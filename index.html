@@ -1,56 +1,206 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Farm Connect - Outback Fencing</title>
-  <style>
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      margin: 0;
-      background: linear-gradient(135deg, #d35400, #7f8c8d); /* rusty orange → steel grey */
-    }
-    .container {
-      text-align: center;
-      background: #fffbea; /* warm sand tone */
-      padding: 50px;
-      border-radius: 15px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.25);
-      max-width: 600px;
-      width: 90%;
-      border: 3px solid #2c3e50;
-      position: relative;
-      overflow: hidden;
-      animation: fadeIn 1s ease-in-out;
-    }
-    h1 {
-      color: #2c3e50;
-      margin-bottom: 10px;
-      font-size: 2.2em;
-    }
-    p {
-      color: #4d3621; /* earthy brown */
-      font-size: 1.2em;
-    }
-    .btn {
-      display: inline-block;
-      margin-top: 25px;
-      padding: 14px 28px;
-      background: #27ae60; /* gumtree green */
-      color: white;
-      font-weight: bold;
-      text-decoration: none;
-      border-radius: 30px;
-      transition: background 0.3s, transform 0.2s;
-    }
-    .btn:hover {
-      background: #1e8449;
-      transform: scale(1.05);
-    }
-    /* Fence effect */
-    .container::before,
-    .container::after {
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Farm Connect</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #a8edea, #fed6e3);
+            flex-direction: column;
+        }
+        .container {
+            text-align: center;
+            background: #fff;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+            max-width: 500px;
+            width: 90%;
+            animation: fadeIn 1s ease-in-out;
+            transition: all 0.5s;
+        }
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 10px;
+            padding: 20px;
+            background: #e9f5e9;
+            border-radius: 10px;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+        .tile {
+            width: 100%;
+            padding-top: 100%;
+            position: relative;
+            background: #f0f8f0;
+            border: 2px solid #a4d49a;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            overflow: hidden;
+        }
+        .tile:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+        .tile img {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 80%;
+            object-fit: contain;
+        }
+        .btn {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 12px 24px;
+            background: #27ae60;
+            color: white;
+            font-weight: bold;
+            text-decoration: none;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .btn:hover {
+            background: #219150;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="intro-screen">
+        <h1>🌾 Welcome to Farm Connect!</h1>
+        <p>This is the beginning of our game. Get ready to build, grow, and explore.</p>
+        <button class="btn" id="start-game-btn">Start Game</button>
+    </div>
+
+    <div class="container hidden" id="game-screen">
+        <h1>Farm Connect!</h1>
+        <p>Connect two matching tiles to clear the board!</p>
+        <div class="game-board" id="game-board"></div>
+        <button class="btn" id="restart-game-btn" style="background-color: #e74c3c;">Restart Game</button>
+    </div>
+
+    <script>
+        const fruits = ['apple', 'banana', 'cherry', 'grape', 'lemon', 'strawberry', 'apple', 'banana', 'cherry', 'grape', 'lemon', 'strawberry'];
+        const gameBoard = document.getElementById('game-board');
+        const startBtn = document.getElementById('start-game-btn');
+        const introScreen = document.getElementById('intro-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const restartBtn = document.getElementById('restart-game-btn');
+
+        let selectedTiles = [];
+        let canClick = true;
+
+        // Shuffle the array of fruits
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        // Create the game board tiles
+        function createBoard() {
+            gameBoard.innerHTML = '';
+            const shuffledFruits = shuffle([...fruits, ...fruits]);
+            shuffledFruits.forEach((fruit, index) => {
+                const tile = document.createElement('div');
+                tile.classList.add('tile');
+                tile.dataset.fruit = fruit;
+
+                const img = document.createElement('img');
+                img.src = `https://i.imgur.com/8QGj5P0.png?1`; // Placeholder image
+                img.alt = fruit;
+
+                tile.appendChild(img);
+                tile.addEventListener('click', () => handleTileClick(tile));
+                gameBoard.appendChild(tile);
+            });
+        }
+
+        // Handle tile clicks
+        function handleTileClick(tile) {
+            if (!canClick || selectedTiles.includes(tile) || selectedTiles.length >= 2) {
+                return;
+            }
+
+            tile.classList.add('selected');
+            tile.style.backgroundColor = '#d4edda';
+            selectedTiles.push(tile);
+
+            if (selectedTiles.length === 2) {
+                canClick = false;
+                setTimeout(checkMatch, 1000);
+            }
+        }
+
+        // Check for a match
+        function checkMatch() {
+            const [tile1, tile2] = selectedTiles;
+            if (tile1.dataset.fruit === tile2.dataset.fruit) {
+                // It's a match! Hide the tiles.
+                setTimeout(() => {
+                    tile1.style.visibility = 'hidden';
+                    tile2.style.visibility = 'hidden';
+                    checkWin();
+                }, 500);
+            } else {
+                // Not a match. Flip them back.
+                setTimeout(() => {
+                    tile1.classList.remove('selected');
+                    tile1.style.backgroundColor = '#f0f8f0';
+                    tile2.classList.remove('selected');
+                    tile2.style.backgroundColor = '#f0f8f0';
+                }, 500);
+            }
+
+            selectedTiles = [];
+            canClick = true;
+        }
+
+        // Check for win condition
+        function checkWin() {
+            const allTiles = document.querySelectorAll('.tile');
+            const allHidden = Array.from(allTiles).every(tile => tile.style.visibility === 'hidden');
+            if (allHidden) {
+                alert('Congratulations! You won!');
+            }
+        }
+
+        // Start the game
+        function startGame() {
+            introScreen.classList.add('hidden');
+            gameScreen.classList.remove('hidden');
+            createBoard();
+        }
+
+        // Restart the game
+        function restartGame() {
+            createBoard();
+        }
+
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', restartGame);
+
+        // Initial image links
+        // We will need to replace these with actual fruit images.
+        // For now, the same image is used for all tiles.
+    </script>
+</body>
+</html>
