@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Farm Connect</title>
+  <title>Farm Connect - Outback Fencing</title>
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -12,51 +12,45 @@
       align-items: center;
       height: 100vh;
       margin: 0;
-      background: linear-gradient(135deg, #a8edea, #fed6e3);
+      background: linear-gradient(135deg, #d35400, #7f8c8d); /* rusty orange → steel grey */
     }
     .container {
       text-align: center;
-      background: #fff;
-      padding: 40px;
-      border-radius: 20px;
-      box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-      max-width: 500px;
+      background: #fffbea; /* warm sand tone */
+      padding: 50px;
+      border-radius: 15px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+      max-width: 600px;
       width: 90%;
+      border: 3px solid #2c3e50;
+      position: relative;
+      overflow: hidden;
       animation: fadeIn 1s ease-in-out;
     }
     h1 {
       color: #2c3e50;
       margin-bottom: 10px;
+      font-size: 2.2em;
     }
     p {
-      color: #555;
-      font-size: 1.1em;
+      color: #4d3621; /* earthy brown */
+      font-size: 1.2em;
     }
     .btn {
       display: inline-block;
-      margin-top: 20px;
-      padding: 12px 24px;
-      background: #27ae60;
+      margin-top: 25px;
+      padding: 14px 28px;
+      background: #27ae60; /* gumtree green */
       color: white;
       font-weight: bold;
       text-decoration: none;
       border-radius: 30px;
-      transition: background 0.3s;
+      transition: background 0.3s, transform 0.2s;
     }
     .btn:hover {
-      background: #219150;
+      background: #1e8449;
+      transform: scale(1.05);
     }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>🌾 Welcome to Farm Connect!</h1>
-    <p>This is the beginning of our game. Get ready to build, grow, and explore.</p>
-    <a href="#" class="btn">Start Game</a>
-  </div>
-</body>
-</html>
+    /* Fence effect */
+    .container::before,
+    .container::after {
