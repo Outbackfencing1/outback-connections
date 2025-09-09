@@ -14,52 +14,78 @@
             margin: 0;
             background: linear-gradient(135deg, #a8edea, #fed6e3);
             flex-direction: column;
+            color: #2c3e50;
         }
+
         .container {
             text-align: center;
             background: #fff;
             padding: 40px;
             border-radius: 20px;
             box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-            max-width: 500px;
+            max-width: 600px;
             width: 90%;
-            animation: fadeIn 1s ease-in-out;
             transition: all 0.5s;
         }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
         .game-board {
             display: grid;
-            grid-template-columns: repeat(6, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 10px;
             padding: 20px;
             background: #e9f5e9;
             border-radius: 10px;
             box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);
-            margin-top: 20px;
         }
+        
         .tile {
-            width: 100%;
-            padding-top: 100%;
-            position: relative;
-            background: #f0f8f0;
-            border: 2px solid #a4d49a;
-            border-radius: 8px;
+            perspective: 1000px;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-            overflow: hidden;
         }
-        .tile:hover {
-            transform: scale(1.05);
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+
+        .tile-inner {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.6s;
         }
-        .tile img {
+
+        .tile.is-flipped .tile-inner {
+            transform: rotateY(180deg);
+        }
+
+        .tile-front, .tile-back {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 8px;
+            border: 2px solid #a4d49a;
+        }
+        
+        .tile-front {
+            background: #f0f8f0;
+        }
+
+        .tile-back {
+            background: #fff;
+            transform: rotateY(180deg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .tile-back img {
             width: 80%;
             height: 80%;
             object-fit: contain;
         }
+
         .btn {
             display: inline-block;
             margin-top: 20px;
@@ -76,131 +102,188 @@
         .btn:hover {
             background: #219150;
         }
+
         .hidden {
             display: none;
+        }
+        
+        .message-container {
+            margin-top: 20px;
+            font-size: 1.2em;
+            color: #2c3e50;
+        }
+
+        .score-container, .timer-container {
+            margin-top: 10px;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
     <div class="container" id="intro-screen">
         <h1>🌾 Welcome to Farm Connect!</h1>
-        <p>This is the beginning of our game. Get ready to build, grow, and explore.</p>
+        <p>A fun and relaxing memory game.</p>
         <button class="btn" id="start-game-btn">Start Game</button>
     </div>
 
     <div class="container hidden" id="game-screen">
         <h1>Farm Connect!</h1>
-        <p>Connect two matching tiles to clear the board!</p>
+        <div class="game-info">
+            <span class="score-container">Pairs: <span id="score">0</span></span>
+            <span class="timer-container">Time: <span id="timer">60</span>s</span>
+        </div>
         <div class="game-board" id="game-board"></div>
         <button class="btn" id="restart-game-btn" style="background-color: #e74c3c;">Restart Game</button>
     </div>
 
+    <div class="container hidden" id="end-screen">
+        <h1>Game Over!</h1>
+        <p id="end-message"></p>
+        <button class="btn" id="play-again-btn">Play Again</button>
+    </div>
+
     <script>
-        const fruits = ['apple', 'banana', 'cherry', 'grape', 'lemon', 'strawberry', 'apple', 'banana', 'cherry', 'grape', 'lemon', 'strawberry'];
         const gameBoard = document.getElementById('game-board');
         const startBtn = document.getElementById('start-game-btn');
+        const restartBtn = document.getElementById('restart-game-btn');
+        const playAgainBtn = document.getElementById('play-again-btn');
         const introScreen = document.getElementById('intro-screen');
         const gameScreen = document.getElementById('game-screen');
-        const restartBtn = document.getElementById('restart-game-btn');
+        const endScreen = document.getElementById('end-screen');
+        const scoreElement = document.getElementById('score');
+        const timerElement = document.getElementById('timer');
+        const endMessageElement = document.getElementById('end-message');
 
-        let selectedTiles = [];
-        let canClick = true;
+        const fruitImages = [
+            'https://i.imgur.com/8QGj5P0.png', 
+            'https://i.imgur.com/2s3Fh1a.png',
+            'https://i.imgur.com/x5S6U8m.png',
+            'https://i.imgur.com/t4V6E8S.png',
+            'https://i.imgur.com/uR2N8Xw.png',
+            'https://i.imgur.com/y3y3y3y.png',
+            'https://i.imgur.com/q1W1e2w.png',
+            'https://i.imgur.com/p7A3Z4S.png',
+        ];
 
-        // Shuffle the array of fruits
-        function shuffle(array) {
+        let cards = [];
+        let flippedCards = [];
+        let canFlip = true;
+        let score = 0;
+        let timer = 60;
+        let timerInterval;
+        let matchedPairs = 0;
+
+        function shuffleArray(array) {
             for (let i = array.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [array[i], array[j]] = [array[j], array[i]];
             }
-            return array;
         }
 
-        // Create the game board tiles
         function createBoard() {
             gameBoard.innerHTML = '';
-            const shuffledFruits = shuffle([...fruits, ...fruits]);
-            shuffledFruits.forEach((fruit, index) => {
-                const tile = document.createElement('div');
-                tile.classList.add('tile');
-                tile.dataset.fruit = fruit;
+            cards = [...fruitImages, ...fruitImages];
+            shuffleArray(cards);
+            matchedPairs = 0;
+            score = 0;
+            scoreElement.textContent = score;
 
+            cards.forEach(image => {
+                const card = document.createElement('div');
+                card.classList.add('tile');
+                
+                const inner = document.createElement('div');
+                inner.classList.add('tile-inner');
+                
+                const front = document.createElement('div');
+                front.classList.add('tile-front');
+                
+                const back = document.createElement('div');
+                back.classList.add('tile-back');
+                
                 const img = document.createElement('img');
-                img.src = `https://i.imgur.com/8QGj5P0.png?1`; // Placeholder image
-                img.alt = fruit;
-
-                tile.appendChild(img);
-                tile.addEventListener('click', () => handleTileClick(tile));
-                gameBoard.appendChild(tile);
+                img.src = image;
+                
+                back.appendChild(img);
+                inner.appendChild(front);
+                inner.appendChild(back);
+                card.appendChild(inner);
+                
+                card.addEventListener('click', () => flipCard(card));
+                
+                gameBoard.appendChild(card);
             });
         }
 
-        // Handle tile clicks
-        function handleTileClick(tile) {
-            if (!canClick || selectedTiles.includes(tile) || selectedTiles.length >= 2) {
+        function flipCard(card) {
+            if (!canFlip || flippedCards.length === 2 || card.classList.contains('is-flipped')) {
                 return;
             }
+            card.classList.add('is-flipped');
+            flippedCards.push(card);
 
-            tile.classList.add('selected');
-            tile.style.backgroundColor = '#d4edda';
-            selectedTiles.push(tile);
-
-            if (selectedTiles.length === 2) {
-                canClick = false;
+            if (flippedCards.length === 2) {
+                canFlip = false;
                 setTimeout(checkMatch, 1000);
             }
         }
 
-        // Check for a match
         function checkMatch() {
-            const [tile1, tile2] = selectedTiles;
-            if (tile1.dataset.fruit === tile2.dataset.fruit) {
-                // It's a match! Hide the tiles.
-                setTimeout(() => {
-                    tile1.style.visibility = 'hidden';
-                    tile2.style.visibility = 'hidden';
-                    checkWin();
-                }, 500);
+            const [card1, card2] = flippedCards;
+            if (card1.querySelector('.tile-back img').src === card2.querySelector('.tile-back img').src) {
+                matchedPairs++;
+                score++;
+                scoreElement.textContent = score;
+                checkWin();
             } else {
-                // Not a match. Flip them back.
                 setTimeout(() => {
-                    tile1.classList.remove('selected');
-                    tile1.style.backgroundColor = '#f0f8f0';
-                    tile2.classList.remove('selected');
-                    tile2.style.backgroundColor = '#f0f8f0';
+                    card1.classList.remove('is-flipped');
+                    card2.classList.remove('is-flipped');
                 }, 500);
             }
-
-            selectedTiles = [];
-            canClick = true;
+            flippedCards = [];
+            canFlip = true;
         }
 
-        // Check for win condition
         function checkWin() {
-            const allTiles = document.querySelectorAll('.tile');
-            const allHidden = Array.from(allTiles).every(tile => tile.style.visibility === 'hidden');
-            if (allHidden) {
-                alert('Congratulations! You won!');
+            if (matchedPairs === fruitImages.length) {
+                endGame(true);
             }
         }
 
-        // Start the game
         function startGame() {
             introScreen.classList.add('hidden');
             gameScreen.classList.remove('hidden');
+            endScreen.classList.add('hidden');
             createBoard();
+            timer = 60;
+            timerElement.textContent = timer;
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timer--;
+                timerElement.textContent = timer;
+                if (timer <= 0) {
+                    endGame(false);
+                }
+            }, 1000);
         }
 
-        // Restart the game
-        function restartGame() {
-            createBoard();
+        function endGame(isWin) {
+            clearInterval(timerInterval);
+            gameScreen.classList.add('hidden');
+            endScreen.classList.remove('hidden');
+            if (isWin) {
+                endMessageElement.textContent = `You won with a score of ${score} and ${timer} seconds left!`;
+            } else {
+                endMessageElement.textContent = `Time's up! You matched ${score} pairs.`;
+            }
         }
 
         startBtn.addEventListener('click', startGame);
-        restartBtn.addEventListener('click', restartGame);
+        restartBtn.addEventListener('click', startGame);
+        playAgainBtn.addEventListener('click', startGame);
 
-        // Initial image links
-        // We will need to replace these with actual fruit images.
-        // For now, the same image is used for all tiles.
+        // Initial image links are placeholders. For a complete experience, we will replace them with actual fruit images.
     </script>
 </body>
 </html>
