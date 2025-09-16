@@ -1,25 +1,25 @@
 // app/c/[handle]/page.tsx
 import { notFound } from "next/navigation";
+// import type { PageProps } from "next"; // ❌ remove any PageProps import
 
-type RouteParams = { handle: string };
+type Params = { handle: string };
+type Props = { params: Params; searchParams?: Record<string, string | string[] | undefined> };
 
-export default async function ContractorPage(
-  { params }: { params: RouteParams }
-) {
+export default function ContractorPage({ params }: Props) {
   const { handle } = params;
 
-  // Example: fetch contractor/profile by "handle"
-  // const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/contractors/${handle}`, { cache: 'no-store' });
+  // Example fetch if/when you add data:
+  // const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/contractors/${handle}`, { cache: "no-store" });
   // if (!res.ok) notFound();
   // const data = await res.json();
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
       <h1 className="text-2xl font-bold text-green-700">Contractor: {handle}</h1>
-      {/* render profile here */}
+      <p className="mt-2 text-neutral-700">Profile page coming soon.</p>
     </main>
   );
 }
 
-// If you don't fetch and want a sync component, remove `async` — both forms are fine:
-// export default function ContractorPage({ params }: { params: RouteParams }) { ... }
+// If you later add this, type it the same explicit way (no PageProps):
+// export async function generateMetadata({ params }: Props): Promise<Metadata> { ... }
