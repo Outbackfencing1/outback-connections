@@ -1,17 +1,13 @@
 // app/c/[handle]/page.tsx
-import { notFound } from "next/navigation";
-// import type { PageProps } from "next"; // ❌ remove any PageProps import
 
-type Params = { handle: string };
-type Props = { params: Params; searchParams?: Record<string, string | string[] | undefined> };
+type Props = {
+  params: {
+    handle: string;
+  };
+};
 
 export default function ContractorPage({ params }: Props) {
   const { handle } = params;
-
-  // Example fetch if/when you add data:
-  // const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/contractors/${handle}`, { cache: "no-store" });
-  // if (!res.ok) notFound();
-  // const data = await res.json();
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
@@ -20,6 +16,3 @@ export default function ContractorPage({ params }: Props) {
     </main>
   );
 }
-
-// If you later add this, type it the same explicit way (no PageProps):
-// export async function generateMetadata({ params }: Props): Promise<Metadata> { ... }
