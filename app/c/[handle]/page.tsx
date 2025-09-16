@@ -1,14 +1,11 @@
 // app/c/[handle]/page.tsx
-// No PageProps imports anywhere in this file.
+// No PageProps imports in this file.
 
-type Props = {
-  params: {
-    handle: string;
-  };
-};
+type Params = { handle: string };
+type Props = { params: Promise<Params> };
 
-export default function ContractorPage({ params }: Props) {
-  const { handle } = params;
+export default async function ContractorPage({ params }: Props) {
+  const { handle } = await params;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
