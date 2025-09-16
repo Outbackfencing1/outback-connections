@@ -1,4 +1,5 @@
 // app/c/[handle]/page.tsx
+// No PageProps imports anywhere in this file.
 
 type Props = {
   params: {
