@@ -1,97 +1,53 @@
-"use client";
-
-import { useState, useTransition, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
-import { signIn, useSession } from "next-auth/react";
+// app/login/page.tsx
+import Link from "next/link";
 
 export default function LoginPage() {
-  const { data: session, status } = useSession();
-  const search = useSearchParams();
-  const callbackUrl = search.get("callbackUrl") || "/";
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      window.location.href = callbackUrl;
-    }
-  }, [status, callbackUrl]);
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [isPending, startTransition] = useTransition();
-  const [err, setErr] = useState<string | null>(null);
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    alert(`Mock login for ${email}. Replace with real auth later.`);
-  }
-
-  const onGoogle = () => {
-    setErr(null);
-    startTransition(async () => {
-      try {
-        await signIn("google", { callbackUrl });
-      } catch (e: any) {
-        setErr(e?.message || "Could not start Google sign-in.");
-      }
-    });
-  };
-
   return (
-    <main className="min-h-dvh bg-neutral-100 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="mx-auto rounded-2xl border bg-white p-6 shadow-sm">
-          <h1 className="text-2xl font-extrabold text-green-800">Login</h1>
-          <p className="mt-1 text-sm text-neutral-600">
-            Continue with Google or use the mock form below.
-          </p>
+    <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4">
+      <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm">
+        <h1 className="text-2xl font-bold text-green-700">Login</h1>
+        <p className="mt-1 text-sm text-neutral-600">
+          Temporary mock form — swap for real auth (Clerk, Supabase, or Shopify App Bridge) later.
+        </p>
 
-          {err ? (
-            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {err}
-            </div>
-          ) : null}
-
-          <button
-            onClick={onGoogle}
-            disabled={isPending}
-            className="mt-5 w-full rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm font-medium shadow-sm hover:border-neutral-300 focus:outline-none focus:ring-4 focus:ring-green-200 disabled:opacity-60"
-          >
-            {isPending ? "Connecting to Google…" : "Continue with Google"}
-          </button>
-
-          <div className="my-6 flex items-center gap-3">
-            <div className="h-px w-full bg-neutral-200" />
-            <span className="text-xs text-neutral-500">or</span>
-            <div className="h-px w-full bg-neutral-200" />
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <form className="mt-6 space-y-4">
+          {/* Email */}
+          <div>
             <input
               type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
               placeholder="Email"
-              className="w-full rounded-xl border px-4 py-3 outline-none focus:ring-2 focus:ring-green-600"
+              className="w-full rounded-lg border px-3 py-2 text-sm shadow-sm focus:border-green-600 focus:outline-none"
             />
+          </div>
+
+          {/* Password */}
+          <div>
             <input
               type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
               placeholder="Password"
-              className="w-full rounded-xl border px-4 py-3 outline-none focus:ring-2 focus:ring-green-600"
+              className="w-full rounded-lg border px-3 py-2 text-sm shadow-sm focus:border-green-600 focus:outline-none"
             />
-            <button className="w-full rounded-xl bg-green-700 px-4 py-3 font-semibold text-white hover:bg-green-800">
-              Sign in
-            </button>
-          </form>
-        </div>
+          </div>
 
-        <p className="mt-4 text-center text-sm text-neutral-600">
-          <a href="/" className="hover:underline">← Back to home</a>
-        </p>
+          {/* Submit */}
+          <button
+            type="submit"
+            className="w-full rounded-lg bg-green-700 py-2 text-white font-semibold shadow-sm hover:bg-green-800"
+          >
+            Sign in
+          </button>
+        </form>
+
+        {/* Back to home link */}
+        <div className="mt-4 text-center">
+          <Link
+            href="/"
+            className="text-sm text-neutral-600 hover:underline"
+          >
+            ← Back to home
+          </Link>
+        </div>
       </div>
-    </main>
+    </div>
   );
 }
