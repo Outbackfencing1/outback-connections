@@ -1,0 +1,94 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ENUMS //
+enum JobStatus {
+  PENDING
+  LIVE
+  COMPLETED
+  CLOSED
+  SPAM
+}
+
+enum Plan {
+  BASIC
+  PRO
+  ELITE
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+// MODELS //
+
+model Job {
+  id              String    @id @default(cuid())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  jobType         String // Simple text for the Launchpad MVP (e.g., "Fencing", "Sheds")
+  description     String    @db.Text
+  postcode        String
+  state           String
+  farmerName      String
+  farmerEmail     String
+  farmerPhone     String
+  status          JobStatus @default(PENDING)
+  manageToken     String    @unique @default(cuid()) // Secure link for farmer to manage job
+  leadDeliveries  LeadDelivery[]
+}
+
+model Contractor {
+  id               String        @id @default(cuid())
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  email            String        @unique
+  companyName      String?
+  // We'll add more profile fields post-launch
+  subscription     Subscription?
+  leadDeliveries   LeadDelivery[]
+  planUsage        PlanUsage[]
+}
+
+model Subscription {
+  id               String             @id @default(cuid())
+  contractorId     String             @unique
+  contractor       Contractor         @relation(fields: [contractorId], references: [id])
+  stripeCustomerId String             @unique
+  stripeSubId      String             @unique
+  plan             Plan
+  status           SubscriptionStatus
+  trialEndAt       DateTime?
+  periodEndAt      DateTime
+}
+
+model LeadDelivery {
+  id           String     @id @default(cuid())
+  jobId        String
+  job          Job        @relation(fields: [jobId], references: [id])
+  contractorId String
+  contractor   Contractor @relation(fields: [contractorId], references: [id])
+  deliveredAt  DateTime   @default(now())
+  revealedAt   DateTime? // Timestamp for when the contractor "spent" a credit
+}
+
+model PlanUsage {
+  id             String   @id @default(cuid())
+  contractorId   String
+  contractor     Contractor @relation(fields: [contractorId], references: [id])
+  periodStartAt  DateTime
+  periodEndAt    DateTime
+  revealsUsed    Int      @default(0)
+}

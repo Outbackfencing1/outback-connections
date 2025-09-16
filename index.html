@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Farm Connect - Outback Fencing</title>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #0f6131; /* Outback Fencing Green */
+    }
+
+    .container {
+      text-align: center;
+      padding: 50px;
+      border-radius: 12px;
+      background: #ffffff;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+      max-width: 700px;
+      width: 90%;
+      animation: fadeIn 1s ease-in-out;
+    }
+
+    .logo {
+      max-width: 200px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      font-size: 2.8rem;
+      margin-bottom: 15px;
+      color: #0f6131; /* matching green */
+    }
+
+    p {
+      font-size: 1.2rem;
+      color: #444;
+      margin-bottom: 30px;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 14px 32px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      background: #0f6131;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 8px;
+      transition: background 0.3s ease, transform 0.2s ease;
+    }
+
+    .btn:hover {
+      background: #094b25;
+      transform: translateY(-2px);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Replace logo.png with your actual file path -->
+    <img src="logo.png" alt="Outback Fencing Logo" class="logo">
+    <h1>Farm Connect</h1>
+    <p>Proudly powered by Outback Fencing.<br>Welcome to the beginning of our game.</p>
+    <a href="#" class="btn">Start Now</a>
+  </div>
+</body>
+</html>
