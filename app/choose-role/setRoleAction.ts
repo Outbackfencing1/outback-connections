@@ -1,20 +1,29 @@
 // app/choose-role/setRoleAction.ts
-"use server";
-
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 
 export async function setRole(role: "customer" | "contractor") {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    redirect(`/login?callbackUrl=${encodeURIComponent("/choose-role")}`); // ✅ use /login
+  const session = await auth();
+
+  const email = session?.user?.email;
+  if (!email) {
+    redirect(`/login?callbackUrl=${encodeURIComponent("/choose-role")}`);
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true },
+  });
+
+  if (!user) {
+    redirect(`/login?callbackUrl=${encodeURIComponent("/choose-role")}`);
   }
 
   await prisma.user.update({
-    where: { id: (session.user as any).id },
+    where: { id: user.id },
     data: { role },
   });
-  return true;
+
+  redirect("/");
 }
