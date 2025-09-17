@@ -1,17 +1,22 @@
-// lib/requireRole.ts
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
+/**
+ * Gate a page by role.
+ * Call at the top of a server component / action.
+ */
 export async function requireRole(required: "customer" | "contractor") {
-  const session = await import { auth } from "@/lib/auth";
-const session = await auth();
-;
-  if (!session) redirect(`/api/auth/login?callbackUrl=/dashboard`);
-  const role = (session.user as any).role ?? null;
-  if (!role) redirect("/choose-role");
-  if (role !== required) {
-    redirect(role === "customer" ? "/dashboard/post-a-job" : "/dashboard/opportunities");
+  const session = await auth();
+  if (!session) {
+    redirect(`/login?callbackUrl=/dashboard`);
   }
-  return session;
+
+  const role = (session.user as any)?.role as
+    | "customer"
+    | "contractor"
+    | undefined;
+
+  if (!role || role !== required) {
+    redirect("/choose-role");
+  }
 }

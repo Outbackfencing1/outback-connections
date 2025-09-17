@@ -1,73 +1,61 @@
 "use server";
 
+import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/lib/auth";
-import { getServerSession } from "next-auth";
 
-export async function saveProfile(input: {
-  handle: string;
-  company: string;
+/**
+ * Form payload for saving/updating a contractor profile.
+ * You can adjust these names to match your form field names.
+ */
+export type ProfileInput = {
+  company?: string;
   abn?: string;
-  serviceAreas?: string; // comma list
-  skills?: string;       // comma list
+  serviceAreas?: string; // comma-separated (e.g. "2800, 2795")
+  skills?: string;       // comma-separated (e.g. "hinge joint, gates")
   rateType?: string;
   rateAmount?: number;
   licence?: string;
   insured?: boolean;
   insuranceExp?: string; // yyyy-mm-dd
   bio?: string;
-  portfolio?: string;    // comma list
-}) {
-  const session = await import { auth } from "@/lib/auth";
-const session = await auth();
-;
+  portfolio?: string;    // comma-separated URLs
+};
+
+export async function saveProfile(input: ProfileInput) {
+  const session = await auth();
   if (!session?.user?.id) return false;
 
-  // persist handle on the User
-  const handle = input.handle?.trim() || null;
-  if (handle) {
-    // ensure unique
-    const existing = await prisma.user.findFirst({ where: { handle } });
-    if (existing && existing.id !== (session.user as any).id) {
-      throw new Error("Handle already taken");
-    }
-    await prisma.user.update({
-      where: { id: (session.user as any).id },
-      data: { handle },
-    });
-  }
+  const userId = (session.user as any).id as string;
 
-  const toArray = (s?: string) =>
-    s ? s.split(",").map(x => x.trim()).filter(Boolean) : [];
+  const toArray = (csv?: string) =>
+    csv
+      ? csv
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : undefined;
+
+  const data: any = {
+    company: input.company,
+    abn: input.abn,
+    rateType: input.rateType,
+    rateAmount: input.rateAmount ?? undefined,
+    licence: input.licence,
+    insured: input.insured ?? undefined,
+    insuranceExp: input.insuranceExp ? new Date(input.insuranceExp) : undefined,
+    bio: input.bio,
+    serviceAreas: toArray(input.serviceAreas),
+    skills: toArray(input.skills),
+    portfolio: toArray(input.portfolio),
+  };
 
   await prisma.contractorProfile.upsert({
-    where: { userId: (session.user as any).id },
+    where: { userId },
+    update: data,
     create: {
-      userId: (session.user as any).id,
-      company: input.company,
-      abn: input.abn || null,
-      serviceAreas: toArray(input.serviceAreas),
-      skills: toArray(input.skills),
-      rateType: input.rateType || null,
-      rateAmount: input.rateAmount || null,
-      licence: input.licence || null,
-      insured: !!input.insured,
-      insuranceExp: input.insuranceExp ? new Date(input.insuranceExp) : null,
-      bio: input.bio || null,
-      portfolio: toArray(input.portfolio),
-    },
-    update: {
-      company: input.company,
-      abn: input.abn || null,
-      serviceAreas: toArray(input.serviceAreas),
-      skills: toArray(input.skills),
-      rateType: input.rateType || null,
-      rateAmount: input.rateAmount || null,
-      licence: input.licence || null,
-      insured: !!input.insured,
-      insuranceExp: input.insuranceExp ? new Date(input.insuranceExp) : null,
-      bio: input.bio || null,
-      portfolio: toArray(input.portfolio),
+      userId,
+      company: input.company ?? "",
+      ...data,
     },
   });
 
