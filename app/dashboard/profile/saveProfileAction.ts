@@ -18,7 +18,9 @@ export async function saveProfile(input: {
   bio?: string;
   portfolio?: string;    // comma list
 }) {
-  const session = await getServerSession(authOptions);
+  const session = await import { auth } from "@/lib/auth";
+const session = await auth();
+;
   if (!session?.user?.id) return false;
 
   // persist handle on the User
