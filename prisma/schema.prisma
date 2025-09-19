@@ -1,94 +1,26 @@
-// prisma/schema.prisma
-
-// --- Data source: SQLite file via .env DATABASE_URL ---
-datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
-}
-
-// --- Generate Prisma Client for TypeScript/Node ---
 generator client {
   provider = "prisma-client-js"
 }
 
-// ===================== Enums =====================
-enum Role {
-  customer
-  contractor
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
-// ===================== Models =====================
-
-// ---- NextAuth User (with role + handle) ----
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  image     String?
-  role      Role?                 // null until user chooses at /choose-role
-  handle    String?  @unique      // public slug for /c/[handle]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // NextAuth relations
-  accounts  Account[]
-  sessions  Session[]
-
-  // App relations
-  contractor ContractorProfile?
-}
-
-// ---- Contractor profile (JSON arrays for SQLite) ----
-model ContractorProfile {
-  id            String   @id @default(cuid())
-  userId        String   @unique
-  company       String
-  abn           String?
-  serviceAreas  Json     @default("[]")  // e.g. ["2800","2795"]
-  skills        Json     @default("[]")  // e.g. ["hinge joint","gates"]
-  rateType      String?                 // "hourly" | "day" (free text for now)
-  rateAmount    Int?
-  licence       String?
-  insured       Boolean  @default(false)
-  insuranceExp  DateTime?
-  bio           String?
-  portfolio     Json     @default("[]")  // array of image URLs
-
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-}
-
-// ---- Your existing Job model (left intact) ----
-model Job {
-  id           String   @id @default(cuid())
-  title        String
-  description  String
-  location     String
-  budget       Int?
-  category     String?
-  contactName  String?
-  contactEmail String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-}
-
-// ---- NextAuth tables (SQLite-friendly) ----
 model Account {
-  id                 String  @id @default(cuid())
-  userId             String
-  type               String
-  provider           String
-  providerAccountId  String
-  refresh_token      String?
-  access_token       String?
-  expires_at         Int?
-  token_type         String?
-  scope              String?
-  id_token           String?
-  session_state      String?
-  oauth_token_secret String?
-  oauth_token        String?
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -100,8 +32,21 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+
+  accounts Account[]
+  sessions Session[]
+
+  // Example app data
+  jobs      Job[]
 }
 
 model VerificationToken {
@@ -110,4 +55,13 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model Job {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  createdAt   DateTime @default(now())
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id])
 }

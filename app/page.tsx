@@ -1,107 +1,318 @@
 import Link from "next/link";
 
-export default function LandingPage() {
+export const metadata = {
+  title: "OutbackConnections – Get skilled work done across Australia",
+  description:
+    "Post a job, find trusted contractors, and keep projects moving. OutbackConnections connects farmers, landholders and trades with verified locals.",
+  openGraph: {
+    title: "OutbackConnections – Get skilled work done across Australia",
+    description:
+      "Post a job, find trusted contractors, and keep projects moving. OutbackConnections connects farmers, landholders and trades with verified locals.",
+    url: "https://www.outbackconnections.com.au",
+    type: "website"
+  }
+};
+
+export default function HomePage() {
   return (
-    <div className="space-y-10 sm:space-y-14">
+    <div className="mx-auto max-w-7xl space-y-8">
       {/* Hero */}
-      <section className="grid items-center gap-5 sm:gap-8 rounded-2xl border bg-white p-5 sm:p-8 shadow-sm md:grid-cols-2">
-        <div className="space-y-4 sm:space-y-6">
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black leading-tight tracking-tight text-green-800">
-            Find trusted contractors. Get farm jobs done with OutbackConnections.
-          </h1>
-          <p className="max-w-prose text-base sm:text-lg text-neutral-700">
-            Post a job in minutes and receive quotes. Contractors start free and only pay after real value is delivered.
-          </p>
+      <section className="rounded-2xl border bg-white p-6 shadow-sm sm:p-10">
+        <div className="grid items-center gap-6 lg:grid-cols-2">
+          <div>
+            <h1 className="text-3xl font-black tracking-tight sm:text-4xl">
+              Get skilled work done—fast, fair, and local
+            </h1>
+            <p className="mt-3 text-base leading-7 text-neutral-700">
+              There are so many skilled Australians, but most ways to find help
+              are messy and time-consuming. We’re building OutbackConnections to{" "}
+              <span className="font-semibold">unlock productivity</span> and help
+              people get stuff done—on farm, on site, and everywhere in between.
+            </p>
 
-          {/* CTAs: full width on mobile */}
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-            <Link
-              href="/post-a-job"
-              className="w-full sm:w-auto rounded-2xl bg-green-700 px-5 py-3 text-base font-semibold text-white text-center hover:bg-green-800"
-            >
-              Post a Job (Free)
-            </Link>
-            <a
-              href="#contractors"
-              className="w-full sm:w-auto rounded-2xl border px-5 py-3 text-base font-semibold text-center hover:bg-neutral-50"
-            >
-              I’m a Contractor
-            </a>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <PrimaryLink href="/post-a-job">Post a job</PrimaryLink>
+              <SecondaryLink href="/opportunities">
+                Find opportunities
+              </SecondaryLink>
+              <GhostLink href="/pricing">See pricing</GhostLink>
+            </div>
+
+            <ul className="mt-6 grid gap-2 text-sm text-neutral-700 sm:grid-cols-2">
+              <li className="flex items-center gap-2">
+                <Dot /> Verified IDs & references
+              </li>
+              <li className="flex items-center gap-2">
+                <Dot /> Transparent reviews
+              </li>
+              <li className="flex items-center gap-2">
+                <Dot /> Simple quotes & messaging
+              </li>
+              <li className="flex items-center gap-2">
+                <Dot /> Built for rural & regional work
+              </li>
+            </ul>
           </div>
 
-          <ul className="mt-2 grid gap-2 sm:gap-3 text-sm text-neutral-600 sm:grid-cols-2">
-            <li>• No platform fee for farmers</li>
-            <li>• Contractors start free up to $1k job value*</li>
-            <li>• In-app quoting & invoicing</li>
-            <li>• Fair leads, no bidding wars</li>
-          </ul>
-          <p className="text-xs text-neutral-500">* Example threshold; adjustable in pricing.</p>
-        </div>
-
-        {/* Simple illustration block (kept short for mobile) */}
-        <div className="rounded-2xl border bg-neutral-50 p-4 sm:p-6">
-          <div className="space-y-3">
-            <div className="h-3 w-24 rounded bg-neutral-200" />
-            <div className="h-4 w-40 rounded bg-neutral-200" />
-            <div className="h-24 rounded-xl bg-neutral-200" />
-            <div className="grid grid-cols-2 gap-2">
-              <div className="h-16 rounded-lg bg-neutral-200" />
-              <div className="h-16 rounded-lg bg-neutral-200" />
+          <div className="rounded-2xl border bg-neutral-50 p-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Stat number="3,200+" label="Contractors interested" />
+              <Stat number="7,800+" label="Jobs planned & posted" />
+              <Stat number="4.9/5" label="Average rating" />
+              <Stat number="48h" label="Typical time to first quote" />
             </div>
-            <div className="h-28 sm:h-32 rounded-xl bg-neutral-200" />
+            <div className="mt-6 rounded-xl border bg-white p-4 text-sm text-neutral-700">
+              <p className="font-medium">What makes us different?</p>
+              <p className="mt-1">
+                Clear scopes, fair quoting, and tools that cut admin—so more of
+                your time is spent doing the work, not chasing it.
+              </p>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Farmers vs Contractors */}
-      <section id="audiences" className="grid gap-4 sm:gap-6 md:grid-cols-2">
-        <div className="rounded-2xl border bg-white p-5 sm:p-6 shadow-sm">
-          <h2 className="text-lg sm:text-xl font-extrabold text-neutral-900">For Farmers</h2>
-          <ul className="mt-3 space-y-2 text-neutral-700 text-sm sm:text-base">
-            <li>• Post a job with photos and location</li>
-            <li>• Compare contractor profiles and quotes</li>
-            <li>• Pay securely after work milestones</li>
-          </ul>
-          <Link
-            href="/post-a-job"
-            className="mt-4 inline-block w-full sm:w-auto rounded-xl bg-green-700 px-4 py-2 text-sm font-semibold text-white text-center hover:bg-green-800"
-          >
-            Post a Job
-          </Link>
-        </div>
+      {/* Value props */}
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <ValueCard
+          title="Trust first"
+          desc="ID checks, references and badges help you pick with confidence."
+        />
+        <ValueCard
+          title="Fair & transparent"
+          desc="Clear briefs, comparable quotes, and no hidden gotchas."
+        />
+        <ValueCard
+          title="Built for the bush"
+          desc="Fencing, earthmoving, welding, stock work—real jobs, real results."
+        />
+        <ValueCard
+          title="Less admin"
+          desc="Messaging, quoting and simple records all in one place."
+        />
+      </section>
 
-        <div id="contractors" className="rounded-2xl border bg-white p-5 sm:p-6 shadow-sm">
-          <h2 className="text-lg sm:text-xl font-extrabold text-neutral-900">For Contractors</h2>
-          <ul className="mt-3 space-y-2 text-neutral-700 text-sm sm:text-base">
-            <li>• Start free until you earn real value</li>
-            <li>• Lead inbox, quotes, and invoicing</li>
-            <li>• Build reputation with verified reviews</li>
-          </ul>
-          <Link
-            href="/contractor"
-            className="mt-4 inline-block w-full sm:w-auto rounded-xl border px-4 py-2 text-sm font-semibold text-center hover:bg-neutral-50"
-          >
-            Open Dashboard
-          </Link>
+      {/* How it works */}
+      <section className="rounded-2xl border bg-white p-6 shadow-sm sm:p-8">
+        <h2 className="text-xl font-bold tracking-tight">How it works</h2>
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <Steps
+            role="For customers"
+            items={[
+              {
+                title: "Post a job",
+                text:
+                  "Describe the work, timing, and location. Add photos if helpful."
+              },
+              {
+                title: "Compare quotes",
+                text:
+                  "Chat, refine scope, and choose the contractor that fits best."
+              },
+              {
+                title: "Get it done",
+                text:
+                  "Track progress and leave a review to help the next person."
+              }
+            ]}
+            cta={{ href: "/post-a-job", label: "Post a job" }}
+          />
+          <Steps
+            role="For contractors"
+            items={[
+              {
+                title: "Build your profile",
+                text:
+                  "List skills, tickets, regions and availability. Earn badges."
+              },
+              {
+                title: "Find & win work",
+                text:
+                  "Browse new jobs, quote quickly, and message customers."
+              },
+              {
+                title: "Deliver & grow",
+                text:
+                  "Great reviews lift your ranking and unlock higher-value jobs."
+              }
+            ]}
+            cta={{ href: "/opportunities", label: "See opportunities" }}
+          />
         </div>
       </section>
 
-      {/* Highlights */}
-      <section className="rounded-2xl border bg-white p-5 sm:p-6 shadow-sm">
-        <h3 className="text-base sm:text-lg font-extrabold">Why OutbackConnections?</h3>
-        <div className="mt-3 sm:mt-4 grid gap-3 sm:gap-4 md:grid-cols-3">
-          {[
-            { title: "Fair to Contractors", desc: "Free until you’ve earned; simple, transparent pricing after." },
-            { title: "Fast for Farmers", desc: "Post once, reach multiple local pros. Approve milestones, pay after results." },
-            { title: "Rural-Ready", desc: "Built for ag jobs, remote sites, and bad reception realities." },
-          ].map((c) => (
-            <div key={c.title} className="rounded-xl border p-4">
-              <div className="text-sm sm:text-base font-bold">{c.title}</div>
-              <div className="mt-1 text-xs sm:text-sm text-neutral-700">{c.desc}</div>
-            </div>
-          ))}
+      {/* Popular categories */}
+      <section>
+        <h2 className="text-xl font-bold tracking-tight">Popular categories</h2>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Category title="Fencing & rural infrastructure" href="/opportunities" />
+          <Category title="Earthmoving & site prep" href="/opportunities" />
+          <Category title="Welding & steel fabrication" href="/opportunities" />
+          <Category title="Carpentry & sheds" href="/opportunities" />
+          <Category title="Electrical & solar" href="/opportunities" />
+          <Category title="Water, pumps & troughs" href="/opportunities" />
+        </div>
+      </section>
+
+      {/* FAQ (lightweight, no JS) */}
+      <section className="rounded-2xl border bg-white p-6 shadow-sm sm:p-8">
+        <h2 className="text-xl font-bold tracking-tight">FAQs</h2>
+        <div className="mt-4 space-y-3">
+          <Faq
+            q="Is OutbackConnections free to try?"
+            a="Yes. Posting a job is free. Contractors can browse opportunities; paid tiers unlock higher volume, priority placement and advanced tools."
+          />
+          <Faq
+            q="How do reviews and badges work?"
+            a="Customers leave a rating and comments after each job. Badges reflect verified licences, tickets, insurance and on-platform performance."
+          />
+          <Faq
+            q="Do you support remote and regional areas?"
+            a="Absolutely. The platform is designed for rural and regional work—flexible regions, travel notes, and offline-friendly messaging."
+          />
+        </div>
+      </section>
+
+      {/* Closing CTA */}
+      <section className="rounded-2xl border bg-white p-6 text-center shadow-sm sm:p-10">
+        <h2 className="text-2xl font-bold tracking-tight">
+          Ready to get work moving?
+        </h2>
+        <p className="mx-auto mt-2 max-w-2xl text-neutral-700">
+          Post a job in minutes or browse opportunities now. Simple tools, fair
+          process, real results.
+        </p>
+        <div className="mt-5 flex flex-wrap justify-center gap-3">
+          <PrimaryLink href="/post-a-job">Post a job</PrimaryLink>
+          <SecondaryLink href="/opportunities">Find opportunities</SecondaryLink>
+          <GhostLink href="/dashboard">Go to dashboard</GhostLink>
         </div>
       </section>
     </div>
+  );
+}
+
+/* ---------- small server-safe UI helpers (no client code) ---------- */
+
+function Dot() {
+  return <span className="inline-block h-2 w-2 rounded-full bg-green-600" />;
+}
+
+function PrimaryLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="rounded-xl border border-green-700 bg-green-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 active:opacity-90"
+    >
+      {children}
+    </Link>
+  );
+}
+
+function SecondaryLink({
+  href,
+  children
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className="rounded-xl border px-4 py-2 text-sm font-medium shadow-sm hover:bg-neutral-50 active:opacity-95"
+    >
+      {children}
+    </Link>
+  );
+}
+
+function GhostLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="rounded-xl px-4 py-2 text-sm font-medium text-neutral-700 underline-offset-4 hover:underline"
+    >
+      {children}
+    </Link>
+  );
+}
+
+function Stat({ number, label }: { number: string; label: string }) {
+  return (
+    <div className="rounded-xl border bg-white p-4 text-center">
+      <div className="text-2xl font-black tracking-tight">{number}</div>
+      <div className="mt-1 text-xs text-neutral-600">{label}</div>
+    </div>
+  );
+}
+
+function ValueCard({ title, desc }: { title: string; desc: string }) {
+  return (
+    <div className="rounded-2xl border bg-white p-5 shadow-sm">
+      <h3 className="text-base font-semibold">{title}</h3>
+      <p className="mt-1 text-sm text-neutral-700">{desc}</p>
+    </div>
+  );
+}
+
+function Steps({
+  role,
+  items,
+  cta
+}: {
+  role: string;
+  items: { title: string; text: string }[];
+  cta: { href: string; label: string };
+}) {
+  return (
+    <div className="rounded-xl border bg-neutral-50 p-5">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-700">
+          {role}
+        </h3>
+        <Link
+          href={cta.href}
+          className="rounded-lg border px-3 py-1.5 text-xs font-medium shadow-sm hover:bg-neutral-100"
+        >
+          {cta.label}
+        </Link>
+      </div>
+      <ol className="mt-4 space-y-3">
+        {items.map((s, i) => (
+          <li key={i} className="rounded-lg bg-white p-3 shadow-sm ring-1 ring-neutral-200">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-green-700 text-xs font-bold text-white">
+                {i + 1}
+              </span>
+              <div>
+                <p className="text-sm font-semibold">{s.title}</p>
+                <p className="text-sm text-neutral-700">{s.text}</p>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function Category({ title, href }: { title: string; href: string }) {
+  return (
+    <Link
+      href={href}
+      className="rounded-2xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow"
+    >
+      <h3 className="text-base font-semibold">{title}</h3>
+      <p className="mt-1 text-sm text-neutral-700">Browse active jobs in this category.</p>
+    </Link>
+  );
+}
+
+function Faq({ q, a }: { q: string; a: string }) {
+  return (
+    <details className="rounded-xl border bg-neutral-50 p-4">
+      <summary className="cursor-pointer select-none text-sm font-semibold">{q}</summary>
+      <p className="mt-2 text-sm text-neutral-700">{a}</p>
+    </details>
   );
 }

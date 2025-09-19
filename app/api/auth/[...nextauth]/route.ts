@@ -1,30 +1,20 @@
-// app/api/auth/[...nextauth]/route.ts
+// app/api/jobs/route.ts
+import { auth } from "@/auth";
 
-import NextAuth from "next-auth";
-import GoogleProvider from "next-auth/providers/google";
-import { PrismaAdapter } from "@auth/prisma-adapter";
-import { prisma } from "@/lib/prisma";
+// Return a simple list so the route compiles & works without a DB.
+export async function GET() {
+  return Response.json({
+    ok: true,
+    jobs: []
+  });
+}
 
-// Export your authOptions separately (so other files can import it)
-export const authOptions = {
-  adapter: PrismaAdapter(prisma),
-  providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
-  ],
-  secret: process.env.NEXTAUTH_SECRET,
-  session: {
-    strategy: "database",
-  },
-  pages: {
-    signIn: "/login",
-  },
-};
+export async function POST(req: Request) {
+  // Protect POST
+  const session = await auth();
+  if (!session) return new Response("Unauthorized", { status: 401 });
 
-// Create NextAuth handler
-const handler = NextAuth(authOptions);
-
-// ✅ Correct way for Next.js 13/14 App Router: export GET and POST
-export { handler as GET, handler as POST };
+  const body = await req.json().catch(() => null);
+  // TODO: save to DB (Prisma) when ready
+  return Response.json({ ok: true, job: body ?? null });
+}

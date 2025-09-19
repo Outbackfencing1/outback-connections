@@ -1,16 +1,7 @@
-import React from "react";
-import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import type { ReactNode } from "react";
 
-export default async function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const session = await auth();
-  if (!session) {
-    redirect(`/login?callbackUrl=/dashboard`);
-  }
-
+export default function DashboardLayout({ children }: { children: ReactNode }) {
+  // Dashboard pages render inside the root layout (which already includes
+  // Providers, Header, and globals.css). Keep this layout minimal.
   return <>{children}</>;
 }
