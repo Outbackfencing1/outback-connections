@@ -1,7 +1,7 @@
 // app/api/jobs/route.ts
 import { auth } from "@/auth";
 
-// Return a simple list so the route compiles & works without a DB.
+// Simple placeholder GET so the route compiles without a DB
 export async function GET() {
   return Response.json({
     ok: true,
@@ -9,12 +9,12 @@ export async function GET() {
   });
 }
 
+// Protected POST example (requires sign-in)
 export async function POST(req: Request) {
-  // Protect POST
   const session = await auth();
   if (!session) return new Response("Unauthorized", { status: 401 });
 
   const body = await req.json().catch(() => null);
-  // TODO: save to DB (Prisma) when ready
+  // TODO: save to DB (Prisma) when you’re ready
   return Response.json({ ok: true, job: body ?? null });
 }
