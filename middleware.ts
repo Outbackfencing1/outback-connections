@@ -1,11 +1,4 @@
-// middleware.ts — safe no-op (never throws)
+// middleware.ts — safe no-op so prod can’t crash
 import { NextResponse } from "next/server";
-
-export function middleware() {
-  return NextResponse.next();
-}
-
-// Match all pages except static assets/_next to keep it cheap
-export const config = {
-  matcher: ["/((?!_next|.*\\..*).*)"]
-};
+export function middleware() { return NextResponse.next(); }
+export const config = { matcher: ["/((?!_next|.*\\..*).*)"] };
