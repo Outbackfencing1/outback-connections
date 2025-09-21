@@ -1,5 +1,17 @@
-// app/api/auth/[...nextauth]/route.ts
-import { handlers } from "@/lib/auth";
+// app/api/jobs/route.ts
+import { auth } from "@/auth";
 
-// NextAuth v5 handlers export
-export const { GET, POST } = handlers;
+// Simple placeholder GET so the route compiles without a DB
+export async function GET() {
+  return Response.json({ ok: true, jobs: [] });
+}
+
+// Protected POST example (requires sign-in)
+export async function POST(req: Request) {
+  const session = await auth();
+  if (!session) return new Response("Unauthorized", { status: 401 });
+
+  const body = await req.json().catch(() => null);
+  // TODO: save with Prisma when you’re ready
+  return Response.json({ ok: true, job: body ?? null });
+}
