@@ -1,34 +1,66 @@
-// app/choose-role/page.tsx
 "use client";
 
-import { useTransition } from "react";
+import { useTransition, useState } from "react";
 import { useRouter } from "next/navigation";
 import { setRole } from "./setRoleAction";
 
-export default function ChooseRolePage() {
-  const [pending, start] = useTransition();
-  const router = useRouter();
+export const metadata = { title: "Choose role – OutbackConnections" };
 
-  const pick = (role: "customer" | "contractor") =>
+export default function ChooseRolePage() {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function choose(role: "customer" | "contractor") {
+    setError(null);
     start(async () => {
-      const ok = await setRole(role);
-      if (ok) router.replace(role === "customer" ? "/dashboard/post-a-job" : "/dashboard/opportunities");
-      else alert("Could not save your role. Try again.");
+      const { ok } = await setRole(role);
+      if (ok) {
+        router.replace(
+          role === "customer" ? "/dashboard/post-a-job" : "/dashboard/opportunities"
+        );
+      } else {
+        setError("Could not save your role. Try again.");
+      }
     });
+  }
 
   return (
-    <main className="mx-auto max-w-md p-6 space-y-6">
-      <h1 className="text-2xl font-semibold">Choose your role</h1>
-      <div className="grid gap-4">
-        <button disabled={pending} onClick={() => pick("customer")} className="rounded-2xl border p-4 text-left hover:shadow-lg disabled:opacity-60">
-          <div className="text-lg font-medium">I’m a customer</div>
-          <div className="text-sm text-neutral-600">Post a fencing job and hire contractors.</div>
+    <div className="mx-auto max-w-md space-y-4">
+      <h1 className="text-2xl font-bold tracking-tight">Choose your role</h1>
+      <p className="text-neutral-600 text-sm">
+        Tell us how you want to use OutbackConnections.
+      </p>
+
+      <div className="grid gap-3">
+        <button
+          onClick={() => choose("customer")}
+          disabled={pending}
+          className="rounded-xl border px-4 py-3 text-left shadow-sm hover:bg-neutral-50 disabled:opacity-60"
+        >
+          <div className="font-semibold">I’m a customer</div>
+          <div className="text-sm text-neutral-600">
+            I want to post a job and get quotes.
+          </div>
         </button>
-        <button disabled={pending} onClick={() => pick("contractor")} className="rounded-2xl border p-4 text-left hover:shadow-lg disabled:opacity-60">
-          <div className="text-lg font-medium">I’m a contractor</div>
-          <div className="text-sm text-neutral-600">Find nearby jobs and win work.</div>
+
+        <button
+          onClick={() => choose("contractor")}
+          disabled={pending}
+          className="rounded-xl border px-4 py-3 text-left shadow-sm hover:bg-neutral-50 disabled:opacity-60"
+        >
+          <div className="font-semibold">I’m a contractor</div>
+          <div className="text-sm text-neutral-600">
+            I want to find work and submit quotes.
+          </div>
         </button>
       </div>
-    </main>
+
+      {error && (
+        <p className="text-sm text-red-600" role="status">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }

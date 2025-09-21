@@ -1,31 +1,16 @@
-// app/choose-role/setRoleAction.ts
 "use server";
 
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 
+// Persist the user's role in a cookie for now (no DB required).
+// You can swap this to a Prisma update later.
 export async function setRole(role: "customer" | "contractor") {
-  const session = await auth();
-
-  const email = session?.user?.email;
-  if (!email) {
-    redirect(`/login?callbackUrl=${encodeURIComponent("/choose-role")}`);
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true },
+  cookies().set("fc_role", role, {
+    path: "/",
+    httpOnly: false, // readable by client to tweak UI if needed
+    sameSite: "lax",
+    maxAge: 60 * 60 * 24 * 30, // 30 days
   });
 
-  if (!user) {
-    redirect(`/login?callbackUrl=${encodeURIComponent("/choose-role")}`);
-  }
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { role },
-  });
-
-  redirect("/");
+  return { ok: true as const };
 }
