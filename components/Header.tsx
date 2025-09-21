@@ -1,52 +1,66 @@
+"use client";
+import { useState } from "react";
 import Link from "next/link";
-import { auth } from "@/auth";
-import AuthButtons from "./AuthButtons";
 
-export default async function Header() {
-  const session = await auth();
-  const isAuthed = !!session?.user;
+export default function Header() {
+  const [open, setOpen] = useState(false);
 
-  const nav = [
-    { href: "/", label: "Home", public: true },
-    { href: "/dashboard", label: "Dashboard", public: false },
-    { href: "/post-a-job", label: "Post a job", public: true },
-    { href: "/opportunities", label: "Opportunities", public: true },
-    { href: "/profile", label: "Profile", public: false },
-    { href: "/pricing", label: "Pricing", public: true }
+  const links = [
+    { href: "/", label: "Home" },
+    { href: "/post-a-job", label: "Post a job" },
+    { href: "/opportunities", label: "Opportunities" },
+    { href: "/pricing", label: "Pricing" },
   ];
 
   return (
-    <header className="rounded-2xl border bg-white p-3 shadow-sm">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-        <Link href="/" className="inline-flex items-center">
-          <span className="text-2xl font-black tracking-tight text-green-700">
-            OutbackConnections
-          </span>
+    <header className="sticky top-0 z-40 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 border-b">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <Link href="/" className="font-extrabold text-xl text-green-700">
+          OutbackConnections
         </Link>
 
-        <nav className="flex flex-wrap items-center gap-2">
-          {nav
-            .filter((i) => i.public || isAuthed)
-            .map((i) => (
-              <Link
-                key={i.href}
-                href={i.href}
-                className="rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-neutral-100"
-              >
-                {i.label}
-              </Link>
-            ))}
+        {/* Desktop nav */}
+        <nav className="hidden md:flex items-center gap-6">
+          {links.map(l => (
+            <Link key={l.href} href={l.href} className="text-sm font-medium hover:text-green-700">
+              {l.label}
+            </Link>
+          ))}
+          <Link href="/login" className="rounded-full border px-3 py-1.5 text-sm hover:bg-gray-50">
+            Sign in
+          </Link>
         </nav>
 
-        <div className="flex items-center gap-2">
-          {session?.user?.email ? (
-            <span className="hidden sm:inline rounded-lg bg-neutral-100 px-3 py-1.5 text-sm text-neutral-700">
-              {session.user.email}
-            </span>
-          ) : null}
-          <AuthButtons isAuthed={isAuthed} />
-        </div>
+        {/* Mobile menu button */}
+        <button
+          aria-label="Open menu"
+          onClick={() => setOpen(v => !v)}
+          className="md:hidden inline-flex items-center rounded-md border px-3 py-2"
+        >
+          ☰
+        </button>
       </div>
+
+      {/* Mobile panel */}
+      {open && (
+        <div className="md:hidden border-t">
+          <nav className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3 flex flex-col gap-2">
+            {links.map(l => (
+              <Link
+                key={l.href}
+                href={l.href}
+                onClick={() => setOpen(false)}
+                className="py-2 text-base font-medium"
+              >
+                {l.label}
+              </Link>
+            ))}
+            <Link href="/login" onClick={() => setOpen(false)} className="py-2 text-base">
+              Sign in
+            </Link>
+          </nav>
+        </div>
+      )}
     </header>
   );
 }

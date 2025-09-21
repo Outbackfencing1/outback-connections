@@ -1,80 +1,62 @@
-type Opportunity = {
-  id: string;
-  title: string;
-  farm: string;
-  location: string;
-  rate: string;
-  summary: string;
-};
-
-const SAMPLE: Opportunity[] = [
-  {
-    id: "1",
-    title: "Irrigation Assistant",
-    farm: "Green Plains",
-    location: "Tamworth, NSW",
-    rate: "$30–$34/hr",
-    summary:
-      "Assist with daily irrigation scheduling, pump checks, and basic maintenance.",
-  },
-  {
-    id: "2",
-    title: "Cattle Station Hand",
-    farm: "Seven Creeks",
-    location: "Charters Towers, QLD",
-    rate: "$290/day",
-    summary:
-      "Yard work, fencing repairs, and general station duties. Experience preferred.",
-  },
-  {
-    id: "3",
-    title: "Vineyard Casual",
-    farm: "Red Ridge Wines",
-    location: "Barossa SA",
-    rate: "$32/hr",
-    summary:
-      "Pruning, wire lifting, and canopy work for 4–6 weeks. Training provided.",
-  },
-];
+// app/dashboard/opportunities/page.tsx
+import Link from "next/link";
+import { allJobs } from "@/lib/jobs";
 
 export const metadata = {
   title: "Opportunities – OutbackConnections",
+  description: "Browse available jobs posted by customers.",
 };
 
 export default function OpportunitiesPage() {
+  const jobs = allJobs();
+
   return (
-    <div className="space-y-4">
+    <main className="mx-auto max-w-6xl px-4 py-10">
       <div className="flex items-end justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold">Opportunities</h2>
-          <p className="text-sm text-gray-500">
-            Sample listings (static data for now).
-          </p>
-        </div>
+        <h1 className="text-3xl font-bold">Opportunities</h1>
+        <Link
+          href="/post-a-job"
+          className="rounded-full border px-4 py-2 text-sm hover:bg-gray-50"
+        >
+          Post a job
+        </Link>
       </div>
 
-      <ul className="grid gap-4 sm:grid-cols-2">
-        {SAMPLE.map((job) => (
-          <li key={job.id} className="rounded-xl border p-4 shadow-sm">
-            <div className="flex items-baseline justify-between">
-              <h3 className="text-lg font-medium">{job.title}</h3>
-              <span className="text-sm text-gray-600">{job.rate}</span>
+      <p className="mt-2 text-gray-600">
+        A simple list of live roles. Click into any card for full details.
+      </p>
+
+      <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-5">
+        {jobs.map((job) => (
+          <article key={job.slug} className="rounded-2xl border p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <h2 className="text-lg font-semibold">{job.title}</h2>
+              <span className="shrink-0 text-sm font-medium text-gray-600">
+                {job.rate}
+              </span>
             </div>
-            <p className="mt-1 text-sm text-gray-600">
-              {job.farm} • {job.location}
+            <p className="mt-1 text-sm text-gray-600">{job.location}</p>
+            <p className="mt-3 text-gray-700 text-sm">
+              {job.description.slice(0, 120)}…
             </p>
-            <p className="mt-3 text-sm text-gray-700">{job.summary}</p>
-            <div className="mt-4">
-              <a
-                href="#"
-                className="inline-block rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-gray-50"
+            <div className="mt-4 flex items-center justify-between">
+              <Link
+                href={`/dashboard/opportunities/${job.slug}`}
+                className="inline-flex rounded-full px-4 py-2 text-sm border font-medium hover:bg-gray-50 transition"
               >
                 View details
-              </a>
+              </Link>
+              <time
+                className="text-xs text-gray-500"
+                dateTime={job.postedAt}
+                suppressHydrationWarning
+              >
+                Posted {new Date(job.postedAt).toLocaleDateString()}
+              </time>
             </div>
-          </li>
+          </article>
         ))}
-      </ul>
-    </div>
+      </div>
+    </main>
   );
 }

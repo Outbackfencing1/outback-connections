@@ -1,6 +1,7 @@
+// app/opportunities/page.tsx
 import { redirect } from "next/navigation";
-export const dynamic = "force-static";
 
-export default function Page() {
+export default function OpportunitiesShortUrl() {
+  // Short URL -> canonical dashboard route
   redirect("/dashboard/opportunities");
 }

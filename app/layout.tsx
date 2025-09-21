@@ -1,21 +1,32 @@
+// app/layout.tsx
 import "./globals.css";
-import type { ReactNode } from "react";
+import type { Metadata } from "next";
 import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 
-export const metadata = {
+const baseUrl =
+  process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+
+export const metadata: Metadata = {
+  metadataBase: new URL(baseUrl),
   title: "OutbackConnections",
-  description: "Connecting farmers and contractors across Australia."
+  description:
+    "Get skilled work done—fast, fair, and local. Post jobs or find farm work and opportunities across Australia.",
+  icons: { icon: "/favicon.ico" },
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
-      <body className="min-h-dvh bg-neutral-50">
-        <div className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4">
+      <body className="bg-neutral-50 text-neutral-900">
+        <div className="flex min-h-dvh flex-col">
           <Header />
-          <main className="rounded-2xl border bg-white p-4 shadow-sm">
-            {children}
-          </main>
+          <main className="flex-1">{children}</main>
+          <Footer />
         </div>
       </body>
     </html>
