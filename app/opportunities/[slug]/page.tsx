@@ -2,27 +2,57 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { getPrisma } from "@/lib/prisma";
 import { allJobs, getJobBySlug } from "@/lib/jobs";
 
 type Params = { slug: string };
 
-export const dynamicParams = false;
+export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
+  const prisma = getPrisma();
+  let title = "Opportunity";
+  let description = "Job opportunity";
 
-export function generateStaticParams(): Params[] {
-  return allJobs().map((j) => ({ slug: j.slug }));
-}
+  if (prisma) {
+    const job = await prisma.job.findUnique({ where: { slug: params.slug } });
+    if (job) {
+      title = `${job.title} – OutbackConnections`;
+      description = `${job.location}${job.rate ? " • " + job.rate : ""} — ${job.description.slice(0, 120)}…`;
+    }
+  } else {
+    const job = getJobBySlug(params.slug);
+    if (job) {
+      title = `${job.title} – OutbackConnections`;
+      description = `${job.location} • ${job.rate} — ${job.description.slice(0, 120)}…`;
+    }
+  }
 
-export function generateMetadata({ params }: { params: Params }): Metadata {
-  const job = getJobBySlug(params.slug);
-  const title = job ? `${job.title} – OutbackConnections` : "Opportunity";
-  const description = job
-    ? `${job.location} • ${job.rate} — ${job.description.slice(0, 120)}…`
-    : "Job opportunity";
   return { title, description };
 }
 
-export default function OpportunityDetailPage({ params }: { params: Params }) {
-  const job = getJobBySlug(params.slug);
+export default async function OpportunityDetailPage({ params }: { params: Params }) {
+  const prisma = getPrisma();
+  let job:
+    | { title: string; location: string; rate: string | null; description: string; postedAt: Date }
+    | null = null;
+
+  if (prisma) {
+    job = await prisma.job.findUnique({
+      where: { slug: params.slug },
+      select: { title: true, location: true, rate: true, description: true, postedAt: true },
+    });
+  } else {
+    const fallback = getJobBySlug(params.slug);
+    if (fallback) {
+      job = {
+        title: fallback.title,
+        location: fallback.location,
+        rate: fallback.rate,
+        description: fallback.description,
+        postedAt: new Date(fallback.postedAt),
+      };
+    }
+  }
+
   if (!job) notFound();
 
   return (
@@ -40,14 +70,14 @@ export default function OpportunityDetailPage({ params }: { params: Params }) {
             <dt className="text-xs uppercase tracking-wide text-gray-500">
               Rate
             </dt>
-            <dd className="text-base font-medium">{job.rate}</dd>
+            <dd className="text-base font-medium">{job.rate || "—"}</dd>
           </div>
           <div>
             <dt className="text-xs uppercase tracking-wide text-gray-500">
               Posted
             </dt>
             <dd className="text-base font-medium" suppressHydrationWarning>
-              {new Date(job.postedAt).toLocaleDateString()}
+              {job.postedAt.toLocaleDateString()}
             </dd>
           </div>
         </dl>
