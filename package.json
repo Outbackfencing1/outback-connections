@@ -5,42 +5,10 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
-    "start": "next start -p 3000",
-    "prod": "next build && next start",
-    "lint": "next lint",
-    "type-check": "tsc --noEmit",
-    "check": "npm run type-check && npm run lint",
-    "prisma:generate": "prisma generate",
-    "prisma:studio": "prisma studio",
-    "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy",
-    "format": "prettier --write .",
-    "build:vercel": "prisma migrate deploy && next build"
+    "start": "next start"
   },
   "dependencies": {
-    "@prisma/client": "^5.18.0",
-    "@supabase/supabase-js": "^2.57.4",
-    "next": "14.x",
-    "next-auth": "^5.0.0-beta.29",
-    "react": "18.x",
-    "react-dom": "18.x",
-    "zod": "^3.23.8"
+    // …your existing deps…
   },
-  "devDependencies": {
-    "@types/node": "^20.16.5",
-    "@types/react": "^18.3.5",
-    "@types/react-dom": "^18.3.0",
-    "autoprefixer": "^10.4.20",
-    "eslint": "^8.57.0",
-    "eslint-config-next": "14.x",
-    "postcss": "^8.4.45",
-    "prettier": "^3.3.3",
-    "prisma": "^5.18.0",
-    "tailwindcss": "^3.4.10",
-    "typescript": "^5.6.2"
-  },
-  "engines": {
-    "node": ">=18.18.0"
-  },
-  "packageManager": "npm@10"
+  "engines": { "node": "20.x" }
 }
