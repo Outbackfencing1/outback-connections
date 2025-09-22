@@ -1,60 +1,44 @@
-// app/dashboard/post-a-job/actions.ts
 "use server";
 
+import { z } from "zod";
+import { supabaseAdmin } from "@/lib/supabase";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { getPrisma } from "@/lib/prisma";
 
-function slugify(input: string) {
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .slice(0, 80);
-}
+const JobSchema = z.object({
+  title: z.string().min(3, "Title is too short"),
+  company: z.string().optional(),
+  location: z.string().optional(),
+  pay_rate: z.string().optional(),
+  description: z.string().min(10, "Description is too short"),
+});
 
 export async function createJob(formData: FormData) {
-  const prisma = getPrisma();
-  if (!prisma) {
-    throw new Error(
-      "Database not configured. Add Vercel Postgres to this project so you can post jobs."
-    );
-  }
-
-  const title = String(formData.get("title") || "").trim();
-  const location = String(formData.get("location") || "").trim();
-  const rate = String(formData.get("rate") || "").trim();
-  const description = String(formData.get("description") || "").trim();
-
-  if (!title || !location || !description) {
-    throw new Error("Please fill in title, location, and description.");
-  }
-
-  // Build a slug and ensure uniqueness
-  let base = slugify(`${title}-${location}`);
-  if (!base) base = `job-${Date.now()}`;
-  let slug = base;
-
-  // If a job already exists with this slug, add a suffix
-  let i = 2;
-  while (await prisma.job.findUnique({ where: { slug } })) {
-    slug = `${base}-${i++}`;
-  }
-
-  const job = await prisma.job.create({
-    data: {
-      slug,
-      title,
-      location,
-      rate: rate || null,
-      description,
-      status: "OPEN",
-    },
+  const raw = Object.fromEntries(formData);
+  const parsed = JobSchema.safeParse({
+    title: raw.title,
+    company: raw.company,
+    location: raw.location,
+    pay_rate: raw.pay_rate,
+    description: raw.description,
   });
 
-  // Revalidate the list page and go to the details page
+  if (!parsed.success) {
+    const msg = parsed.error.issues.map((i) => i.message).join(", ");
+    return { ok: false as const, message: msg };
+  }
+
+  const supa = supabaseAdmin();
+  const { error } = await supa.from("jobs").insert({
+    ...parsed.data,
+    status: "open",
+  });
+
+  if (error) {
+    return { ok: false as const, message: error.message };
+  }
+
+  // Refresh listings
   revalidatePath("/dashboard/opportunities");
-  redirect(`/dashboard/opportunities/${job.slug}`);
+  revalidatePath("/opportunities");
+  return { ok: true as const };
 }

@@ -1,57 +1,64 @@
-import { auth, signIn } from "@/auth";
+// app/dashboard/page.tsx
+import { auth } from "@/auth";
+import Link from "next/link";
 
-export default async function DashboardHome() {
+export const metadata = { title: "Dashboard – OutbackConnections" };
+
+export default async function DashboardPage() {
   const session = await auth();
+  const name = session?.user?.name ?? "there";
 
-  if (!session) {
-    async function login() {
-      "use server";
-      await signIn("google");
-    }
-
-    return (
-      <div className="space-y-4">
-        <p className="text-gray-700">You need to sign in to access the dashboard.</p>
-        <form action={login}>
-          <button
-            type="submit"
-            className="rounded-xl border px-4 py-2 font-medium shadow-sm transition hover:bg-gray-50"
-          >
-            Sign in with Google
-          </button>
-        </form>
-      </div>
-    );
-  }
+  const cards = [
+    {
+      href: "/dashboard/post-a-job",
+      title: "Post a job",
+      description:
+        "Create a listing with the work, location and pay. Contractors will be able to contact you.",
+      action: "Create job",
+    },
+    {
+      href: "/dashboard/opportunities",
+      title: "Opportunities",
+      description:
+        "Browse open roles posted by landholders and businesses. Apply or save ones you like.",
+      action: "Browse roles",
+    },
+    {
+      href: "/dashboard/profile",
+      title: "Your profile",
+      description:
+        "Tell us about your skills and availability so we can match you with the right work.",
+      action: "Edit profile",
+    },
+  ];
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-xl border p-4">
-        <p className="text-gray-600">Welcome back,</p>
-        <p className="text-lg font-medium">{session.user?.name ?? "there"} 👋</p>
+    <main className="mx-auto max-w-6xl px-4 py-8">
+      <h1 className="text-2xl font-semibold">Dashboard</h1>
+      <p className="mt-1 text-gray-700">Welcome, {name}.</p>
+
+      <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {cards.map((c) => (
+          <article key={c.href} className="rounded-2xl border p-6 shadow-sm">
+            <h2 className="text-lg font-medium">{c.title}</h2>
+            <p className="mt-2 text-sm text-gray-700">{c.description}</p>
+            <div className="mt-4">
+              <Link
+                href={c.href}
+                className="inline-flex items-center rounded-md border px-3 py-1.5 text-sm hover:bg-gray-50"
+              >
+                {c.action}
+              </Link>
+            </div>
+          </article>
+        ))}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <a
-          href="/dashboard/post-a-job"
-          className="rounded-xl border p-5 shadow-sm transition hover:bg-gray-50"
-        >
-          <h2 className="font-semibold">Post a Job</h2>
-          <p className="mt-1 text-sm text-gray-500">
-            Create a new job listing (placeholder form – no DB required yet).
-          </p>
-        </a>
-
-        <a
-          href="/dashboard/opportunities"
-          className="rounded-xl border p-5 shadow-sm transition hover:bg-gray-50"
-        >
-          <h2 className="font-semibold">Opportunities</h2>
-          <p className="mt-1 text-sm text-gray-500">
-            Browse sample opportunities (static data for now).
-          </p>
-        </a>
-      </div>
-    </div>
+      {!session && (
+        <p className="mt-8 text-sm text-amber-700">
+          You’re not signed in. Some actions may be unavailable.
+        </p>
+      )}
+    </main>
   );
 }
