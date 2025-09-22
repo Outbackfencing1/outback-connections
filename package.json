@@ -2,13 +2,32 @@
   "name": "farmconnect",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "lint": "next lint",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
-    // …your existing deps…
+    "@prisma/client": "^6.16.2",
+    "@supabase/supabase-js": "^2.47.0",
+    "next": "^14.2.0",
+    "next-auth": "^5.0.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "zod": "^3.23.8"
   },
-  "engines": { "node": "20.x" }
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^14.2.0",
+    "postcss": "^8.4.41",
+    "prisma": "^6.16.2",
+    "tailwindcss": "^3.4.10",
+    "typescript": "^5.6.3"
+  }
 }
