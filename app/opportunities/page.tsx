@@ -1,4 +1,4 @@
-export const metadata = { title: "Opportunities – OutbackConnections" };
+export const metadata = { title: "Opportunities – Outback Connections" };
 
 export default function OpportunitiesListPage() {
   // static placeholder for now

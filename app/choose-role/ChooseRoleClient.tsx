@@ -29,7 +29,7 @@ export default function ChooseRoleClient() {
     <div className="mx-auto max-w-md space-y-4">
       <h1 className="text-2xl font-bold tracking-tight">Choose your role</h1>
       <p className="text-neutral-600 text-sm">
-        Tell us how you want to use OutbackConnections.
+        Tell us how you want to use Outback Connections.
       </p>
 
       <div className="grid gap-3">

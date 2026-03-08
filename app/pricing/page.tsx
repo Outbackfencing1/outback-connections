@@ -1,75 +1,69 @@
 import Link from "next/link";
 
+export const metadata = {
+  title: "Pricing – Outback Connections",
+  description: "Simple, transparent pricing for contractors on Outback Connections.",
+};
+
 export default function PricingPage() {
   const plans = [
     {
-      name: "Starter",
+      name: "Free",
       price: "Free",
-      desc: "Start free until you’ve earned $1,000 in completed job value.",
+      desc: "Browse listings and post 1 listing per month.",
       features: [
-        "Leads included",
-        "Send quotes & invoices",
-        "Profile listed in directory",
+        "Browse all listings",
+        "1 listing per month",
+        "Basic profile page",
+        "Email notifications",
       ],
       cta: "Get Started",
-      href: "/contractor",
-      highlight: "Most popular for new contractors",
-    },
-    {
-      name: "Growth",
-      price: "$49 / month",
-      desc: "For contractors building steady work.",
-      features: [
-        "Unlimited leads",
-        "In-app messaging",
-        "Job milestone tracking",
-        "Priority listing in directory",
-      ],
-      cta: "Choose Growth",
-      href: "/contractor",
-      highlight: "",
+      href: "/login",
+      highlight: "Great for getting started",
     },
     {
       name: "Pro",
-      price: "$99 / month",
-      desc: "For established contractors wanting maximum exposure.",
+      price: "$29 / month",
+      desc: "Unlimited listings with featured placement and analytics.",
       features: [
-        "Everything in Growth",
-        "Top-tier profile placement",
-        "Early access to high-value jobs",
-        "Premium support",
+        "Unlimited listings",
+        "Featured placement",
+        "Listing analytics",
+        "Priority in search results",
+        "In-app messaging",
       ],
-      cta: "Choose Pro",
-      href: "/contractor",
-      highlight: "",
+      cta: "Coming Soon",
+      href: "#",
+      highlight: "Most popular",
     },
     {
-      name: "Enterprise",
-      price: "Custom",
-      desc: "For large teams or regional contractors.",
+      name: "Business",
+      price: "$99 / month",
+      desc: "Everything in Pro plus API access, bulk listings, and priority support.",
       features: [
-        "Custom pricing",
+        "Everything in Pro",
+        "API access",
+        "Bulk listing upload",
+        "Priority support",
         "Team logins",
-        "API & integrations",
-        "Dedicated support rep",
+        "Custom branding",
       ],
-      cta: "Contact Us",
-      href: "/post-a-job", // or /contact later
+      cta: "Coming Soon",
+      href: "#",
       highlight: "",
     },
   ];
 
   return (
-    <div className="mx-auto max-w-5xl space-y-10">
+    <div className="mx-auto max-w-5xl px-4 py-8 space-y-10">
       <header>
-        <h1 className="text-3xl font-extrabold text-green-800">OutbackConnections Pricing</h1>
+        <h1 className="text-3xl font-extrabold text-green-800">Pricing</h1>
         <p className="mt-2 text-neutral-700">
-          Contractors start free until you reach <strong>$1,000</strong> in completed job value.
-          Upgrade anytime to unlock more leads and features.
+          Simple, transparent pricing. Start free and upgrade when you&apos;re ready.
         </p>
       </header>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-3">
         {plans.map((plan) => (
           <div key={plan.name} className="flex flex-col rounded-2xl border bg-white p-6 shadow-sm">
             <h2 className="text-xl font-bold text-neutral-900">{plan.name}</h2>
@@ -81,30 +75,38 @@ export default function PricingPage() {
 
             <ul className="mt-4 flex-1 space-y-2 text-sm text-neutral-700">
               {plan.features.map((f) => (
-                <li key={f}>• {f}</li>
+                <li key={f}>&bull; {f}</li>
               ))}
             </ul>
 
-            <Link
-              href={plan.href}
-              className="mt-6 inline-block rounded-xl bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 text-center"
-            >
-              {plan.cta}
-            </Link>
+            {plan.href === "#" ? (
+              <span className="mt-6 inline-block rounded-xl bg-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-500 text-center cursor-not-allowed">
+                {plan.cta}
+              </span>
+            ) : (
+              <Link
+                href={plan.href}
+                className="mt-6 inline-block rounded-xl bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 text-center"
+              >
+                {plan.cta}
+              </Link>
+            )}
           </div>
         ))}
       </div>
 
       <section className="rounded-2xl border bg-white p-6 shadow-sm">
-        <h3 className="text-lg font-extrabold">How “Free Until $1k” Works</h3>
-        <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-neutral-700">
-          <li>Accept jobs and complete milestones inside OutbackConnections.</li>
-          <li>Once your total completed job value hits $1,000, choose a paid plan.</li>
-          <li>If you pause work, you can downgrade or cancel anytime.</li>
-        </ol>
-        <p className="mt-4 text-xs text-neutral-500">
-          Note: Threshold can be adjusted later based on market feedback.
+        <h3 className="text-lg font-extrabold">Need a custom plan?</h3>
+        <p className="mt-2 text-sm text-neutral-700">
+          For large teams, regional contractors, or enterprise needs, get in touch
+          and we&apos;ll put together a package that works for you.
         </p>
+        <Link
+          href="/post-a-job"
+          className="mt-4 inline-block rounded-xl bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800"
+        >
+          Contact Us
+        </Link>
       </section>
     </div>
   );

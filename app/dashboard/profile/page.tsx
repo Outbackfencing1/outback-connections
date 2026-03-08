@@ -2,7 +2,7 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 
-export const metadata = { title: "Contractor profile – OutbackConnections" };
+export const metadata = { title: "Contractor profile – Outback Connections" };
 
 export default async function ProfilePage() {
   // Require sign-in

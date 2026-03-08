@@ -16,7 +16,7 @@ export default function Header() {
     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 border-b">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <Link href="/" className="font-extrabold text-xl text-green-700">
-          OutbackConnections
+          Outback Connections
         </Link>
 
         {/* Desktop nav */}

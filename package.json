@@ -1,9 +1,9 @@
 {
-  "name": "farmconnect",
+  "name": "outback-connections",
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": "20.x"
+    "node": ">=20"
   },
   "scripts": {
     "dev": "next dev -p 3000",
@@ -13,15 +13,17 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@auth/core": "^0.41.0",
     "@prisma/client": "^6.16.2",
     "@supabase/supabase-js": "^2.47.0",
     "next": "^14.2.0",
-    "next-auth": "^4.24.7",
+    "next-auth": "^5.0.0-beta.30",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/react": "19.2.14",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.0",

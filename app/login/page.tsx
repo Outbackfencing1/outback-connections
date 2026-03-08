@@ -2,7 +2,7 @@ import { auth, signIn } from "@/auth";
 import { redirect } from "next/navigation";
 
 export const metadata = {
-  title: "Login – OutbackConnections",
+  title: "Login – Outback Connections",
 };
 
 export default async function LoginPage() {

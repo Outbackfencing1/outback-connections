@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Dashboard – OutbackConnections",
+  title: "Dashboard – Outback Connections",
 };
 
 export default function DashboardLayout({

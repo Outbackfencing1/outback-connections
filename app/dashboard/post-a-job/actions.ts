@@ -28,6 +28,13 @@ export async function createJob(formData: FormData) {
   }
 
   const supa = supabaseAdmin();
+  if (!supa) {
+    return {
+      ok: false as const,
+      message: "Database is not configured yet. Job posting will be available soon.",
+    };
+  }
+
   const { error } = await supa.from("jobs").insert({
     ...parsed.data,
     status: "open",
@@ -37,7 +44,6 @@ export async function createJob(formData: FormData) {
     return { ok: false as const, message: error.message };
   }
 
-  // Refresh listings
   revalidatePath("/dashboard/opportunities");
   revalidatePath("/opportunities");
   return { ok: true as const };

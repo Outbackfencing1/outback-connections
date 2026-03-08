@@ -1,7 +1,7 @@
 // app/dashboard/post-a-job/page.tsx
 import PostJobForm from "./post-job-form";
 
-export const metadata = { title: "Post a job – OutbackConnections" };
+export const metadata = { title: "Post a job – Outback Connections" };
 
 export default function PostAJobPage() {
   return (

@@ -2,7 +2,7 @@
 import { auth } from "@/auth";
 import Link from "next/link";
 
-export const metadata = { title: "Dashboard – OutbackConnections" };
+export const metadata = { title: "Dashboard – Outback Connections" };
 
 export default async function DashboardPage() {
   const session = await auth();

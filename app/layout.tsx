@@ -9,9 +9,9 @@ const baseUrl =
 
 export const metadata: Metadata = {
   metadataBase: new URL(baseUrl),
-  title: "OutbackConnections",
+  title: "Outback Connections | Rural Australia's Marketplace",
   description:
-    "Get skilled work done—fast, fair, and local. Post jobs or find farm work and opportunities across Australia.",
+    "Find rural jobs, freight, and equipment across Australia. Built by Outback Fencing & Steel Supplies.",
   icons: { icon: "/favicon.ico" },
 };
 

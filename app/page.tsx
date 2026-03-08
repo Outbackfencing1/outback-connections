@@ -2,44 +2,50 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "OutbackConnections — Get skilled work done fast, fair, and local",
+  title: "Outback Connections | Rural Australia's Marketplace",
   description:
-    "Find skilled help or local gigs quickly. OutbackConnections connects landowners and contractors across Australia.",
+    "Find rural jobs, freight, and equipment across Australia. Built by Outback Fencing & Steel Supplies.",
 };
 
 export default function HomePage() {
   return (
     <main>
-      {/* Shell */}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 
         {/* Hero */}
         <section className="py-10 sm:py-14 md:py-20">
           <div className="mx-auto max-w-3xl lg:max-w-5xl">
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight [text-wrap:balance]">
-              Get skilled work done—fast, fair, and local
+              Rural Australia&apos;s marketplace for jobs, freight &amp; equipment
             </h1>
 
             <p className="mt-4 text-base sm:text-lg md:text-xl text-gray-700 [text-wrap:pretty]">
-              There are so many skilled Australians, but most ways to find help
-              are messy and time-consuming. We’re building OutbackConnections to{" "}
-              <strong>unlock productivity</strong> and help people get stuff
-              done—on farm, on site, and everywhere in between.
+              Built by{" "}
+              <a
+                href="https://outbackfencing.com.au"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium underline underline-offset-4 hover:text-green-700"
+              >
+                Outback Fencing &amp; Steel Supplies
+              </a>{" "}
+              in Orange, NSW. We&apos;re connecting skilled Australians to get
+              stuff done — on farm, on site, and everywhere in between.
             </p>
 
-            {/* CTAs (stack on mobile) */}
+            {/* CTAs */}
             <div className="mt-6 flex flex-col sm:flex-row gap-3">
               <Link
                 href="/post-a-job"
                 className="w-full sm:w-auto rounded-full px-5 py-3 text-center bg-green-700 text-white font-medium hover:bg-green-800 transition"
               >
-                Post a job
+                Post a listing
               </Link>
               <Link
                 href="/opportunities"
                 className="w-full sm:w-auto rounded-full px-5 py-3 text-center border font-medium hover:bg-gray-50 transition"
               >
-                Find opportunities
+                Browse opportunities
               </Link>
             </div>
 
@@ -58,16 +64,16 @@ export default function HomePage() {
         <section className="pb-12 sm:pb-16">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
             <Feature
-              title="Local & fast"
+              title="Local &amp; fast"
               body="Post a job and reach nearby contractors quickly. Keep work close to home."
             />
             <Feature
-              title="Fair & transparent"
+              title="Fair &amp; transparent"
               body="Clear expectations and messaging up front to avoid time-wasting back-and-forth."
             />
             <Feature
               title="Made for the bush"
-              body="Built for rural and regional work—farm hands, fencing, station work, trades and more."
+              body="Built for rural and regional work — fencing, earthworks, station work, trades and more."
             />
           </div>
         </section>
@@ -88,13 +94,13 @@ export default function HomePage() {
                 href="/post-a-job"
                 className="rounded-full px-5 py-3 text-center bg-green-700 text-white font-medium hover:bg-green-800 transition"
               >
-                Post a job
+                Post a listing
               </Link>
               <Link
                 href="/opportunities"
                 className="rounded-full px-5 py-3 text-center border font-medium hover:bg-gray-50 transition"
               >
-                Find opportunities
+                Browse opportunities
               </Link>
             </div>
           </div>

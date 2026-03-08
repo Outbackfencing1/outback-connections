@@ -15,7 +15,7 @@ export default function ContractorDashboard() {
     <div className="rounded-2xl border bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-extrabold text-green-800">
-          OutbackConnections Dashboard
+          Outback Connections Dashboard
         </h1>
         <a
           href="/pricing"
