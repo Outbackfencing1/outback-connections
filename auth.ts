@@ -1,15 +1,20 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
+import type { Provider } from "next-auth/providers";
+
+const providers: Provider[] = [];
+
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  providers.push(
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    })
+  );
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!
-    })
-  ],
-  // Keep auth simple: JWT sessions, no DB required locally or on first deploy
+  providers,
   session: { strategy: "jwt" },
-  // Your login page route
-  pages: { signIn: "/login" }
+  pages: { signIn: "/login" },
 });

@@ -5,6 +5,8 @@ export const metadata = {
   title: "Login – Outback Connections",
 };
 
+const hasGoogle = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+
 export default async function LoginPage() {
   const session = await auth();
   if (session) {
@@ -23,14 +25,23 @@ export default async function LoginPage() {
         Use Google to sign in and access your dashboard.
       </p>
 
-      <form action={loginGoogle} className="mt-8">
-        <button
-          type="submit"
-          className="w-full rounded-xl border px-4 py-3 font-medium shadow-sm transition hover:bg-gray-50"
-        >
-          Continue with Google
-        </button>
-      </form>
+      {hasGoogle ? (
+        <form action={loginGoogle} className="mt-8">
+          <button
+            type="submit"
+            className="w-full rounded-xl border px-4 py-3 font-medium shadow-sm transition hover:bg-gray-50"
+          >
+            Continue with Google
+          </button>
+        </form>
+      ) : (
+        <div className="mt-8 rounded-xl border bg-amber-50 p-4">
+          <p className="text-sm text-amber-800">
+            Sign-in is not configured yet. Google OAuth credentials need to be
+            added to the environment variables.
+          </p>
+        </div>
+      )}
 
       <p className="mt-4 text-xs text-gray-500">
         By signing in you agree to our terms and privacy policy.
