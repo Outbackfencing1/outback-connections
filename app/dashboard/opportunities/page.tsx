@@ -1,7 +1,7 @@
 // app/dashboard/opportunities/page.tsx
 import { supabaseServer } from "@/lib/supabase";
 
-export const metadata = { title: "Dashboard – Opportunities" };
+export const metadata = { title: "Fencing Opportunities – Dashboard" };
 
 export default async function DashboardOpportunitiesPage() {
   const supa = supabaseServer();
@@ -9,11 +9,11 @@ export default async function DashboardOpportunitiesPage() {
   if (!supa) {
     return (
       <main className="mx-auto max-w-5xl px-4 py-8">
-        <h1 className="mb-6 text-2xl font-semibold">Opportunities</h1>
-        <div className="rounded-xl border bg-amber-50 p-6">
-          <h2 className="font-medium text-amber-800">Coming Soon</h2>
+        <h1 className="text-2xl font-bold text-neutral-900">Fencing Opportunities</h1>
+        <div className="mt-6 rounded-xl border bg-amber-50 border-amber-200 p-6">
+          <h2 className="font-semibold text-amber-800">Coming Soon</h2>
           <p className="mt-1 text-sm text-amber-700">
-            Live job listings will appear here once the database is connected.
+            Live fencing job listings will appear here once the database is connected.
             Check back soon.
           </p>
         </div>
@@ -23,31 +23,41 @@ export default async function DashboardOpportunitiesPage() {
 
   const { data: jobs, error } = await supa
     .from("jobs")
-    .select("id,title,company,location,pay_rate,description,created_at")
+    .select("id,title,location,rate,description,slug,created_at")
     .eq("status", "open")
     .order("created_at", { ascending: false })
     .limit(50);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
-      <h1 className="mb-6 text-2xl font-semibold">Opportunities</h1>
+      <h1 className="text-2xl font-bold text-neutral-900">Fencing Opportunities</h1>
+      <p className="mt-1 text-neutral-600">Open fencing jobs from landholders and businesses.</p>
+
       {error ? (
-        <p className="text-red-600">Failed to load jobs: {error.message}</p>
+        <div className="mt-6 rounded-xl border bg-red-50 border-red-200 p-4">
+          <p className="text-sm text-red-700">Failed to load jobs: {error.message}</p>
+        </div>
       ) : (
-        <ul className="grid gap-4">
+        <ul className="mt-6 grid gap-4">
           {(jobs ?? []).map((j) => (
-            <li key={j.id} className="rounded-lg border p-4">
+            <li key={j.id} className="rounded-xl border bg-white p-5 shadow-sm hover:border-green-300 hover:shadow-md transition">
               <div className="flex items-center justify-between">
-                <span className="font-medium">{j.title}</span>
-                {j.pay_rate && <span className="text-sm text-gray-600">{j.pay_rate}</span>}
+                <span className="font-semibold text-neutral-900">{j.title}</span>
+                {j.rate && (
+                  <span className="text-sm font-semibold text-neutral-700">{j.rate}</span>
+                )}
               </div>
-              <p className="text-sm text-gray-700">
-                {[j.company, j.location].filter(Boolean).join(" \u2022 ")}
-              </p>
-              <p className="mt-2 text-gray-800">{j.description}</p>
+              {j.location && (
+                <p className="mt-1 text-sm text-neutral-500">{j.location}</p>
+              )}
+              {j.description && (
+                <p className="mt-2 text-sm text-neutral-700 leading-relaxed">{j.description}</p>
+              )}
             </li>
           ))}
-          {(jobs ?? []).length === 0 && <p>No jobs yet.</p>}
+          {(jobs ?? []).length === 0 && (
+            <p className="text-neutral-500">No fencing jobs posted yet. Check back soon.</p>
+          )}
         </ul>
       )}
     </main>

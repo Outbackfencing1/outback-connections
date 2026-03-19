@@ -11,41 +11,41 @@ export default async function DashboardPage() {
   const cards = [
     {
       href: "/dashboard/post-a-job",
-      title: "Post a job",
+      title: "Post a fencing job",
       description:
-        "Create a listing with the work, location and pay. Contractors will be able to contact you.",
+        "Create a listing with the work type, location, and budget. Contractors in your area will see it and send quotes.",
       action: "Create job",
     },
     {
       href: "/dashboard/opportunities",
       title: "Opportunities",
       description:
-        "Browse open roles posted by landholders and businesses. Apply or save ones you like.",
-      action: "Browse roles",
+        "Browse open fencing work posted by landholders and businesses. Apply or save ones you're interested in.",
+      action: "Browse jobs",
     },
     {
       href: "/dashboard/profile",
       title: "Your profile",
       description:
-        "Tell us about your skills and availability so we can match you with the right work.",
+        "Set up your contractor profile with skills, service areas, and rates so landholders can find you.",
       action: "Edit profile",
     },
   ];
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
-      <p className="mt-1 text-gray-700">Welcome, {name}.</p>
+      <h1 className="text-2xl font-bold text-neutral-900">Dashboard</h1>
+      <p className="mt-1 text-neutral-600">Welcome back, {name}.</p>
 
       <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((c) => (
-          <article key={c.href} className="rounded-2xl border p-6 shadow-sm">
-            <h2 className="text-lg font-medium">{c.title}</h2>
-            <p className="mt-2 text-sm text-gray-700">{c.description}</p>
+          <article key={c.href} className="rounded-xl border bg-white p-6 shadow-sm hover:border-green-300 hover:shadow-md transition">
+            <h2 className="text-lg font-semibold text-neutral-900">{c.title}</h2>
+            <p className="mt-2 text-sm text-neutral-600 leading-relaxed">{c.description}</p>
             <div className="mt-4">
               <Link
                 href={c.href}
-                className="inline-flex items-center rounded-md border px-3 py-1.5 text-sm hover:bg-gray-50"
+                className="inline-flex items-center rounded-full bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 transition shadow-sm"
               >
                 {c.action}
               </Link>
@@ -55,9 +55,14 @@ export default async function DashboardPage() {
       </div>
 
       {!session && (
-        <p className="mt-8 text-sm text-amber-700">
-          You’re not signed in. Some actions may be unavailable.
-        </p>
+        <div className="mt-8 rounded-xl border bg-amber-50 border-amber-200 p-4">
+          <p className="text-sm text-amber-800">
+            You&apos;re not signed in. Some actions may be unavailable.{" "}
+            <Link href="/login" className="font-semibold underline underline-offset-2 hover:text-amber-900">
+              Sign in
+            </Link>
+          </p>
+        </div>
       )}
     </main>
   );

@@ -4,33 +4,29 @@ import Link from "next/link";
 export default function NotFound() {
   return (
     <main className="mx-auto max-w-5xl px-4 py-16">
-      <div className="rounded-2xl border bg-white p-10 shadow-sm">
-        <p className="text-sm font-medium text-emerald-700">404</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">
-          This page could not be found
+      <div className="rounded-2xl border bg-white p-10 shadow-sm text-center">
+        <div className="inline-block rounded-full bg-green-50 border border-green-200 px-4 py-1.5 text-sm font-semibold text-green-800">
+          404
+        </div>
+        <h1 className="mt-4 text-3xl font-bold tracking-tight text-neutral-900">
+          Page not found
         </h1>
-        <p className="mt-3 max-w-prose text-neutral-600">
-          The page may have moved, or the link you followed might be broken.
+        <p className="mt-3 text-neutral-600 max-w-md mx-auto">
+          The page you&apos;re looking for doesn&apos;t exist or may have been moved.
         </p>
 
-        <div className="mt-8 flex flex-wrap gap-3">
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Link
             href="/"
-            className="inline-flex items-center justify-center rounded-xl bg-emerald-700 px-4 py-2 text-white transition hover:bg-emerald-800"
+            className="rounded-full bg-green-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-800 transition shadow-sm"
           >
             Go home
           </Link>
           <Link
             href="/opportunities"
-            className="inline-flex items-center justify-center rounded-xl border px-4 py-2 text-neutral-800 hover:bg-neutral-50"
+            className="rounded-full border px-5 py-2.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 transition"
           >
             Browse opportunities
-          </Link>
-          <Link
-            href="/post-a-job"
-            className="inline-flex items-center justify-center rounded-xl border px-4 py-2 text-neutral-800 hover:bg-neutral-50"
-          >
-            Post a job
           </Link>
         </div>
       </div>
