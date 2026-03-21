@@ -1,6 +1,6 @@
 # Outback Connections
 
-Rural Australia's marketplace for jobs, freight, and equipment. Built by Outback Fencing & Steel Supplies Pty Ltd.
+Australia's marketplace for fencing contractors. Connect farmers and landholders with qualified fencing contractors across rural and regional Australia. Built by Outback Fencing & Steel Supplies Pty Ltd.
 
 ## Tech Stack
 
