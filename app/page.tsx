@@ -1,5 +1,6 @@
 // app/page.tsx
 import Link from "next/link";
+import { supabaseServer } from "@/lib/supabase";
 
 export const metadata = {
   title: "Outback Connections | Fencing Contractors & Rural Jobs",
@@ -7,10 +8,30 @@ export const metadata = {
     "Find fencing contractors across rural Australia. Post jobs, get quotes, and connect with experienced fencing professionals.",
 };
 
-export default function HomePage() {
+async function getLiveStats() {
+  const supa = supabaseServer();
+  if (!supa) return { profiles: 0, jobs: 0, active: 0 };
+
+  const [profilesRes, jobsRes, activeRes] = await Promise.all([
+    supa.from("profiles").select("*", { count: "exact", head: true }),
+    supa.from("jobs").select("*", { count: "exact", head: true }),
+    supa.from("customer_activities").select("*", { count: "exact", head: true })
+      .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+  ]);
+
+  return {
+    profiles: profilesRes.count ?? 0,
+    jobs: jobsRes.count ?? 0,
+    active: activeRes.count ?? 0,
+  };
+}
+
+export default async function HomePage() {
+  const stats = await getLiveStats();
+
   return (
     <main>
-      {/* Hero — dark gradient */}
+      {/* Hero */}
       <section className="relative bg-gradient-to-br from-[#1a3a0a] via-[#2D5016] to-[#1a2e0a] overflow-hidden">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2260%22%20height%3D%2260%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M0%200h60v60H0z%22%20fill%3D%22none%22%2F%3E%3Cpath%20d%3D%22M30%200v60M0%2030h60%22%20stroke%3D%22rgba(255%2C255%2C255%2C0.03)%22%20stroke-width%3D%221%22%2F%3E%3C%2Fsvg%3E')] opacity-50" />
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16 sm:py-20 md:py-28">
@@ -42,7 +63,7 @@ export default function HomePage() {
 
       {/* Trust bar */}
       <section className="bg-neutral-100 border-b border-neutral-200">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-5">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
             <TrustItem icon={<ShieldIcon />} label="Verified IDs" />
             <TrustItem icon={<StarIcon />} label="Transparent reviews" />
@@ -54,8 +75,17 @@ export default function HomePage() {
 
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 
+        {/* Live stats */}
+        <section className="py-8">
+          <div className="grid grid-cols-3 gap-4">
+            <LiveStat label="Contractors Registered" value={stats.profiles} />
+            <LiveStat label="Jobs Posted" value={stats.jobs} />
+            <LiveStat label="Active This Week" value={stats.active} />
+          </div>
+        </section>
+
         {/* Service categories */}
-        <section className="py-12 sm:py-16">
+        <section className="pb-12 sm:pb-16">
           <h2 className="text-2xl font-bold tracking-tight text-neutral-900">
             Top Services
           </h2>
@@ -142,6 +172,15 @@ export default function HomePage() {
 }
 
 /* ---------- Sub-components ---------- */
+
+function LiveStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-white p-4 text-center shadow-sm">
+      <p className="text-2xl font-bold text-neutral-900">{value > 0 ? value.toLocaleString("en-AU") : "\u2014"}</p>
+      <p className="mt-1 text-xs font-medium text-neutral-500">{label}</p>
+    </div>
+  );
+}
 
 function TrustItem({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (

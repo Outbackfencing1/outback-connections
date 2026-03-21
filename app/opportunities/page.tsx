@@ -1,50 +1,27 @@
+import { supabaseServer } from "@/lib/supabase";
+import Link from "next/link";
+
 export const metadata = { title: "Fencing Opportunities – Outback Connections" };
 
-export default function OpportunitiesListPage() {
-  const items = [
-    {
-      slug: "boundary-fencing-dubbo",
-      title: "Boundary Fencing — 4km Hinge Joint Run",
-      pay: "$18,000–$22,000",
-      where: "Dunedoo Station \u2022 Dubbo, NSW",
-      type: "Boundary",
-    },
-    {
-      slug: "cattle-yard-rebuild",
-      title: "Cattle Yard Rebuild — Steel Panel Replacement",
-      pay: "$8,500 est",
-      where: "Doyle Pastoral \u2022 Emerald, QLD",
-      type: "Yards",
-    },
-    {
-      slug: "strainer-assembly-molong",
-      title: "End Assembly & Strainer Install — 12 Assemblies",
-      pay: "$4,200 est",
-      where: "Hartley Farms \u2022 Molong, NSW",
-      type: "Strainers",
-    },
-    {
-      slug: "electric-fence-strip-grazing",
-      title: "Electric Fence Setup — Rotational Grazing",
-      pay: "$3,800–$4,500",
-      where: "Greenfield Ag \u2022 Hamilton, VIC",
-      type: "Electric",
-    },
-    {
-      slug: "gate-install-driveway",
-      title: "Driveway Gate & Cattle Grid Install",
-      pay: "$6,200 est",
-      where: "Willow Creek \u2022 Mudgee, NSW",
-      type: "Gates",
-    },
-    {
-      slug: "storm-damage-fence-repair",
-      title: "Storm Damage Fence Repair — 2km Boundary",
-      pay: "$7,500–$9,000",
-      where: "Blackwood Farms \u2022 Armidale, NSW",
-      type: "Repairs",
-    },
-  ];
+export default async function OpportunitiesListPage() {
+  const supa = supabaseServer();
+  let jobs: any[] = [];
+  let error: string | null = null;
+
+  if (supa) {
+    const res = await supa
+      .from("jobs")
+      .select("id,title,location,rate,slug,created_at")
+      .eq("status", "open")
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (res.error) {
+      error = res.error.message;
+    } else {
+      jobs = res.data ?? [];
+    }
+  }
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
@@ -53,36 +30,52 @@ export default function OpportunitiesListPage() {
         Browse available fencing work across rural and regional Australia.
       </p>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        {items.map((job) => (
-          <a
-            key={job.slug}
-            href={`/opportunities/${job.slug}`}
-            className="group rounded-xl border bg-white p-5 shadow-sm hover:border-green-300 hover:shadow-md transition"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <h2 className="text-base font-semibold text-neutral-900 group-hover:text-green-700 transition">
-                {job.title}
-              </h2>
-              <span className="shrink-0 rounded-full bg-green-50 border border-green-200 px-2.5 py-0.5 text-xs font-medium text-green-800">
-                {job.type}
-              </span>
-            </div>
-            <div className="mt-2 flex items-center justify-between">
-              <span className="text-sm text-neutral-600">{job.where}</span>
-              <span className="text-sm font-semibold text-neutral-800">{job.pay}</span>
-            </div>
-          </a>
-        ))}
-      </div>
+      {error && (
+        <div className="mt-6 rounded-lg border bg-red-50 border-red-200 p-4">
+          <p className="text-sm text-red-700">Failed to load jobs: {error}</p>
+        </div>
+      )}
 
-      <div className="mt-8 rounded-xl border bg-green-50 p-5">
-        <p className="text-sm text-green-800">
-          <span className="font-semibold">Looking for more work?</span> New fencing jobs
-          are posted regularly. Create a free contractor profile to get notified about
-          opportunities in your area.
-        </p>
-      </div>
+      {!error && jobs.length > 0 && (
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          {jobs.map((job) => (
+            <div
+              key={job.id}
+              className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm"
+            >
+              <h2 className="font-semibold text-neutral-900">{job.title}</h2>
+              <div className="mt-2 flex items-center justify-between">
+                {job.location && (
+                  <span className="text-sm text-neutral-600">{job.location}</span>
+                )}
+                {job.rate && (
+                  <span className="text-sm font-semibold text-neutral-800">{job.rate}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!error && jobs.length === 0 && (
+        <div className="mt-8 rounded-lg border border-neutral-200 bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto w-12 h-12 rounded-full bg-neutral-100 flex items-center justify-center">
+            <svg className="w-6 h-6 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+            </svg>
+          </div>
+          <h2 className="mt-4 text-lg font-semibold text-neutral-900">No jobs posted yet</h2>
+          <p className="mt-1 text-sm text-neutral-600">
+            Be the first to post a fencing job and connect with contractors in your area.
+          </p>
+          <Link
+            href="/post-a-job"
+            className="mt-5 inline-block rounded-lg bg-[#2D5016] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#234012] transition shadow-sm"
+          >
+            Post a Job
+          </Link>
+        </div>
+      )}
     </main>
   );
 }
