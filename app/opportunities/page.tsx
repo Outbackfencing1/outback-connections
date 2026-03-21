@@ -11,7 +11,7 @@ export default async function OpportunitiesListPage() {
   if (supa) {
     const res = await supa
       .from("jobs")
-      .select("id,title,location,rate,slug,created_at")
+      .select("id,title,description,location,rate,slug,status,created_at")
       .eq("status", "open")
       .order("created_at", { ascending: false })
       .limit(50);
@@ -25,10 +25,20 @@ export default async function OpportunitiesListPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
-      <h1 className="text-2xl font-bold text-neutral-900">Fencing Opportunities</h1>
-      <p className="mt-1 text-neutral-600">
-        Browse available fencing work across rural and regional Australia.
-      </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-neutral-900">Fencing Opportunities</h1>
+          <p className="mt-1 text-neutral-600">
+            Browse available fencing work across rural and regional Australia.
+          </p>
+        </div>
+        <Link
+          href="/post-a-job"
+          className="hidden sm:inline-block rounded-lg bg-[#2D5016] px-4 py-2 text-sm font-semibold text-white hover:bg-[#234012] transition shadow-sm"
+        >
+          Post a Job
+        </Link>
+      </div>
 
       {error && (
         <div className="mt-6 rounded-lg border bg-red-50 border-red-200 p-4">
@@ -37,21 +47,27 @@ export default async function OpportunitiesListPage() {
       )}
 
       {!error && jobs.length > 0 && (
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <div className="mt-6 grid gap-4">
           {jobs.map((job) => (
             <div
               key={job.id}
               className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm"
             >
-              <h2 className="font-semibold text-neutral-900">{job.title}</h2>
-              <div className="mt-2 flex items-center justify-between">
-                {job.location && (
-                  <span className="text-sm text-neutral-600">{job.location}</span>
-                )}
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="font-semibold text-neutral-900">{job.title}</h2>
                 {job.rate && (
-                  <span className="text-sm font-semibold text-neutral-800">{job.rate}</span>
+                  <span className="shrink-0 text-sm font-semibold text-neutral-800">{job.rate}</span>
                 )}
               </div>
+              {job.location && (
+                <p className="mt-1 text-sm text-neutral-500">{job.location}</p>
+              )}
+              {job.description && (
+                <p className="mt-2 text-sm text-neutral-700 leading-relaxed">{job.description}</p>
+              )}
+              <p className="mt-3 text-xs text-neutral-400">
+                Posted {new Date(job.created_at).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })}
+              </p>
             </div>
           ))}
         </div>
@@ -76,6 +92,16 @@ export default async function OpportunitiesListPage() {
           </Link>
         </div>
       )}
+
+      {/* Mobile CTA */}
+      <div className="mt-6 sm:hidden">
+        <Link
+          href="/post-a-job"
+          className="block rounded-lg bg-[#2D5016] px-5 py-3 text-center text-sm font-semibold text-white hover:bg-[#234012] transition shadow-sm"
+        >
+          Post a Job
+        </Link>
+      </div>
     </main>
   );
 }
