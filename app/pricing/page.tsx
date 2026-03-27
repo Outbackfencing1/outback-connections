@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export const metadata = {
   title: "Pricing – Outback Connections",
-  description: "Simple, transparent pricing for fencing contractors on Outback Connections.",
+  description: "Simple, transparent pricing for rural businesses on Outback Connections.",
 };
 
 export default function PricingPage() {
@@ -10,9 +10,9 @@ export default function PricingPage() {
     {
       name: "Free",
       price: "Free",
-      desc: "Get started with basic access to fencing jobs in your area.",
+      desc: "Get started with basic access to jobs, freight, and opportunities.",
       features: [
-        "Browse all fencing listings",
+        "Browse all listings",
         "1 listing per month",
         "Basic contractor profile",
         "Email notifications",
@@ -26,16 +26,16 @@ export default function PricingPage() {
       name: "Pro",
       price: "$29",
       period: "/ month",
-      desc: "For active contractors who want more visibility and unlimited job posts.",
+      desc: "For active contractors and businesses who want more visibility and unlimited posts.",
       features: [
-        "Unlimited job listings",
+        "Unlimited job & freight listings",
         "Featured placement in search",
         "Listing analytics & views",
         "Priority in search results",
         "In-app messaging",
       ],
-      cta: "Coming Soon",
-      href: "#",
+      cta: "Contact Us",
+      href: "/post-a-job",
       highlight: "Most popular",
       featured: true,
     },
@@ -43,7 +43,7 @@ export default function PricingPage() {
       name: "Business",
       price: "$99",
       period: "/ month",
-      desc: "For fencing companies with teams and high-volume operations.",
+      desc: "For companies with teams and high-volume operations.",
       features: [
         "Everything in Pro",
         "API access",
@@ -52,9 +52,9 @@ export default function PricingPage() {
         "Team logins",
         "Custom branding",
       ],
-      cta: "Coming Soon",
-      href: "#",
-      highlight: "",
+      cta: "Contact Us",
+      href: "/post-a-job",
+      highlight: "Best value for teams",
       featured: false,
     },
   ];
@@ -112,18 +112,12 @@ export default function PricingPage() {
               ))}
             </ul>
 
-            {plan.href === "#" ? (
-              <span className="mt-6 inline-block rounded-full bg-neutral-200 px-4 py-2.5 text-sm font-semibold text-neutral-500 text-center cursor-not-allowed">
-                {plan.cta}
-              </span>
-            ) : (
-              <Link
-                href={plan.href}
-                className="mt-6 inline-block rounded-full bg-green-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-800 text-center transition shadow-sm"
-              >
-                {plan.cta}
-              </Link>
-            )}
+            <Link
+              href={plan.href}
+              className="mt-6 inline-block rounded-full bg-green-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-800 text-center transition shadow-sm"
+            >
+              {plan.cta}
+            </Link>
           </div>
         ))}
       </div>
@@ -131,7 +125,7 @@ export default function PricingPage() {
       <section className="rounded-2xl border bg-white p-6 sm:p-8 shadow-sm text-center">
         <h3 className="text-lg font-bold text-neutral-900">Need a custom plan?</h3>
         <p className="mt-2 text-sm text-neutral-600 max-w-md mx-auto">
-          For large fencing companies, regional contractor groups, or enterprise needs,
+          For large companies, regional groups, or enterprise needs,
           get in touch and we&apos;ll put together a package that works for you.
         </p>
         <Link

@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   title: "Outback Connections | Rural Jobs, Freight & Opportunities",
   description:
     "Connecting Australia's rural workforce, freight and opportunities — all in one free platform. Post jobs, book freight, and connect with skilled contractors.",
-  icons: { icon: "/favicon.ico" },
+  icons: { icon: "/favicon.svg" },
 };
 
 export default function RootLayout({
