@@ -4,13 +4,7 @@ import Link from "next/link";
 
 export default function Header() {
   const [open, setOpen] = useState(false);
-
-  const links = [
-    { href: "/opportunities", label: "Marketplace" },
-    { href: "/contractor", label: "Contractors" },
-    { href: "/dashboard", label: "Dashboard" },
-    { href: "/pricing", label: "Pricing" },
-  ];
+  const [marketOpen, setMarketOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-neutral-200">
@@ -26,15 +20,44 @@ export default function Header() {
 
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-1">
-          {links.map(l => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className="rounded-md px-3 py-1.5 text-sm font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition"
+          {/* Marketplace dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setMarketOpen((v) => !v)}
+              onBlur={() => setTimeout(() => setMarketOpen(false), 150)}
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition inline-flex items-center gap-1"
             >
-              {l.label}
-            </Link>
-          ))}
+              Marketplace
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {marketOpen && (
+              <div className="absolute left-0 top-full mt-1 w-44 rounded-lg border border-neutral-200 bg-white shadow-lg py-1 z-50">
+                <Link href="/opportunities" className="block px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50">Jobs</Link>
+                <Link href="/freight" className="block px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50">Freight</Link>
+                <Link href="/opportunities" className="block px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50">Opportunities</Link>
+              </div>
+            )}
+          </div>
+          <Link
+            href="/contractor"
+            className="rounded-md px-3 py-1.5 text-sm font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition"
+          >
+            Contractors
+          </Link>
+          <Link
+            href="/dashboard"
+            className="rounded-md px-3 py-1.5 text-sm font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition"
+          >
+            Dashboard
+          </Link>
+          <Link
+            href="/pricing"
+            className="rounded-md px-3 py-1.5 text-sm font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition"
+          >
+            Pricing
+          </Link>
           <div className="ml-3 flex items-center gap-2">
             <Link
               href="/login"
@@ -73,16 +96,14 @@ export default function Header() {
       {open && (
         <div className="md:hidden border-t border-neutral-200 bg-white">
           <nav className="mx-auto max-w-7xl px-4 py-2 flex flex-col">
-            {links.map(l => (
-              <Link
-                key={l.href}
-                href={l.href}
-                onClick={() => setOpen(false)}
-                className="rounded-md px-3 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition"
-              >
-                {l.label}
-              </Link>
-            ))}
+            <span className="px-3 pt-2 pb-1 text-xs font-semibold text-neutral-400 uppercase tracking-wider">Marketplace</span>
+            <Link href="/opportunities" onClick={() => setOpen(false)} className="rounded-md px-3 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition pl-6">Jobs</Link>
+            <Link href="/freight" onClick={() => setOpen(false)} className="rounded-md px-3 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition pl-6">Freight</Link>
+            <Link href="/opportunities" onClick={() => setOpen(false)} className="rounded-md px-3 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition pl-6">Opportunities</Link>
+            <hr className="my-2 border-neutral-100" />
+            <Link href="/contractor" onClick={() => setOpen(false)} className="rounded-md px-3 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition">Contractors</Link>
+            <Link href="/dashboard" onClick={() => setOpen(false)} className="rounded-md px-3 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition">Dashboard</Link>
+            <Link href="/pricing" onClick={() => setOpen(false)} className="rounded-md px-3 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition">Pricing</Link>
             <hr className="my-2 border-neutral-100" />
             <Link
               href="/login"

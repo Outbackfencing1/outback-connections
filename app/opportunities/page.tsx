@@ -1,7 +1,7 @@
 import { supabaseServer } from "@/lib/supabase";
 import Link from "next/link";
 
-export const metadata = { title: "Fencing Opportunities – Outback Connections" };
+export const metadata = { title: "Opportunities – Outback Connections" };
 
 export default async function OpportunitiesListPage() {
   const supa = supabaseServer();
@@ -27,9 +27,9 @@ export default async function OpportunitiesListPage() {
     <main className="mx-auto max-w-5xl px-4 py-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Fencing Opportunities</h1>
+          <h1 className="text-2xl font-bold text-neutral-900">Opportunities</h1>
           <p className="mt-1 text-neutral-600">
-            Browse available fencing work across rural and regional Australia.
+            Browse jobs and opportunities across rural and regional Australia.
           </p>
         </div>
         <Link
