@@ -4,7 +4,7 @@ import { supabaseServer } from "@/lib/supabase";
 import Link from "next/link";
 import { FencingCalculator } from "./fencing-calculator";
 
-export const metadata = { title: "Dashboard – Outback Ops" };
+export const metadata = { title: "Dashboard – Outback Connections" };
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -17,25 +17,16 @@ async function getStats() {
   const supa = supabaseServer();
   if (!supa) return null;
 
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-
-  const [customers, quotesMonth, ordersMonth, activities] = await Promise.all([
-    supa.from("customers").select("*", { count: "exact", head: true }),
-    supa.from("quotes").select("*", { count: "exact", head: true }).gte("created_at", monthStart),
-    supa.from("orders").select("*", { count: "exact", head: true }).gte("created_at", monthStart),
-    supa
-      .from("customer_activities")
-      .select("id, customer_id, type, notes, created_at, customers(name)")
-      .order("created_at", { ascending: false })
-      .limit(8),
+  const [jobsRes, contractorsRes, freightRes] = await Promise.all([
+    supa.from("jobs").select("*", { count: "exact", head: true }),
+    supa.from("profiles").select("*", { count: "exact", head: true }),
+    supa.from("freight_listings").select("*", { count: "exact", head: true }),
   ]);
 
   return {
-    customerCount: customers.count ?? 0,
-    quotesCount: quotesMonth.count ?? 0,
-    ordersCount: ordersMonth.count ?? 0,
-    recentActivity: activities.data ?? [],
+    jobsCount: jobsRes.count ?? 0,
+    contractorsCount: contractorsRes.count ?? 0,
+    freightCount: freightRes.count ?? 0,
   };
 }
 
@@ -52,7 +43,7 @@ export default async function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-lg font-bold text-amber-500 tracking-wide">OUTBACK OPS</h1>
-              <p className="text-xs text-neutral-400">Fencing &amp; Steel Supplies</p>
+              <p className="text-xs text-neutral-400">Jobs, Freight &amp; Opportunities</p>
             </div>
             <p className="text-sm text-neutral-300">
               {getGreeting()}, <span className="font-medium text-white">{name}</span>
@@ -67,66 +58,18 @@ export default async function DashboardPage() {
         <FencingCalculator />
 
         {/* Stats row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Total Customers" value={stats ? formatNum(stats.customerCount) : "\u2014"} />
-          <StatCard label="Quotes This Month" value={stats ? formatNum(stats.quotesCount) : "\u2014"} />
-          <StatCard label="Orders This Month" value={stats ? formatNum(stats.ordersCount) : "\u2014"} />
-          <StatCard label="Open Jobs" value="\u2014" sub="Coming soon" />
-        </div>
-
-        {/* Two-column layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Recent Activity */}
-          <div className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-neutral-900">Recent Activity</h2>
-            {stats && stats.recentActivity.length > 0 ? (
-              <ul className="mt-4 space-y-3">
-                {stats.recentActivity.map((a: any) => (
-                  <li key={a.id} className="flex items-start gap-3">
-                    <ActivityIcon type={a.type} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-neutral-900 truncate">
-                        <span className="font-medium">{(a.customers as any)?.name ?? "Customer"}</span>
-                        {" \u2014 "}
-                        <span className="text-neutral-600">{a.notes || a.type}</span>
-                      </p>
-                      <p className="text-xs text-neutral-400">
-                        {new Date(a.created_at).toLocaleDateString("en-AU", {
-                          day: "numeric",
-                          month: "short",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-4 text-sm text-neutral-500">No recent activity.</p>
-            )}
-          </div>
-
-          {/* Action Items */}
-          <div className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-neutral-900">Action Items</h2>
-            <div className="mt-4 space-y-3">
-              <ActionPlaceholder label="Overdue follow-ups" />
-              <ActionPlaceholder label="Unpaid invoices" />
-              <ActionPlaceholder label="Quotes expiring soon" />
-            </div>
-            <p className="mt-4 text-xs text-neutral-400">
-              Automated tracking coming soon.
-            </p>
-          </div>
+        <div className="grid grid-cols-3 gap-4">
+          <StatCard label="Total Jobs Posted" value={stats ? formatNum(stats.jobsCount) : "\u2014"} />
+          <StatCard label="Contractors Registered" value={stats ? formatNum(stats.contractorsCount) : "\u2014"} />
+          <StatCard label="Freight Listings" value={stats ? formatNum(stats.freightCount) : "\u2014"} />
         </div>
 
         {/* Quick actions */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <QuickAction href="/dashboard/post-a-job" label="New Quote" icon={<DocPlusIcon />} />
-          <QuickAction href="/dashboard/profile" label="Add Customer" icon={<UserPlusIcon />} />
+          <QuickAction href="/dashboard/post-a-job" label="Post a Job" icon={<DocPlusIcon />} />
+          <QuickAction href="/dashboard/post-freight" label="Post Freight" icon={<TruckIcon />} />
           <QuickAction href="/dashboard/opportunities" label="Browse Jobs" icon={<SearchIcon />} />
-          <QuickAction href="/pricing" label="Pricing" icon={<TagIcon />} />
+          <QuickAction href="/dashboard/profile" label="My Profile" icon={<UserPlusIcon />} />
         </div>
 
         {!session && (
@@ -150,21 +93,11 @@ function formatNum(n: number): string {
   return n.toLocaleString("en-AU");
 }
 
-function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function StatCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
       <p className="text-sm text-neutral-500">{label}</p>
       <p className="mt-1 text-2xl font-bold text-neutral-900">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-neutral-400">{sub}</p>}
-    </div>
-  );
-}
-
-function ActionPlaceholder({ label }: { label: string }) {
-  return (
-    <div className="flex items-center justify-between rounded-md border border-neutral-100 bg-neutral-50 px-4 py-3">
-      <span className="text-sm text-neutral-700">{label}</span>
-      <span className="text-xs text-neutral-400">&mdash;</span>
     </div>
   );
 }
@@ -181,19 +114,14 @@ function QuickAction({ href, label, icon }: { href: string; label: string; icon:
   );
 }
 
-function ActivityIcon({ type }: { type: string }) {
-  const cls = "mt-0.5 w-4 h-4 shrink-0";
-  if (type === "quote" || type === "quote_created")
-    return <svg className={`${cls} text-amber-500`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>;
-  if (type === "order" || type === "order_placed")
-    return <svg className={`${cls} text-green-600`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
-  return <svg className={`${cls} text-neutral-400`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>;
-}
-
 /* ---------- SVG Icons ---------- */
 
 function DocPlusIcon() {
   return <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>;
+}
+
+function TruckIcon() {
+  return <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0H6.375c-.621 0-1.125-.504-1.125-1.125v-3.659a1.125 1.125 0 01.328-.794l3.1-3.1a1.125 1.125 0 01.795-.329H13.5m7.125 7.5V12m0 0V5.625A1.125 1.125 0 0019.5 4.5h-6.75a1.125 1.125 0 00-1.125 1.125v12m8.25-6h-2.25m0 0h-2.25" /></svg>;
 }
 
 function UserPlusIcon() {
@@ -202,8 +130,4 @@ function UserPlusIcon() {
 
 function SearchIcon() {
   return <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>;
-}
-
-function TagIcon() {
-  return <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" /><path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" /></svg>;
 }
