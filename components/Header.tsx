@@ -2,62 +2,63 @@
 import { useState } from "react";
 import Link from "next/link";
 
+const links = [
+  { href: "/", label: "Home" },
+  { href: "/help", label: "Get Help" },
+  { href: "/about", label: "About" },
+  { href: "/privacy", label: "Privacy" },
+];
+
 export default function Header() {
   const [open, setOpen] = useState(false);
 
-  const links = [
-    { href: "/", label: "Home" },
-    { href: "/post-a-job", label: "Post a job" },
-    { href: "/opportunities", label: "Opportunities" },
-    { href: "/pricing", label: "Pricing" },
-  ];
-
   return (
-    <header className="sticky top-0 z-40 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 border-b">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <Link href="/" className="font-extrabold text-xl text-green-700">
+    <header className="sticky top-0 z-40 border-b bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <Link
+          href="/"
+          className="text-lg font-extrabold text-green-800 sm:text-xl"
+        >
           Outback Connections
         </Link>
 
-        {/* Desktop nav */}
-        <nav className="hidden md:flex items-center gap-6">
-          {links.map(l => (
-            <Link key={l.href} href={l.href} className="text-sm font-medium hover:text-green-700">
+        <nav className="hidden items-center gap-6 md:flex">
+          {links.map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className="text-sm font-medium text-neutral-800 hover:text-green-800"
+            >
               {l.label}
             </Link>
           ))}
-          <Link href="/login" className="rounded-full border px-3 py-1.5 text-sm hover:bg-gray-50">
-            Sign in
-          </Link>
         </nav>
 
-        {/* Mobile menu button */}
         <button
-          aria-label="Open menu"
-          onClick={() => setOpen(v => !v)}
-          className="md:hidden inline-flex items-center rounded-md border px-3 py-2"
+          type="button"
+          aria-label={open ? "Close menu" : "Open menu"}
+          aria-expanded={open}
+          aria-controls="site-nav-mobile"
+          onClick={() => setOpen((v) => !v)}
+          className="inline-flex items-center rounded-md border px-3 py-2 text-sm md:hidden"
         >
-          ☰
+          {open ? "✕" : "☰"}
         </button>
       </div>
 
-      {/* Mobile panel */}
       {open && (
-        <div className="md:hidden border-t">
-          <nav className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3 flex flex-col gap-2">
-            {links.map(l => (
+        <div id="site-nav-mobile" className="border-t md:hidden">
+          <nav className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-3 sm:px-6 lg:px-8">
+            {links.map((l) => (
               <Link
                 key={l.href}
                 href={l.href}
                 onClick={() => setOpen(false)}
-                className="py-2 text-base font-medium"
+                className="rounded-md px-2 py-2 text-base font-medium text-neutral-800 hover:bg-neutral-50"
               >
                 {l.label}
               </Link>
             ))}
-            <Link href="/login" onClick={() => setOpen(false)} className="py-2 text-base">
-              Sign in
-            </Link>
           </nav>
         </div>
       )}
