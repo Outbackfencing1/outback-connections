@@ -2,12 +2,9 @@
 import { useState } from "react";
 import Link from "next/link";
 
-const links = [
-  { href: "/", label: "Home" },
-  { href: "/help", label: "Get Help" },
-  { href: "/about", label: "About" },
-  { href: "/privacy", label: "Privacy" },
-];
+// Interim header for the Step 1 archive commit. Step 4 replaces this with the
+// full marketplace nav (Home / Services / Jobs / Freight / Post / Sign in).
+const links = [{ href: "/", label: "Home" }];
 
 export default function Header() {
   const [open, setOpen] = useState(false);
@@ -34,16 +31,18 @@ export default function Header() {
           ))}
         </nav>
 
-        <button
-          type="button"
-          aria-label={open ? "Close menu" : "Open menu"}
-          aria-expanded={open}
-          aria-controls="site-nav-mobile"
-          onClick={() => setOpen((v) => !v)}
-          className="inline-flex items-center rounded-md border px-3 py-2 text-sm md:hidden"
-        >
-          {open ? "✕" : "☰"}
-        </button>
+        {links.length > 1 && (
+          <button
+            type="button"
+            aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
+            aria-controls="site-nav-mobile"
+            onClick={() => setOpen((v) => !v)}
+            className="inline-flex items-center rounded-md border px-3 py-2 text-sm md:hidden"
+          >
+            {open ? "Close" : "Menu"}
+          </button>
+        )}
       </div>
 
       {open && (

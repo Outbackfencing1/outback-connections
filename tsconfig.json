@@ -40,6 +40,8 @@
     ".next/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "app/_archive/**",
+    "app/_archive_help/**"
   ]
 }
