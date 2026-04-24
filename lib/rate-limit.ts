@@ -4,7 +4,10 @@
 // Fails OPEN (allows submission) on DB errors or missing env, because a
 // broken rate-limit check must not block a rural user from getting help.
 
-import { supabaseAdmin } from "@/lib/supabase";
+// Step 5 will generalise this into a reusable checkListingPostRateLimit
+// against the listings table. For now the body is unchanged; only the
+// import path moves to the new admin-client module.
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export type RateLimitOk = { ok: true; remaining: number };
 export type RateLimitDenied = { ok: false; remaining: 0; retryAfterMinutes: number; message: string };
@@ -25,7 +28,7 @@ async function countRecent(
   ip: string,
   windowMs: number
 ): Promise<number | null> {
-  const supa = supabaseAdmin();
+  const supa = createAdminClient();
   if (!supa) return null;
 
   const since = new Date(Date.now() - windowMs).toISOString();
