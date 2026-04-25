@@ -17,9 +17,10 @@ export default async function DashboardPage() {
 
   const user = data.user;
   const createdAt = user.created_at ? new Date(user.created_at) : null;
-  const ageDays = createdAt
-    ? Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24))
-    : 0;
+  const ageMs = createdAt ? Date.now() - createdAt.getTime() : 0;
+  const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
+  const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+  const canPost = ageHours >= 24;
 
   // Quick listings count (RLS lets owners read their own)
   const { count } = await supabase
@@ -79,8 +80,10 @@ export default async function DashboardPage() {
             Account settings
           </h2>
           <p className="mt-2 text-sm text-neutral-700">
-            Account age: {ageDays} day{ageDays === 1 ? "" : "s"}.
-            {ageDays < 7 && " You can post once your account is 7 days old."}
+            Account age: {ageDays > 0
+              ? `${ageDays} day${ageDays === 1 ? "" : "s"}`
+              : `${ageHours} hour${ageHours === 1 ? "" : "s"}`}
+            .{!canPost && " You can post once your account is 24 hours old."}
           </p>
         </Link>
       </div>

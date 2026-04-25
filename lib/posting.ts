@@ -24,7 +24,9 @@ export type PostingGuardFail =
   | { ok: false; reason: "email_unverified"; message: string }
   | { ok: false; reason: "account_too_new"; message: string; accountAgeDays: number };
 
-const ACCOUNT_AGE_REQUIREMENT_DAYS = 7;
+// Hours of account age required before a user can post. Set to 24 after
+// audit feedback — 7 days was filtering legitimate signups too aggressively.
+const ACCOUNT_AGE_REQUIREMENT_HOURS = 24;
 
 export async function checkPostingGuard(): Promise<PostingGuardOk | PostingGuardFail> {
   const supabase = createClient();
@@ -46,12 +48,15 @@ export async function checkPostingGuard(): Promise<PostingGuardOk | PostingGuard
     };
   }
   const created = new Date(user.created_at).getTime();
-  const ageDays = Math.floor((Date.now() - created) / (1000 * 60 * 60 * 24));
-  if (ageDays < ACCOUNT_AGE_REQUIREMENT_DAYS) {
+  const ageMs = Date.now() - created;
+  const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
+  const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+  if (ageHours < ACCOUNT_AGE_REQUIREMENT_HOURS) {
     return {
       ok: false,
       reason: "account_too_new",
-      message: `Accounts need to be ${ACCOUNT_AGE_REQUIREMENT_DAYS} days old before posting. Your account is ${ageDays} day${ageDays === 1 ? "" : "s"} old. Come back in ${ACCOUNT_AGE_REQUIREMENT_DAYS - ageDays} day${ACCOUNT_AGE_REQUIREMENT_DAYS - ageDays === 1 ? "" : "s"}.`,
+      message:
+        "Your account needs to be at least 24 hours old before posting. Tomorrow you'll be good to go.",
       accountAgeDays: ageDays,
     };
   }
