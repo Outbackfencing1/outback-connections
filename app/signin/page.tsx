@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 export const metadata = {
   title: "Sign in — Outback Connections",
   description:
-    "Sign in to Outback Connections with a one-time link. No passwords.",
+    "Sign in to Outback Connections with a magic link or your password.",
 };
 
 export const dynamic = "force-dynamic";
@@ -21,8 +21,7 @@ export default async function SignInPage() {
     <div className="mx-auto max-w-md px-4 py-14">
       <h1 className="text-3xl font-bold tracking-tight">Sign in</h1>
       <p className="mt-2 text-sm text-neutral-700">
-        Enter your email and we&apos;ll send you a link. Click it, and
-        you&apos;re in.
+        Magic link or password — your choice.
       </p>
 
       <div className="mt-8">
@@ -33,8 +32,8 @@ export default async function SignInPage() {
         Don&apos;t have an account?{" "}
         <Link href="/signup" className="underline">
           Sign up
-        </Link>{" "}
-        — same flow, same magic link.
+        </Link>
+        .
       </p>
     </div>
   );
