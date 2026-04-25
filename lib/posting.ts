@@ -6,6 +6,10 @@ import { z } from "zod";
 import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { DEFAULT_FROM, sendEmail } from "@/lib/email";
+
+const BASE_URL =
+  process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
 
 // ============================================================
 // Posting guards — caller must be signed in, email verified,
@@ -332,6 +336,8 @@ type ListingsInsert = {
   contact_best_time: string | null;
   policy_version_id: string;
   state: string | null;
+  /** User's account email — used to send the first-listing email on success */
+  user_email?: string;
 };
 
 export async function insertListing<DetailRow extends Record<string, unknown>>(
@@ -344,13 +350,16 @@ export async function insertListing<DetailRow extends Record<string, unknown>>(
     return { ok: false, message: "Listing storage isn't configured. Try again later." };
   }
 
+  // Strip user_email before inserting — it's not a column on listings
+  const { user_email: _user_email, ...listingRow } = listing;
+
   // Step 1: insert listings with a placeholder slug (we don't have the
   // anonymised_id until after insert). We'll update the slug immediately.
   const placeholderSlug = `pending-${listing.postcode}-${Math.random().toString(36).slice(2, 10)}`;
   const { data: inserted, error: listingErr } = await supa
     .from("listings")
-    .insert({ ...listing, slug: placeholderSlug })
-    .select("id, anonymised_id")
+    .insert({ ...listingRow, slug: placeholderSlug })
+    .select("id, anonymised_id, expires_at")
     .single();
 
   if (listingErr || !inserted) {
@@ -382,7 +391,116 @@ export async function insertListing<DetailRow extends Record<string, unknown>>(
     return { ok: false, message: "Couldn't save the listing details. Please try again." };
   }
 
+  // Item 11: best-effort first-listing email (no-op if not first)
+  if (listing.user_email) {
+    void sendFirstListingEmail({
+      userEmail: listing.user_email,
+      userId: listing.user_id,
+      listingTitle: listing.title,
+      listingKind: listing.kind,
+      slug: realSlug,
+      expiresAt: inserted.expires_at,
+    });
+  }
+
   return { ok: true, slug: realSlug };
+}
+
+// ============================================================
+// Item 11: post-confirmation email on first listing.
+// Best-effort. Fires after a successful insert. Only sends if this is
+// the user's first listing.
+// ============================================================
+
+export async function sendFirstListingEmail(args: {
+  userEmail: string;
+  userId: string;
+  listingTitle: string;
+  listingKind: "job" | "freight" | "service_offering" | "service_request";
+  slug: string;
+  expiresAt: string | Date;
+}): Promise<void> {
+  const supa = createAdminClient();
+  if (!supa) return;
+
+  // Count user's listings — only send on the first one
+  const { count } = await supa
+    .from("listings")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", args.userId);
+
+  if (count !== 1) return; // not the first
+
+  const path = pathForKind(args.listingKind, args.slug);
+  const link = `${BASE_URL}${path}`;
+  const expiresStr = (typeof args.expiresAt === "string" ? new Date(args.expiresAt) : args.expiresAt)
+    .toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
+
+  const text = [
+    `G'day,`,
+    ``,
+    `Your first listing is live on Outback Connections:`,
+    `${args.listingTitle}`,
+    `${link}`,
+    ``,
+    `It'll stay up until ${expiresStr}, then expire unless you renew.`,
+    ``,
+    `Want more responses? A few things that help:`,
+    `- Make the title specific. "Station hand wanted, near Mudgee, fencing experience" beats "need a hand".`,
+    `- Add the postcode, a price range, and best contact times if you can.`,
+    `- Reply to people quickly — the early responders are usually the keenest.`,
+    ``,
+    `When you've found someone (or didn't), mark the listing as filled in your dashboard:`,
+    `${BASE_URL}/dashboard/listings`,
+    ``,
+    `That helps us improve the platform without invading anyone's privacy.`,
+    ``,
+    `If something looks off, reply to this email — a real person reads it.`,
+    ``,
+    `— Outback Connections`,
+    `${BASE_URL}`,
+  ].join("\n");
+
+  const html = `<!DOCTYPE html><html><body style="font-family:-apple-system,system-ui,sans-serif;max-width:600px;margin:0 auto;padding:16px;color:#111;line-height:1.5;">
+<p>G'day,</p>
+<p>Your first listing is live on Outback Connections:</p>
+<p><a href="${link}"><strong>${escapeHtml(args.listingTitle)}</strong></a></p>
+<p>It'll stay up until <strong>${expiresStr}</strong>, then expire unless you renew.</p>
+<p>Want more responses? A few things that help:</p>
+<ul>
+  <li>Make the title specific. "Station hand wanted, near Mudgee, fencing experience" beats "need a hand".</li>
+  <li>Add the postcode, a price range, and best contact times if you can.</li>
+  <li>Reply to people quickly — the early responders are usually the keenest.</li>
+</ul>
+<p>When you've found someone (or didn't), <a href="${BASE_URL}/dashboard/listings">mark the listing as filled in your dashboard</a>. That helps us improve the platform without invading anyone's privacy.</p>
+<p>If something looks off, reply to this email — a real person reads it.</p>
+<p style="margin-top:24px;color:#888;font-size:0.9em;">— Outback Connections<br>${BASE_URL}</p>
+</body></html>`;
+
+  try {
+    await sendEmail({
+      to: args.userEmail,
+      from: DEFAULT_FROM,
+      subject: "Your listing is live on Outback Connections",
+      text,
+      html,
+    });
+  } catch (e) {
+    console.error("[posting] first-listing email failed:", e);
+  }
+}
+
+function pathForKind(
+  kind: "job" | "freight" | "service_offering" | "service_request",
+  slug: string
+): string {
+  if (kind === "job") return `/jobs/${slug}`;
+  if (kind === "freight") return `/freight/${slug}`;
+  return `/services/listing/${slug}`;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 // ============================================================

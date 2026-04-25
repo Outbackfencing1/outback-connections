@@ -59,6 +59,7 @@ export async function postFreight(formData: FormData): Promise<ActionResult> {
       contact_best_time: data.contact_best_time || null,
       policy_version_id: policyId,
       state: null,
+      user_email: guard.email,
     },
     "freight_details",
     {
