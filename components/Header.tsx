@@ -1,66 +1,95 @@
-"use client";
-import { useState } from "react";
+// components/Header.tsx — server component.
+// Reads auth server-side so the nav can show "Sign in" or "Dashboard"
+// without needing client-side hydration.
+// Mobile nav is a plain stacked list (no hamburger, no JS) — better for
+// patchy signal and zero-JS clients.
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
 
-// Interim header for the Step 1 archive commit. Step 4 replaces this with the
-// full marketplace nav (Home / Services / Jobs / Freight / Post / Sign in).
-const links = [{ href: "/", label: "Home" }];
+const primaryLinks = [
+  { href: "/services", label: "Services" },
+  { href: "/jobs", label: "Jobs" },
+  { href: "/freight", label: "Freight" },
+];
 
-export default function Header() {
-  const [open, setOpen] = useState(false);
+export default async function Header() {
+  const supabase = createClient();
+  const { data } = await supabase.auth.getUser();
+  const signedIn = !!data.user;
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link
-          href="/"
-          className="text-lg font-extrabold text-green-800 sm:text-xl"
-        >
-          Outback Connections
-        </Link>
-
-        <nav className="hidden items-center gap-6 md:flex">
-          {links.map((l) => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className="text-sm font-medium text-neutral-800 hover:text-green-800"
-            >
-              {l.label}
-            </Link>
-          ))}
-        </nav>
-
-        {links.length > 1 && (
-          <button
-            type="button"
-            aria-label={open ? "Close menu" : "Open menu"}
-            aria-expanded={open}
-            aria-controls="site-nav-mobile"
-            onClick={() => setOpen((v) => !v)}
-            className="inline-flex items-center rounded-md border px-3 py-2 text-sm md:hidden"
+    <header className="sticky top-0 z-40 border-b bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/70">
+      <div className="mx-auto max-w-6xl px-4 py-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between gap-4">
+          <Link
+            href="/"
+            className="shrink-0 text-base font-extrabold leading-tight text-green-800 sm:text-lg"
           >
-            {open ? "Close" : "Menu"}
-          </button>
-        )}
-      </div>
+            Outback Connections
+          </Link>
 
-      {open && (
-        <div id="site-nav-mobile" className="border-t md:hidden">
-          <nav className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-3 sm:px-6 lg:px-8">
-            {links.map((l) => (
+          <nav className="hidden items-center gap-5 md:flex">
+            {primaryLinks.map((l) => (
               <Link
                 key={l.href}
                 href={l.href}
-                onClick={() => setOpen(false)}
-                className="rounded-md px-2 py-2 text-base font-medium text-neutral-800 hover:bg-neutral-50"
+                className="text-sm font-medium text-neutral-800 hover:text-green-800"
               >
                 {l.label}
               </Link>
             ))}
+            <Link
+              href="/post"
+              className="rounded-lg bg-green-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-green-800"
+            >
+              Post a listing
+            </Link>
+            {signedIn ? (
+              <Link
+                href="/dashboard"
+                className="text-sm font-medium text-neutral-800 hover:text-green-800"
+              >
+                Dashboard
+              </Link>
+            ) : (
+              <Link
+                href="/signin"
+                className="text-sm font-medium text-neutral-800 hover:text-green-800"
+              >
+                Sign in
+              </Link>
+            )}
           </nav>
         </div>
-      )}
+
+        {/* Mobile nav: stacked, always visible. No JS. */}
+        <nav className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm md:hidden">
+          {primaryLinks.map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className="font-medium text-neutral-800"
+            >
+              {l.label}
+            </Link>
+          ))}
+          <Link
+            href="/post"
+            className="rounded-lg bg-green-700 px-2.5 py-1 text-xs font-semibold text-white"
+          >
+            Post
+          </Link>
+          {signedIn ? (
+            <Link href="/dashboard" className="font-medium text-neutral-800">
+              Dashboard
+            </Link>
+          ) : (
+            <Link href="/signin" className="font-medium text-neutral-800">
+              Sign in
+            </Link>
+          )}
+        </nav>
+      </div>
     </header>
   );
 }

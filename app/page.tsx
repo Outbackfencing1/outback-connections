@@ -1,145 +1,196 @@
-// app/page.tsx
 import Link from "next/link";
 
 export const metadata = {
-  title: "Outback Connections — rural consumer help, free",
+  title: "Outback Connections — rural Australia's free marketplace",
   description:
-    "Been ripped off, stuck on a quote, or something's gone wrong? We'll help. Free, for rural Australians. Run by Outback Fencing & Steel Supplies.",
+    "Jobs, freight, and the bloke who's handy with a bore pump. A free rural marketplace — no lead fees, no rip-offs, direct contact between parties.",
 };
 
 export default function HomePage() {
   return (
     <div>
-      {/* Conflict-of-interest disclosure — above the fold, unmissable. */}
-      <div className="border-b border-amber-200 bg-amber-50">
-        <div className="mx-auto max-w-3xl px-4 py-3 text-sm text-amber-900">
-          <p>
-            <span className="font-semibold">Upfront:</span> Outback Connections
-            is run by{" "}
-            <a
-              href="https://outbackfencing.com.au"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
+      {/* Hero */}
+      <section className="mx-auto max-w-3xl px-4 py-12 sm:py-16">
+        <h1 className="text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl md:text-5xl">
+          Jobs, freight, and the bloke who&apos;s handy with a bore pump.
+        </h1>
+        <p className="mt-5 text-base text-neutral-700 sm:text-lg">
+          Rural Australia&apos;s free marketplace — no lead fees, no
+          rip-offs, just direct contact.
+        </p>
+      </section>
+
+      {/* Three pillars: Services is the hero card, Jobs + Freight below. */}
+      <section className="mx-auto max-w-6xl px-4 pb-6 sm:px-6 lg:px-8">
+        <Link
+          href="/services"
+          className="block rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm transition hover:border-green-700 hover:shadow-md sm:p-8"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-green-800">
+                Services
+              </p>
+              <h2 className="mt-1 text-2xl font-bold text-neutral-900 sm:text-3xl">
+                Find a bloke who can actually do the job
+              </h2>
+              <p className="mt-3 text-sm text-neutral-700 sm:text-base">
+                Bore pump specialists, helicopter mustering, drone spraying,
+                mobile diesel mechanics, contract croppers, shearing teams,
+                welders. The rural specialists nobody else indexes.
+              </p>
+            </div>
+            <span
+              aria-hidden="true"
+              className="shrink-0 text-2xl text-neutral-400"
             >
-              Outback Fencing &amp; Steel Supplies
-            </a>
-            , a rural fencing manufacturer. We&apos;re telling you this up
-            front so you know who we are.{" "}
-            <Link href="/about" className="underline">
-              More about us
-            </Link>
-            .
+              →
+            </span>
+          </div>
+        </Link>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <Link
+            href="/jobs"
+            className="block rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm transition hover:border-green-700 hover:shadow-md sm:p-6"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide text-green-800">
+              Jobs
+            </p>
+            <h2 className="mt-1 text-xl font-bold text-neutral-900">
+              Post rural work, find rural hands
+            </h2>
+            <p className="mt-2 text-sm text-neutral-700">
+              Station hands, shearers, fencing labour, harvest, mustering,
+              dairy, truckies. Free to post, free to reach out.
+            </p>
+            <p className="mt-3 text-sm font-medium text-green-800">
+              Browse jobs →
+            </p>
+          </Link>
+
+          <Link
+            href="/freight"
+            className="block rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm transition hover:border-green-700 hover:shadow-md sm:p-6"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide text-green-800">
+              Freight
+            </p>
+            <h2 className="mt-1 text-xl font-bold text-neutral-900">
+              Move livestock, hay, grain, machinery
+            </h2>
+            <p className="mt-2 text-sm text-neutral-700">
+              Farmers posting what needs moving; truckies posting available
+              runs. No brokers, no cut, no mark-up.
+            </p>
+            <p className="mt-3 text-sm font-medium text-green-800">
+              Browse freight →
+            </p>
+          </Link>
+        </div>
+      </section>
+
+      {/* Post a listing */}
+      <section className="mx-auto max-w-3xl px-4 py-10">
+        <div className="rounded-2xl border border-green-200 bg-green-50 p-6 text-center sm:p-8">
+          <h2 className="text-xl font-bold text-neutral-900 sm:text-2xl">
+            Got a job, a truck, or a service to offer?
+          </h2>
+          <p className="mt-2 text-sm text-neutral-700 sm:text-base">
+            Takes a few minutes. Free forever.
+          </p>
+          <Link
+            href="/post"
+            className="mt-4 inline-block rounded-xl bg-green-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-800"
+          >
+            Post a listing
+          </Link>
+          <p className="mt-3 text-xs text-neutral-600">
+            You&apos;ll need to sign in first. No passwords — just a link to
+            your email.
           </p>
         </div>
-      </div>
+      </section>
 
-      <div className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
-        {/* Hero */}
-        <section>
-          <h1 className="text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl md:text-5xl">
-            Been ripped off? Stuck on a quote? Something gone wrong?{" "}
-            <span className="text-green-800">We&apos;ll help — free.</span>
-          </h1>
+      {/* How it works */}
+      <section className="mx-auto max-w-3xl px-4 py-8">
+        <h2 className="text-xl font-bold text-neutral-900 sm:text-2xl">
+          How it works
+        </h2>
+        <ol className="mt-4 space-y-3 text-neutral-800">
+          <li className="flex gap-3">
+            <span className="shrink-0 font-bold text-green-800">1.</span>
+            <span>
+              <strong>Sign in to post.</strong> Email magic link — no
+              password to remember.
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <span className="shrink-0 font-bold text-green-800">2.</span>
+            <span>
+              <strong>Browse freely.</strong> No account needed to look
+              around.
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <span className="shrink-0 font-bold text-green-800">3.</span>
+            <span>
+              <strong>Contact each other directly.</strong> No middleman,
+              no messaging system, no lead fees. Sign in to see contact
+              details.
+            </span>
+          </li>
+        </ol>
+      </section>
 
-          <p className="mt-5 text-lg text-neutral-700 sm:text-xl">
-            Tell us what&apos;s happened. We read every message within 48
-            hours and point you somewhere useful — Fair Trading, Rural
-            Financial Counselling, or a contractor we know to be straight.
-          </p>
+      {/* What we don't do */}
+      <section className="mx-auto max-w-3xl px-4 py-8">
+        <h2 className="text-xl font-bold text-neutral-900 sm:text-2xl">
+          What we don&apos;t do
+        </h2>
+        <ul className="mt-4 space-y-2 text-neutral-800">
+          <li>
+            <strong>No lead fees.</strong> Not now, not ever. Other sites
+            charge tradies $20–30 per lead whether they win or not. Not
+            here.
+          </li>
+          <li>
+            <strong>No paid placement.</strong> No featured listings,
+            nobody pays to rise in search.
+          </li>
+          <li>
+            <strong>No reviews or star ratings.</strong> It&apos;s too
+            easy to fake, too easy to defame, and we&apos;re not running
+            a trust-and-safety team. Maybe later, properly.
+          </li>
+          <li>
+            <strong>No messaging system.</strong> Direct email or phone
+            contact — that&apos;s it.
+          </li>
+          <li>
+            <strong>No spam.</strong> Sign-in is email-only. Listings
+            auto-expire at 30 days so stale ones fall off.
+          </li>
+        </ul>
+      </section>
 
-          <div className="mt-7">
-            <Link
-              href="/help"
-              className="inline-block rounded-xl bg-green-700 px-6 py-4 text-lg font-semibold text-white shadow-sm hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-800 focus:ring-offset-2"
-            >
-              Get Help
-            </Link>
-          </div>
-
-          <p className="mt-4 text-sm text-neutral-700">
-            Something serious?{" "}
-            <Link
-              href="/report"
-              className="font-medium underline underline-offset-2"
-            >
-              Report it privately
-            </Link>
-            . Nothing is made public — we don&apos;t name contractors.
-          </p>
-        </section>
-
-        {/* What we do */}
-        <section className="mt-14 border-t border-neutral-200 pt-8">
-          <h2 className="text-2xl font-bold">What we do</h2>
-          <ul className="mt-4 space-y-4 text-neutral-800">
-            <li>
-              <span className="font-semibold">Read your message.</span>{" "}
-              Every one. Within 48 hours.
-            </li>
-            <li>
-              <span className="font-semibold">
-                Point you somewhere useful.
-              </span>{" "}
-              Fair Trading, Rural Financial Counselling, industry bodies, or
-              contractors we know to be straight.
-            </li>
-            <li>
-              <span className="font-semibold">Keep a private record.</span>{" "}
-              Stored locked away. Never published with names attached. Helps
-              us spot patterns across the bush.
-            </li>
-          </ul>
-        </section>
-
-        {/* Who we are */}
-        <section className="mt-12 border-t border-neutral-200 pt-8">
-          <h2 className="text-2xl font-bold">Who we are</h2>
-          <p className="mt-3 text-neutral-800">
-            A free service for rural Australians. Run by{" "}
-            <a
-              href="https://outbackfencing.com.au"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
-            >
-              Outback Fencing &amp; Steel Supplies
-            </a>{" "}
-            in Orange, NSW. We started this because when rural people get
-            stuck — on a quote, a job, or a contractor — there&apos;s no one
-            local, plain-speaking, and free to turn to.
-          </p>
-          <p className="mt-3 text-neutral-800">
-            We&apos;re new. We don&apos;t have testimonials yet. We&apos;d
-            rather earn the trust than fake it.
-          </p>
-        </section>
-
-        {/* Information, not advice */}
-        <section className="mt-12 border-t border-neutral-200 pt-8">
-          <h2 className="text-2xl font-bold">What we&apos;re not</h2>
-          <p className="mt-3 text-neutral-800">
-            We&apos;re not lawyers, accountants, or licensed advisors. What we
-            give you is{" "}
-            <span className="font-semibold">information, not advice</span> — a
-            starting point, not a judgment. If the stakes are high, get
-            proper advice alongside what we share.
-          </p>
-        </section>
-
-        {/* Second CTA for long-scroll mobile */}
-        <section className="mt-14 text-center">
-          <Link
-            href="/help"
-            className="inline-block rounded-xl bg-green-700 px-6 py-4 text-lg font-semibold text-white shadow-sm hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-800 focus:ring-offset-2"
+      {/* COI */}
+      <section className="mx-auto max-w-3xl px-4 py-10">
+        <p className="text-sm text-neutral-700">
+          <strong>Upfront:</strong> Outback Connections is run by{" "}
+          <a
+            href="https://outbackfencing.com.au"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
           >
-            Get Help
-          </Link>
-          <p className="mt-3 text-sm text-neutral-600">
-            Takes a few minutes. No account needed.
-          </p>
-        </section>
-      </div>
+            Outback Fencing &amp; Steel Supplies Pty Ltd
+          </a>
+          , a rural fencing manufacturer. We built this because rural
+          Australia deserves a decent marketplace. We disclose who we are
+          upfront, on every page.
+        </p>
+      </section>
     </div>
   );
 }
