@@ -186,6 +186,11 @@ export default function PostFreightForm({ categories, action, listingId, default
         </div>
       </div>
 
+      <p className="rounded-lg bg-neutral-50 border border-neutral-200 p-3 text-xs text-neutral-700">
+        <strong>Tip:</strong> Specific listings get more responses.
+        Mention postcode, price range, and best contact times if you can.
+      </p>
+
       <div>
         <button
           type="submit"

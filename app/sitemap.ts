@@ -16,6 +16,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/faq", priority: 0.4 },
     { path: "/privacy", priority: 0.2 },
     { path: "/terms", priority: 0.2 },
+    { path: "/acceptable-use", priority: 0.2 },
+    { path: "/cookies", priority: 0.2 },
   ];
 
   return routes.map(({ path, priority }) => ({

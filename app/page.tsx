@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata = {
   title: "Outback Connections — rural Australia's free marketplace",
@@ -6,7 +7,46 @@ export const metadata = {
     "Jobs, freight, and the bloke who's handy with a bore pump. A free rural marketplace — no lead fees, no rip-offs, direct contact between parties.",
 };
 
-export default function HomePage() {
+export const dynamic = "force-dynamic";
+
+async function getLiveStats() {
+  const supabase = createClient();
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const nowIso = new Date().toISOString();
+
+  const [active, recent, postcodes] = await Promise.all([
+    supabase
+      .from("listings")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active")
+      .gt("expires_at", nowIso),
+    supabase
+      .from("listings")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active")
+      .gt("expires_at", nowIso)
+      .gte("created_at", sevenDaysAgo),
+    supabase
+      .from("listings")
+      .select("postcode")
+      .eq("status", "active")
+      .gt("expires_at", nowIso),
+  ]);
+
+  const distinctPostcodes = new Set((postcodes.data ?? []).map((r) => r.postcode))
+    .size;
+
+  return {
+    active: active.count ?? 0,
+    recent: recent.count ?? 0,
+    postcodes: distinctPostcodes,
+  };
+}
+
+export default async function HomePage() {
+  const stats = await getLiveStats();
+  const showStats = stats.active >= 10;
+
   return (
     <div>
       {/* Hero */}
@@ -19,6 +59,21 @@ export default function HomePage() {
           rip-offs, just direct contact.
         </p>
       </section>
+
+      {/* Live stats (item 12). Hidden if active count < 10 — never show
+          fake numbers. */}
+      {showStats && (
+        <section className="mx-auto max-w-3xl px-4 pb-2">
+          <p className="text-sm text-neutral-700">
+            <strong>{stats.active.toLocaleString("en-AU")}</strong> active
+            listing{stats.active === 1 ? "" : "s"}.{" "}
+            <strong>{stats.recent.toLocaleString("en-AU")}</strong> new
+            this week.{" "}
+            <strong>{stats.postcodes.toLocaleString("en-AU")}</strong>{" "}
+            postcode{stats.postcodes === 1 ? "" : "s"} covered.
+          </p>
+        </section>
+      )}
 
       {/* Three pillars: Services is the hero card, Jobs + Freight below. */}
       <section className="mx-auto max-w-6xl px-4 pb-6 sm:px-6 lg:px-8">
