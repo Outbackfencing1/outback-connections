@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { setFlash } from "@/lib/posting";
 
 // ============================================================
@@ -105,3 +106,84 @@ export async function deleteListing(formData: FormData): Promise<void> {
   revalidatePath("/services");
   redirect("/dashboard/listings");
 }
+
+// ============================================================
+// Mark a listing as closed (outcome captured)
+// ============================================================
+
+const CloseSchema = z.object({
+  listing_id: z.string().uuid("Bad listing id"),
+  reason: z.enum(["matched", "no_takers", "withdrawn", "other"]),
+  note: z.string().trim().max(2000).optional().default(""),
+});
+
+export type CloseResult =
+  | { ok: true }
+  | { ok: false; message: string };
+
+export async function closeListing(formData: FormData): Promise<CloseResult> {
+  const supabase = createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    return { ok: false, message: "Sign in to close a listing." };
+  }
+
+  const parsed = CloseSchema.safeParse({
+    listing_id: formData.get("listing_id"),
+    reason: formData.get("reason"),
+    note: formData.get("note"),
+  });
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Bad input" };
+  }
+
+  // Ownership check via the user's RLS context
+  const { data: existing } = await supabase
+    .from("listings")
+    .select("id, user_id, title, status")
+    .eq("id", parsed.data.listing_id)
+    .maybeSingle();
+
+  if (!existing) return { ok: false, message: "Listing not found." };
+  if (existing.user_id !== userData.user.id) {
+    return { ok: false, message: "That listing isn't yours." };
+  }
+  if (existing.status !== "active") {
+    return {
+      ok: false,
+      message: `Listing is already ${existing.status.replace(/_/g, " ")}; can only close active listings.`,
+    };
+  }
+
+  // Use admin client to bypass any RLS subtleties on update
+  const admin = createAdminClient();
+  if (!admin) {
+    return {
+      ok: false,
+      message: "Closing isn't configured on this environment. Contact support.",
+    };
+  }
+
+  const { error } = await admin
+    .from("listings")
+    .update({
+      status: "closed",
+      closed_at: new Date().toISOString(),
+      closed_reason: parsed.data.reason,
+      closed_note: parsed.data.note || null,
+    })
+    .eq("id", parsed.data.listing_id);
+
+  if (error) {
+    console.error("[close] update failed:", error.message);
+    return { ok: false, message: "Couldn't close the listing. Please try again." };
+  }
+
+  revalidatePath("/dashboard/listings");
+  revalidatePath("/jobs");
+  revalidatePath("/freight");
+  revalidatePath("/services");
+
+  return { ok: true };
+}
+

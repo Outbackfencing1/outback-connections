@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { readAndClearFlash } from "@/lib/posting";
 import { kindLabel, listingHref, relativeTime } from "@/lib/format";
 import OwnerActions from "@/components/detail/OwnerActions";
+import CloseListingForm from "@/components/detail/CloseListingForm";
 
 export const metadata = {
   title: "My listings — Outback Connections",
@@ -53,6 +54,7 @@ export default async function MyListingsPage() {
   const expired = listings.filter(
     (l) => l.status === "expired" || (l.status === "active" && new Date(l.expires_at).getTime() <= now)
   );
+  const closed = listings.filter((l) => l.status === "closed");
   const hidden = listings.filter(
     (l) => l.status === "hidden_flagged" || l.status === "deleted_by_admin"
   );
@@ -87,7 +89,8 @@ export default async function MyListingsPage() {
         </div>
       ) : (
         <>
-          <ListingGroup title="Active" subtitle="Visible on the public marketplace." rows={active} />
+          <ListingGroup title="Active" subtitle="Visible on the public marketplace." rows={active} showClose />
+          <ListingGroup title="Closed" subtitle="You marked these as filled or withdrawn. Kept here for your records." rows={closed} />
           <ListingGroup title="Expired" subtitle="Past 30 days; not visible publicly. Edit + repost if you want them back up." rows={expired} />
           <ListingGroup title="Hidden" subtitle="Hidden by moderation. Email support if you think this is wrong." rows={hidden} />
         </>
@@ -106,10 +109,12 @@ function ListingGroup({
   title,
   subtitle,
   rows,
+  showClose,
 }: {
   title: string;
   subtitle: string;
   rows: ListingRow[];
+  showClose?: boolean;
 }) {
   if (rows.length === 0) return null;
 
@@ -152,8 +157,11 @@ function ListingGroup({
                   </>
                 )}
               </p>
-              <div className="mt-3">
+              <div className="mt-3 flex flex-wrap items-start gap-3">
                 <OwnerActions listingId={l.id} listingTitle={l.title} />
+                {showClose && (
+                  <CloseListingForm listingId={l.id} listingTitle={l.title} />
+                )}
               </div>
             </li>
           );
