@@ -160,6 +160,117 @@ export async function deleteListing(formData: FormData): Promise<void> {
 }
 
 // ============================================================
+// Item 20: legal-concern report (defamation, copyright, illegal content)
+// ============================================================
+
+const LegalReportSchema = z.object({
+  listing_id: z.string().uuid("Bad listing id"),
+  complainant_name: z.string().trim().max(200).optional().default(""),
+  complainant_email: z.string().trim().email("That email doesn't look right").max(255),
+  type_of_concern: z.enum(["defamation", "copyright", "illegal_content", "privacy_breach", "other"]),
+  details: z.string().trim().min(20, "Tell us a bit more — at least 20 characters").max(5000),
+});
+
+export type LegalReportResult =
+  | { ok: true; reference: string }
+  | { ok: false; message: string };
+
+export async function submitLegalConcern(formData: FormData): Promise<LegalReportResult> {
+  const parsed = LegalReportSchema.safeParse({
+    listing_id: formData.get("listing_id"),
+    complainant_name: formData.get("complainant_name") ?? "",
+    complainant_email: formData.get("complainant_email"),
+    type_of_concern: formData.get("type_of_concern"),
+    details: formData.get("details"),
+  });
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Bad input" };
+  }
+
+  const supabase = createClient();
+
+  // Snapshot listing identity at time of complaint, in case the
+  // listing is later edited or deleted.
+  const { data: listing } = await supabase
+    .from("listings")
+    .select("id, title, slug, kind")
+    .eq("id", parsed.data.listing_id)
+    .maybeSingle();
+
+  const path = listing
+    ? listing.kind === "job"
+      ? `/jobs/${listing.slug}`
+      : listing.kind === "freight"
+        ? `/freight/${listing.slug}`
+        : `/services/listing/${listing.slug}`
+    : null;
+  const listingUrl = path ? `${BASE_URL}${path}` : null;
+
+  // Insert into defamation_complaints. RLS policy permits anonymous
+  // inserts; we need the form reachable from any listing detail page.
+  const admin = createAdminClient();
+  if (!admin) {
+    return { ok: false, message: "Couldn't record the complaint right now. Email support@outbackfencingsupplies.com.au instead." };
+  }
+  const { data: inserted, error } = await admin
+    .from("defamation_complaints")
+    .insert({
+      listing_id: parsed.data.listing_id,
+      listing_title_snapshot: listing?.title ?? null,
+      listing_url_snapshot: listingUrl,
+      complainant_name: parsed.data.complainant_name || null,
+      complainant_email: parsed.data.complainant_email,
+      type_of_concern: parsed.data.type_of_concern,
+      details: parsed.data.details,
+    })
+    .select("anonymised_id")
+    .single();
+
+  if (error || !inserted) {
+    console.error("[legal] insert failed:", error?.message);
+    return { ok: false, message: "Couldn't record the complaint. Please try again or email us." };
+  }
+
+  // Alert admin so the SLA clock is visible
+  try {
+    const concernLabels: Record<string, string> = {
+      defamation: "Defamation",
+      copyright: "Copyright",
+      illegal_content: "Illegal content",
+      privacy_breach: "Privacy breach",
+      other: "Other",
+    };
+    const text = [
+      `A legal concern has been raised on Outback Connections.`,
+      ``,
+      `Reference: ${inserted.anonymised_id}`,
+      `Type: ${concernLabels[parsed.data.type_of_concern]}`,
+      `Listing: ${listing?.title ?? "(unknown)"}${listingUrl ? `\nURL: ${listingUrl}` : ""}`,
+      ``,
+      `Complainant: ${parsed.data.complainant_name || "(no name given)"} <${parsed.data.complainant_email}>`,
+      ``,
+      `Details:`,
+      parsed.data.details,
+      ``,
+      `Procedure: docs/DEFAMATION-COMPLAINT-PROCEDURE.md`,
+      `Response SLA: 5 business days.`,
+    ].join("\n");
+
+    await sendEmail({
+      to: NOTIFICATION_TO,
+      subject: `[LEGAL] ${inserted.anonymised_id} ${concernLabels[parsed.data.type_of_concern]} — ${listing?.title ?? "listing"}`,
+      text,
+      html: `<pre style="font-family:-apple-system,system-ui,sans-serif;white-space:pre-wrap;">${escapeHtml(text)}</pre>`,
+      replyTo: parsed.data.complainant_email,
+    });
+  } catch (e) {
+    console.error("[legal] admin alert email failed:", e);
+  }
+
+  return { ok: true, reference: inserted.anonymised_id };
+}
+
+// ============================================================
 // Mark a listing as closed (outcome captured)
 // ============================================================
 

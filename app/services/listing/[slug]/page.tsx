@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ContactBlock from "@/components/detail/ContactBlock";
 import FlagForm from "@/components/detail/FlagForm";
+import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
 import { kindLabel, relativeTime } from "@/lib/format";
 import { buildDescription, buildTitle, jsonLdScript, serviceJsonLd } from "@/lib/seo";
@@ -149,12 +150,13 @@ export default async function ServiceDetailPage({
       </section>
 
       {!isOwner && (
-        <div className="mt-8">
+        <div className="mt-8 space-y-3">
           <FlagForm
             listingId={listing.id}
             signedIn={!!viewer}
             signInRedirect={`/services/listing/${listing.slug}`}
           />
+          <LegalConcernForm listingId={listing.id} />
         </div>
       )}
     </div>
