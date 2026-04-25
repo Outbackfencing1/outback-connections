@@ -49,14 +49,40 @@ export default async function HomePage() {
 
   return (
     <div>
-      {/* Hero */}
+      {/* Hero — single primary CTA, supporting actions in smaller text. */}
       <section className="mx-auto max-w-3xl px-4 py-12 sm:py-16">
         <h1 className="text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl md:text-5xl">
           Jobs, freight, and the bloke who&apos;s handy with a bore pump.
         </h1>
         <p className="mt-5 text-base text-neutral-700 sm:text-lg">
-          Rural Australia&apos;s free marketplace — no lead fees, no
-          rip-offs, just direct contact.
+          Free rural marketplace. No lead fees ever.
+        </p>
+        <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Link
+            href="/services"
+            className="inline-flex items-center justify-center rounded-xl bg-green-700 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-800 focus:ring-offset-2"
+          >
+            Browse listings
+          </Link>
+          <p className="text-sm text-neutral-700">
+            Or{" "}
+            <Link href="/post" className="font-medium text-green-800 underline">
+              post a listing
+            </Link>{" "}
+            — free, takes 3 minutes.
+          </p>
+        </div>
+        <p className="mt-4 text-xs text-neutral-500">
+          Run by{" "}
+          <a
+            href="https://outbackfencing.com.au"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            Outback Fencing &amp; Steel Supplies
+          </a>
+          .
         </p>
       </section>
 
