@@ -5,11 +5,35 @@ import ContactBlock from "@/components/detail/ContactBlock";
 import FlagForm from "@/components/detail/FlagForm";
 import OwnerActions from "@/components/detail/OwnerActions";
 import { kindLabel, relativeTime } from "@/lib/format";
+import { buildDescription, buildTitle } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: { slug: string } }) {
-  return { title: `${params.slug.replace(/-/g, " ")} — Freight — Outback Connections` };
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("listings")
+    .select(`title, description, postcode, category:categories(label)`)
+    .eq("slug", params.slug)
+    .eq("kind", "freight")
+    .maybeSingle();
+
+  if (!data) {
+    return { title: "Freight listing not found — Outback Connections" };
+  }
+  const cat = Array.isArray(data.category) ? data.category[0] : data.category;
+  const title = buildTitle({
+    listingTitle: data.title,
+    categoryLabel: cat?.label ?? "Freight",
+    postcode: data.postcode,
+  });
+  const description = buildDescription(data.description);
+  return {
+    title,
+    description,
+    openGraph: { title, description, type: "article" },
+    twitter: { card: "summary", title, description },
+  };
 }
 
 export default async function FreightDetailPage({

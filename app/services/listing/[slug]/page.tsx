@@ -5,12 +5,37 @@ import ContactBlock from "@/components/detail/ContactBlock";
 import FlagForm from "@/components/detail/FlagForm";
 import OwnerActions from "@/components/detail/OwnerActions";
 import { kindLabel, relativeTime } from "@/lib/format";
+import { buildDescription, buildTitle, jsonLdScript, serviceJsonLd } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
+const BASE_URL =
+  process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
+
 export async function generateMetadata({ params }: { params: { slug: string } }) {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("listings")
+    .select(`title, description, postcode, category:categories(label)`)
+    .eq("slug", params.slug)
+    .in("kind", ["service_offering", "service_request"])
+    .maybeSingle();
+
+  if (!data) {
+    return { title: "Service listing not found — Outback Connections" };
+  }
+  const cat = Array.isArray(data.category) ? data.category[0] : data.category;
+  const title = buildTitle({
+    listingTitle: data.title,
+    categoryLabel: cat?.label ?? "Services",
+    postcode: data.postcode,
+  });
+  const description = buildDescription(data.description);
   return {
-    title: `${params.slug.replace(/-/g, " ")} — Services — Outback Connections`,
+    title,
+    description,
+    openGraph: { title, description, type: "article" },
+    twitter: { card: "summary", title, description },
   };
 }
 
@@ -50,8 +75,31 @@ export default async function ServiceDetailPage({
     : listing.service_details;
   const cat = Array.isArray(listing.category) ? listing.category[0] : listing.category;
 
+  // JSON-LD only emitted for offerings (a real Service in schema.org sense).
+  // Service requests are demand-side and don't have a clean schema mapping.
+  const jsonLd =
+    listing.kind === "service_offering"
+      ? serviceJsonLd({
+          title: listing.title,
+          description: listing.description,
+          postcode: listing.postcode,
+          state: listing.state,
+          category: cat?.label ?? "Service",
+          rateType: detail?.rate_type ?? null,
+          rateAmount: detail?.rate_amount ?? null,
+          baseUrl: BASE_URL,
+          slug: listing.slug,
+        })
+      : null;
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
+      {jsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
+        />
+      )}
       <p className="text-sm">
         <Link
           href={cat ? `/services/${cat.slug}` : "/services"}

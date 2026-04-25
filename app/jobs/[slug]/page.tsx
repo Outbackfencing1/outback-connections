@@ -5,11 +5,41 @@ import ContactBlock from "@/components/detail/ContactBlock";
 import FlagForm from "@/components/detail/FlagForm";
 import OwnerActions from "@/components/detail/OwnerActions";
 import { kindLabel, relativeTime } from "@/lib/format";
+import { buildDescription, buildTitle, jobPostingJsonLd, jsonLdScript } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
+const BASE_URL =
+  process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
+
 export async function generateMetadata({ params }: { params: { slug: string } }) {
-  return { title: `${params.slug.replace(/-/g, " ")} — Jobs — Outback Connections` };
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("listings")
+    .select(`
+      title, description, postcode, status, expires_at,
+      category:categories(label)
+    `)
+    .eq("slug", params.slug)
+    .eq("kind", "job")
+    .maybeSingle();
+
+  if (!data) {
+    return { title: "Job not found — Outback Connections" };
+  }
+  const cat = Array.isArray(data.category) ? data.category[0] : data.category;
+  const title = buildTitle({
+    listingTitle: data.title,
+    categoryLabel: cat?.label ?? "Jobs",
+    postcode: data.postcode,
+  });
+  const description = buildDescription(data.description);
+  return {
+    title,
+    description,
+    openGraph: { title, description, type: "article" },
+    twitter: { card: "summary", title, description },
+  };
 }
 
 export default async function JobDetailPage({
@@ -48,8 +78,26 @@ export default async function JobDetailPage({
     : listing.job_details;
   const cat = Array.isArray(listing.category) ? listing.category[0] : listing.category;
 
+  const jsonLd = jobPostingJsonLd({
+    title: listing.title,
+    description: listing.description,
+    postcode: listing.postcode,
+    state: listing.state,
+    createdAt: listing.created_at,
+    expiresAt: listing.expires_at,
+    workType: detail?.work_type ?? null,
+    payType: detail?.pay_type ?? null,
+    payAmount: detail?.pay_amount ?? null,
+    baseUrl: BASE_URL,
+    slug: listing.slug,
+  });
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
+      />
       <p className="text-sm">
         <Link href="/jobs" className="text-neutral-600 underline">
           ← All jobs
