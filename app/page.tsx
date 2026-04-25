@@ -181,35 +181,17 @@ export default async function HomePage() {
         </ol>
       </section>
 
-      {/* What we don't do */}
+      {/* What we don't do — single line, link out for the detail. */}
       <section className="mx-auto max-w-3xl px-4 py-8">
-        <h2 className="text-xl font-bold text-neutral-900 sm:text-2xl">
-          What we don&apos;t do
-        </h2>
-        <ul className="mt-4 space-y-2 text-neutral-800">
-          <li>
-            <strong>No lead fees.</strong> Not now, not ever. Other sites
-            charge tradies $20–30 per lead whether they win or not. Not
-            here.
-          </li>
-          <li>
-            <strong>No paid placement.</strong> No featured listings,
-            nobody pays to rise in search.
-          </li>
-          <li>
-            <strong>No reviews or star ratings.</strong> It&apos;s too
-            easy to fake, too easy to defame, and we&apos;re not running
-            a trust-and-safety team. Maybe later, properly.
-          </li>
-          <li>
-            <strong>No messaging system.</strong> Direct email or phone
-            contact — that&apos;s it.
-          </li>
-          <li>
-            <strong>No spam.</strong> Sign-in is email-only. Listings
-            auto-expire at 30 days so stale ones fall off.
-          </li>
-        </ul>
+        <p className="text-lg font-bold text-neutral-900 sm:text-xl">
+          Free forever. No lead fees. No spam. No middleman. No fake reviews.
+        </p>
+        <p className="mt-3 text-sm text-neutral-700">
+          <Link href="/faq" className="underline">
+            Read more
+          </Link>{" "}
+          about what we do and don&apos;t do.
+        </p>
       </section>
 
       {/* COI */}
