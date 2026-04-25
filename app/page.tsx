@@ -191,28 +191,6 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* Post a listing */}
-      <section className="mx-auto max-w-3xl px-4 py-10">
-        <div className="rounded-2xl border border-green-200 bg-green-50 p-6 text-center sm:p-8">
-          <h2 className="text-xl font-bold text-neutral-900 sm:text-2xl">
-            Got a job, a truck, or a service to offer?
-          </h2>
-          <p className="mt-2 text-sm text-neutral-700 sm:text-base">
-            Takes a few minutes. Free forever.
-          </p>
-          <Link
-            href="/post"
-            className="mt-4 inline-block rounded-xl bg-green-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-800"
-          >
-            Post a listing
-          </Link>
-          <p className="mt-3 text-xs text-neutral-600">
-            You&apos;ll need to sign in first. No passwords — just a link to
-            your email.
-          </p>
-        </div>
-      </section>
-
       {/* How it works */}
       <section className="mx-auto max-w-3xl px-4 py-8">
         <h2 className="text-xl font-bold text-neutral-900 sm:text-2xl">
@@ -255,6 +233,24 @@ export default async function HomePage() {
           </Link>{" "}
           about what we do and don&apos;t do.
         </p>
+      </section>
+
+      {/* Final CTA strip — primary goal of the homepage is to get listings posted. */}
+      <section className="mx-auto max-w-3xl px-4 py-10">
+        <div className="rounded-2xl border border-green-200 bg-green-50 p-8 text-center sm:p-10">
+          <h2 className="text-2xl font-bold text-neutral-900 sm:text-3xl">
+            Get on it.
+          </h2>
+          <p className="mt-2 text-sm text-neutral-700 sm:text-base">
+            Free forever. Takes 3 minutes.
+          </p>
+          <Link
+            href="/post"
+            className="mt-5 inline-flex items-center justify-center rounded-xl bg-green-700 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-800 focus:ring-offset-2"
+          >
+            Post a listing
+          </Link>
+        </div>
       </section>
 
       {/* COI — tightened. */}
