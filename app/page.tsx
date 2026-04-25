@@ -229,9 +229,9 @@ export default async function HomePage() {
         </p>
         <p className="mt-3 text-sm text-neutral-700">
           <Link href="/faq" className="underline">
-            Read more
+            Read the FAQ
           </Link>{" "}
-          about what we do and don&apos;t do.
+          for the detail on what we do and don&apos;t do.
         </p>
       </section>
 

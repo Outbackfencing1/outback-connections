@@ -29,19 +29,19 @@ export default async function Header() {
             Outback Connections
           </Link>
 
-          <nav className="hidden items-center gap-5 md:flex">
+          <nav className="hidden items-center gap-3 md:flex">
             {primaryLinks.map((l) => (
               <Link
                 key={l.href}
                 href={l.href}
-                className="text-sm font-medium text-neutral-800 hover:text-green-800"
+                className="rounded px-2 py-2 text-sm font-medium text-neutral-800 hover:text-green-800"
               >
                 {l.label}
               </Link>
             ))}
             <Link
               href="/post"
-              className="rounded-lg bg-green-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-green-800"
+              className="rounded-lg bg-green-700 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-800"
             >
               Post a listing
             </Link>
@@ -49,14 +49,14 @@ export default async function Header() {
               <>
                 <Link
                   href="/dashboard"
-                  className="text-sm font-medium text-neutral-800 hover:text-green-800"
+                  className="rounded px-2 py-2 text-sm font-medium text-neutral-800 hover:text-green-800"
                 >
                   Dashboard
                 </Link>
                 <form action={signOut}>
                   <button
                     type="submit"
-                    className="text-sm font-medium text-neutral-800 hover:text-green-800"
+                    className="rounded px-2 py-2 text-sm font-medium text-neutral-800 hover:text-green-800"
                   >
                     Sign out
                   </button>
@@ -65,7 +65,7 @@ export default async function Header() {
             ) : (
               <Link
                 href="/signin"
-                className="text-sm font-medium text-neutral-800 hover:text-green-800"
+                className="rounded px-2 py-2 text-sm font-medium text-neutral-800 hover:text-green-800"
               >
                 Sign in
               </Link>
@@ -73,39 +73,45 @@ export default async function Header() {
           </nav>
         </div>
 
-        {/* Mobile nav: stacked, always visible. No JS. */}
-        <nav className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm md:hidden">
+        {/* Mobile nav: stacked, always visible. No JS. Bigger tap targets. */}
+        <nav className="-mx-1 mt-2 flex flex-wrap items-center gap-x-1 gap-y-1 text-sm md:hidden">
           {primaryLinks.map((l) => (
             <Link
               key={l.href}
               href={l.href}
-              className="font-medium text-neutral-800"
+              className="rounded px-2 py-2 font-medium text-neutral-800"
             >
               {l.label}
             </Link>
           ))}
           <Link
             href="/post"
-            className="rounded-lg bg-green-700 px-2.5 py-1 text-xs font-semibold text-white"
+            className="rounded-lg bg-green-700 px-3 py-2 text-xs font-semibold text-white"
           >
             Post
           </Link>
           {signedIn ? (
             <>
-              <Link href="/dashboard" className="font-medium text-neutral-800">
+              <Link
+                href="/dashboard"
+                className="rounded px-2 py-2 font-medium text-neutral-800"
+              >
                 Dashboard
               </Link>
               <form action={signOut}>
                 <button
                   type="submit"
-                  className="font-medium text-neutral-800"
+                  className="rounded px-2 py-2 font-medium text-neutral-800"
                 >
                   Sign out
                 </button>
               </form>
             </>
           ) : (
-            <Link href="/signin" className="font-medium text-neutral-800">
+            <Link
+              href="/signin"
+              className="rounded px-2 py-2 font-medium text-neutral-800"
+            >
               Sign in
             </Link>
           )}
