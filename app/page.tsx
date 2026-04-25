@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { kindLabel, listingHref, relativeTime } from "@/lib/format";
+
+const RECENT_MIN_TO_SHOW = 5;
+const RECENT_LIMIT = 5;
 
 export const metadata = {
   title: "Outback Connections — rural Australia's free marketplace",
@@ -43,9 +47,44 @@ async function getLiveStats() {
   };
 }
 
+type RecentListing = {
+  slug: string;
+  kind: string;
+  title: string;
+  postcode: string;
+  state: string | null;
+  created_at: string;
+  category: { label: string } | null;
+};
+
+async function getRecentListings(): Promise<RecentListing[]> {
+  const supabase = createClient();
+  const nowIso = new Date().toISOString();
+  const { data } = await supabase
+    .from("listings")
+    .select(
+      `slug, kind, title, postcode, state, created_at, category:categories(label)`
+    )
+    .eq("status", "active")
+    .gt("expires_at", nowIso)
+    .order("created_at", { ascending: false })
+    .limit(RECENT_LIMIT);
+
+  return (data ?? []).map((row) => ({
+    slug: row.slug,
+    kind: row.kind,
+    title: row.title,
+    postcode: row.postcode,
+    state: row.state,
+    created_at: row.created_at,
+    category: Array.isArray(row.category) ? row.category[0] ?? null : row.category,
+  }));
+}
+
 export default async function HomePage() {
-  const stats = await getLiveStats();
+  const [stats, recent] = await Promise.all([getLiveStats(), getRecentListings()]);
   const showStats = stats.active >= 10;
+  const showRecent = stats.active >= RECENT_MIN_TO_SHOW && recent.length > 0;
 
   return (
     <div>
@@ -127,6 +166,30 @@ export default async function HomePage() {
           />
         </div>
       </section>
+
+      {/* What's on now — only shown if we have ≥ 5 active listings site-wide. */}
+      {showRecent && (
+        <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 className="text-xl font-bold text-neutral-900 sm:text-2xl">
+              What&apos;s on now
+            </h2>
+            <Link
+              href="/services"
+              className="text-sm font-medium text-green-800 underline"
+            >
+              See all →
+            </Link>
+          </div>
+          <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {recent.map((l) => (
+              <li key={l.slug}>
+                <RecentCard listing={l} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Post a listing */}
       <section className="mx-auto max-w-3xl px-4 py-10">
@@ -212,6 +275,31 @@ export default async function HomePage() {
         </p>
       </section>
     </div>
+  );
+}
+
+function RecentCard({ listing }: { listing: RecentListing }) {
+  const location = listing.state
+    ? `${listing.postcode} ${listing.state}`
+    : listing.postcode;
+  return (
+    <Link
+      href={listingHref(listing.kind, listing.slug)}
+      className="block h-full rounded-xl border border-neutral-200 bg-white p-4 shadow-sm transition hover:border-green-700 hover:shadow-md"
+    >
+      <p className="text-xs font-semibold uppercase tracking-wide text-green-800">
+        {kindLabel(listing.kind)}
+      </p>
+      <h3 className="mt-1 line-clamp-2 text-base font-semibold text-neutral-900">
+        {listing.title}
+      </h3>
+      <p className="mt-2 text-xs text-neutral-600">
+        {listing.category?.label ?? "—"} · {location}
+      </p>
+      <p className="mt-1 text-xs text-neutral-500">
+        Posted {relativeTime(listing.created_at)}
+      </p>
+    </Link>
   );
 }
 
