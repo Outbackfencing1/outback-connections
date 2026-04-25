@@ -1,10 +1,11 @@
 // components/Header.tsx — server component.
-// Reads auth server-side so the nav can show "Sign in" or "Dashboard"
-// without needing client-side hydration.
+// Reads auth server-side so the nav can show "Sign in" or "Dashboard +
+// Sign out" without needing client-side hydration.
 // Mobile nav is a plain stacked list (no hamburger, no JS) — better for
 // patchy signal and zero-JS clients.
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { signOut } from "@/app/dashboard/actions";
 
 const primaryLinks = [
   { href: "/services", label: "Services" },
@@ -45,12 +46,22 @@ export default async function Header() {
               Post a listing
             </Link>
             {signedIn ? (
-              <Link
-                href="/dashboard"
-                className="text-sm font-medium text-neutral-800 hover:text-green-800"
-              >
-                Dashboard
-              </Link>
+              <>
+                <Link
+                  href="/dashboard"
+                  className="text-sm font-medium text-neutral-800 hover:text-green-800"
+                >
+                  Dashboard
+                </Link>
+                <form action={signOut}>
+                  <button
+                    type="submit"
+                    className="text-sm font-medium text-neutral-800 hover:text-green-800"
+                  >
+                    Sign out
+                  </button>
+                </form>
+              </>
             ) : (
               <Link
                 href="/signin"
@@ -80,9 +91,19 @@ export default async function Header() {
             Post
           </Link>
           {signedIn ? (
-            <Link href="/dashboard" className="font-medium text-neutral-800">
-              Dashboard
-            </Link>
+            <>
+              <Link href="/dashboard" className="font-medium text-neutral-800">
+                Dashboard
+              </Link>
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  className="font-medium text-neutral-800"
+                >
+                  Sign out
+                </button>
+              </form>
+            </>
           ) : (
             <Link href="/signin" className="font-medium text-neutral-800">
               Sign in

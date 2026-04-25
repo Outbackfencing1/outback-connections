@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { signOut } from "./actions";
 
 export const metadata = {
   title: "Dashboard — Outback Connections",
@@ -84,7 +85,16 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      <p className="mt-10 text-xs text-neutral-500">
+      <form action={signOut} className="mt-10">
+        <button
+          type="submit"
+          className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-semibold text-neutral-900 hover:bg-neutral-50"
+        >
+          Sign out
+        </button>
+      </form>
+
+      <p className="mt-6 text-xs text-neutral-500">
         <Link href="/" className="underline">
           ← Back to home
         </Link>
