@@ -70,7 +70,12 @@ export default async function AdminFlagQueuePage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
-      <h1 className="text-3xl font-bold tracking-tight">Flag queue</h1>
+      <div className="flex items-baseline justify-between gap-4">
+        <h1 className="text-3xl font-bold tracking-tight">Flag queue</h1>
+        <Link href="/dashboard/admin/moderation" className="text-sm underline">
+          Moderation history →
+        </Link>
+      </div>
       <p className="mt-2 text-sm text-neutral-700">
         Listings with one or more flags. V1 is manual review — Phase 2 adds
         auto-hide at 2+ flags.
