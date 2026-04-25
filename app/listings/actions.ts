@@ -6,6 +6,10 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { setFlash } from "@/lib/posting";
+import { NOTIFICATION_TO, sendEmail } from "@/lib/email";
+
+const BASE_URL =
+  process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
 
 // ============================================================
 // Flag a listing (signed-in non-owner only)
@@ -65,7 +69,55 @@ export async function flagListing(formData: FormData): Promise<FlagResult> {
     return { ok: false, message: "Couldn't record the flag. Please try again." };
   }
 
+  // Item 10: alert admin so the queue isn't invisible. Best-effort —
+  // email failure must not surface to the user (the flag was recorded).
+  try {
+    const { data: listingDetail } = await supabase
+      .from("listings")
+      .select("title, slug, kind, postcode, flag_count")
+      .eq("id", parsed.data.listing_id)
+      .maybeSingle();
+
+    const reasonLabels: Record<string, string> = {
+      scam: "Scam / fraud",
+      duplicate: "Duplicate listing",
+      offensive: "Offensive or abusive",
+      miscategorised: "Wrong category",
+      other: "Other",
+    };
+    const subject = `[FLAG] ${listingDetail?.title ?? "listing"} flagged by ${userData.user.email ?? "user"}`;
+    const adminUrl = `${BASE_URL}/dashboard/admin/flags`;
+    const text = [
+      `A listing has been flagged on Outback Connections.`,
+      ``,
+      `Listing: ${listingDetail?.title ?? "(unknown)"}`,
+      `Postcode: ${listingDetail?.postcode ?? "—"}`,
+      `Kind: ${listingDetail?.kind ?? "—"}`,
+      `Total flags now: ${listingDetail?.flag_count ?? "?"}`,
+      ``,
+      `Flagged by: ${userData.user.email ?? "(unknown)"}`,
+      `Reason: ${reasonLabels[parsed.data.reason] ?? parsed.data.reason}`,
+      `Note: ${parsed.data.note || "(none)"}`,
+      ``,
+      `Review queue: ${adminUrl}`,
+    ].join("\n");
+
+    await sendEmail({
+      to: NOTIFICATION_TO,
+      subject,
+      text,
+      html: `<pre style="font-family:-apple-system,system-ui,sans-serif;white-space:pre-wrap;">${escapeHtml(text)}</pre>`,
+      replyTo: userData.user.email ?? undefined,
+    });
+  } catch (e) {
+    console.error("[flag] admin alert email failed:", e);
+  }
+
   return { ok: true };
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 // ============================================================
