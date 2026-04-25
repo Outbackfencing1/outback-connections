@@ -9,7 +9,14 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: ["/"],
-      disallow: ["/api/", "/dashboard/"],
+      disallow: [
+        "/api/",
+        "/auth/",
+        "/dashboard/",
+        "/signin",
+        "/signup",
+        "/verify/",
+      ],
     },
     sitemap: `${base}/sitemap.xml`,
     host: base,

@@ -6,12 +6,22 @@ export default function sitemap(): MetadataRoute.Sitemap {
     process.env.NEXT_PUBLIC_BASE_URL ||
     "https://www.outbackconnections.com.au";
 
-  const routes = ["", "/help", "/about", "/privacy", "/terms"].map((p) => ({
-    url: `${base}${p}`,
+  const routes = [
+    { path: "", priority: 1 },
+    { path: "/services", priority: 0.9 },
+    { path: "/jobs", priority: 0.8 },
+    { path: "/freight", priority: 0.8 },
+    { path: "/post", priority: 0.5 },
+    { path: "/about", priority: 0.4 },
+    { path: "/faq", priority: 0.4 },
+    { path: "/privacy", priority: 0.2 },
+    { path: "/terms", priority: 0.2 },
+  ];
+
+  return routes.map(({ path, priority }) => ({
+    url: `${base}${path}`,
     lastModified: new Date(),
     changeFrequency: "weekly" as const,
-    priority: p === "" ? 1 : p === "/help" ? 0.9 : 0.5,
+    priority,
   }));
-
-  return routes;
 }
