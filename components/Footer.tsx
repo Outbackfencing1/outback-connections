@@ -12,8 +12,9 @@ export default function Footer() {
           We disclose this upfront, on every page.
         </p>
 
-        <div className="mt-8 grid gap-8 md:grid-cols-4">
-          <div>
+        {/* Single column on mobile with section dividers, 4 columns from md+. */}
+        <div className="mt-8 grid gap-0 md:grid-cols-4 md:gap-8">
+          <div className="border-t border-neutral-200 py-6 md:border-t-0 md:py-0">
             <h3 className="text-sm font-semibold text-neutral-900">
               Marketplace
             </h3>
@@ -28,7 +29,7 @@ export default function Footer() {
             </ul>
           </div>
 
-          <div>
+          <div className="border-t border-neutral-200 py-6 md:border-t-0 md:py-0">
             <h3 className="text-sm font-semibold text-neutral-900">
               Legal
             </h3>
@@ -40,7 +41,7 @@ export default function Footer() {
             </ul>
           </div>
 
-          <div>
+          <div className="border-t border-neutral-200 py-6 md:border-t-0 md:py-0">
             <h3 className="text-sm font-semibold text-neutral-900">
               Who we are
             </h3>
@@ -53,7 +54,7 @@ export default function Footer() {
             </address>
           </div>
 
-          <div>
+          <div className="border-t border-neutral-200 py-6 md:border-t-0 md:py-0">
             <h3 className="text-sm font-semibold text-neutral-900">
               Contact
             </h3>
