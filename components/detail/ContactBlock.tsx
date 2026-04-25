@@ -23,7 +23,7 @@ export default function ContactBlock({
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
         <p className="font-semibold text-amber-900">Contact details</p>
         <p className="mt-2 text-sm text-amber-900">
-          We hide contact details from the open web to stop spam and scraping.
+          Sign in to see how to get in touch — we hide these to stop spam.
         </p>
         <Link
           href={`/signin?next=${encodeURIComponent(signInRedirect)}`}
