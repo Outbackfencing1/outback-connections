@@ -1,9 +1,13 @@
 // app/auth/callback/route.ts
 // Magic-link landing. Supabase redirects here with ?code=... after the user
-// clicks the email link. We exchange the code for a session (sets cookies)
-// and send them onward — to the dashboard by default, or to ?next= if set.
+// clicks the email link. We exchange the code for a session, persist any
+// signup consent stashed by the action, then send them onward.
 import { NextResponse, type NextRequest } from "next/server";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+const SIGNUP_CONSENT_COOKIE = "oc_signup_consent";
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -19,9 +23,40 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     console.error("[auth] exchangeCodeForSession failed:", error.message);
-    return NextResponse.redirect(
-      `${origin}/signin?error=exchange_failed`
-    );
+    return NextResponse.redirect(`${origin}/signin?error=exchange_failed`);
+  }
+
+  // Persist signup consent if it's stashed
+  const cookieStore = cookies();
+  const consentRaw = cookieStore.get(SIGNUP_CONSENT_COOKIE)?.value;
+  if (consentRaw) {
+    try {
+      const consent = JSON.parse(consentRaw) as {
+        terms_version: string;
+        agreed_at: string;
+        marketing: boolean;
+        dob_confirmed: boolean;
+      };
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData.user) {
+        const admin = createAdminClient();
+        if (admin) {
+          await admin
+            .from("user_profiles")
+            .update({
+              terms_consent_at: consent.agreed_at,
+              terms_consent_version: consent.terms_version,
+              dob_confirmed_at: consent.dob_confirmed ? consent.agreed_at : null,
+              marketing_consent_at: consent.marketing ? consent.agreed_at : null,
+            })
+            .eq("user_id", userData.user.id);
+        }
+      }
+    } catch (e) {
+      console.error("[auth] failed to apply signup consent:", e);
+    } finally {
+      cookieStore.set(SIGNUP_CONSENT_COOKIE, "", { maxAge: 0, path: "/" });
+    }
   }
 
   return NextResponse.redirect(`${origin}${next}`);
