@@ -257,21 +257,20 @@ export default async function HomePage() {
         </p>
       </section>
 
-      {/* COI */}
+      {/* COI — tightened. */}
       <section className="mx-auto max-w-3xl px-4 py-10">
         <p className="text-sm text-neutral-700">
-          <strong>Upfront:</strong> Outback Connections is run by{" "}
+          Run by{" "}
           <a
             href="https://outbackfencing.com.au"
             target="_blank"
             rel="noopener noreferrer"
             className="underline"
           >
-            Outback Fencing &amp; Steel Supplies Pty Ltd
+            Outback Fencing &amp; Steel Supplies
           </a>
-          , a rural fencing manufacturer. We built this because rural
-          Australia deserves a decent marketplace. We disclose who we are
-          upfront, on every page.
+          . We built this because rural Australia deserves a decent
+          marketplace — and we want you to know who&apos;s behind it.
         </p>
       </section>
     </div>
