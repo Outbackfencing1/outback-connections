@@ -12,52 +12,31 @@ export default function Footer() {
           We disclose this upfront, on every page.
         </p>
 
-        <div className="mt-8 grid gap-6 md:grid-cols-3">
+        <div className="mt-8 grid gap-8 md:grid-cols-4">
           <div>
             <h3 className="text-sm font-semibold text-neutral-900">
               Marketplace
             </h3>
             <ul className="mt-3 space-y-2 text-sm text-neutral-700">
-              <li>
-                <Link href="/" className="hover:text-neutral-900">
-                  Home
-                </Link>
-              </li>
-              <li>
-                <Link href="/services" className="hover:text-neutral-900">
-                  Services
-                </Link>
-              </li>
-              <li>
-                <Link href="/jobs" className="hover:text-neutral-900">
-                  Jobs
-                </Link>
-              </li>
-              <li>
-                <Link href="/freight" className="hover:text-neutral-900">
-                  Freight
-                </Link>
-              </li>
-              <li>
-                <Link href="/about" className="hover:text-neutral-900">
-                  About
-                </Link>
-              </li>
-              <li>
-                <Link href="/faq" className="hover:text-neutral-900">
-                  FAQ
-                </Link>
-              </li>
-              <li>
-                <Link href="/privacy" className="hover:text-neutral-900">
-                  Privacy
-                </Link>
-              </li>
-              <li>
-                <Link href="/terms" className="hover:text-neutral-900">
-                  Terms
-                </Link>
-              </li>
+              <li><Link href="/" className="hover:text-neutral-900">Home</Link></li>
+              <li><Link href="/services" className="hover:text-neutral-900">Services</Link></li>
+              <li><Link href="/jobs" className="hover:text-neutral-900">Jobs</Link></li>
+              <li><Link href="/freight" className="hover:text-neutral-900">Freight</Link></li>
+              <li><Link href="/post" className="hover:text-neutral-900">Post a listing</Link></li>
+              <li><Link href="/about" className="hover:text-neutral-900">About</Link></li>
+              <li><Link href="/faq" className="hover:text-neutral-900">FAQ</Link></li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-neutral-900">
+              Legal
+            </h3>
+            <ul className="mt-3 space-y-2 text-sm text-neutral-700">
+              <li><Link href="/privacy" className="hover:text-neutral-900">Privacy notice</Link></li>
+              <li><Link href="/terms" className="hover:text-neutral-900">Terms of service</Link></li>
+              <li><Link href="/acceptable-use" className="hover:text-neutral-900">Acceptable use</Link></li>
+              <li><Link href="/cookies" className="hover:text-neutral-900">Cookies</Link></li>
             </ul>
           </div>
 
