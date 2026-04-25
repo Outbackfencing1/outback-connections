@@ -7,9 +7,13 @@ import type { ActionResult } from "@/lib/posting";
 type Props = {
   categories: Category[];
   action: (formData: FormData) => Promise<ActionResult>;
+  listingId?: string;
+  defaults?: Record<string, string>;
+  submitLabel?: string;
 };
 
-export default function PostFreightForm({ categories, action }: Props) {
+export default function PostFreightForm({ categories, action, listingId, defaults, submitLabel }: Props) {
+  const v = (k: string) => defaults?.[k] ?? "";
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, start] = useTransition();
 
@@ -40,12 +44,14 @@ export default function PostFreightForm({ categories, action }: Props) {
         </div>
       )}
 
+      {listingId && <input type="hidden" name="listing_id" value={listingId} />}
+
       <Field id="direction" label="What kind of freight post is this?" error={errors.direction} required>
         <select
           id="direction"
           name="direction"
           required
-          defaultValue=""
+          defaultValue={v("direction")}
           className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
         >
           <option value="">Pick one</option>
@@ -54,7 +60,7 @@ export default function PostFreightForm({ categories, action }: Props) {
         </select>
       </Field>
 
-      <BaseFields categories={categories} errors={errors} defaults={{}} />
+      <BaseFields categories={categories} errors={errors} defaults={defaults ?? {}} />
 
       <div className="rounded-xl border border-neutral-200 p-4">
         <p className="text-sm font-semibold text-neutral-800">Freight details</p>
@@ -67,6 +73,7 @@ export default function PostFreightForm({ categories, action }: Props) {
               inputMode="numeric"
               pattern="[0-9]{4}"
               maxLength={4}
+              defaultValue={v("origin_postcode")}
               className="mt-1 block w-32 rounded-lg border border-neutral-300 bg-white px-3 py-2"
             />
           </Field>
@@ -78,6 +85,7 @@ export default function PostFreightForm({ categories, action }: Props) {
               inputMode="numeric"
               pattern="[0-9]{4}"
               maxLength={4}
+              defaultValue={v("destination_postcode")}
               className="mt-1 block w-32 rounded-lg border border-neutral-300 bg-white px-3 py-2"
             />
           </Field>
@@ -88,6 +96,7 @@ export default function PostFreightForm({ categories, action }: Props) {
             <select
               id="vehicle_type"
               name="vehicle_type"
+              defaultValue={v("vehicle_type")}
               className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
             >
               <option value="">Not specified</option>
@@ -105,6 +114,7 @@ export default function PostFreightForm({ categories, action }: Props) {
             <select
               id="cargo_type"
               name="cargo_type"
+              defaultValue={v("cargo_type")}
               className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
             >
               <option value="">Not specified</option>
@@ -130,6 +140,7 @@ export default function PostFreightForm({ categories, action }: Props) {
               step="1"
               min="0"
               max="1000000"
+              defaultValue={v("weight_kg")}
               className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
             />
           </Field>
@@ -138,6 +149,7 @@ export default function PostFreightForm({ categories, action }: Props) {
             <select
               id="budget_bracket"
               name="budget_bracket"
+              defaultValue={v("budget_bracket")}
               className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
             >
               <option value="">Not specified</option>
@@ -157,6 +169,7 @@ export default function PostFreightForm({ categories, action }: Props) {
               id="pickup_from_date"
               name="pickup_from_date"
               type="date"
+              defaultValue={v("pickup_from_date")}
               className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
             />
           </Field>
@@ -166,6 +179,7 @@ export default function PostFreightForm({ categories, action }: Props) {
               id="pickup_by_date"
               name="pickup_by_date"
               type="date"
+              defaultValue={v("pickup_by_date")}
               className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
             />
           </Field>
@@ -178,7 +192,7 @@ export default function PostFreightForm({ categories, action }: Props) {
           disabled={pending}
           className="inline-block rounded-xl bg-green-700 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-800 focus:ring-offset-2 disabled:opacity-60"
         >
-          {pending ? "Posting..." : "Post freight"}
+          {pending ? "Saving..." : (submitLabel ?? "Post freight")}
         </button>
         <p className="mt-2 text-xs text-neutral-600">
           Listings stay up for 30 days, then expire unless you renew.

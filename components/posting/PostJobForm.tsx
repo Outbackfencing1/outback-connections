@@ -7,9 +7,16 @@ import type { ActionResult } from "@/lib/posting";
 type Props = {
   categories: Category[];
   action: (formData: FormData) => Promise<ActionResult>;
+  /** Edit mode: pass the listing id so the action knows which row to update */
+  listingId?: string;
+  /** Edit mode: pre-populate form fields from existing data */
+  defaults?: Record<string, string>;
+  /** Submit-button label override */
+  submitLabel?: string;
 };
 
-export default function PostJobForm({ categories, action }: Props) {
+export default function PostJobForm({ categories, action, listingId, defaults, submitLabel }: Props) {
+  const v = (k: string) => defaults?.[k] ?? "";
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, start] = useTransition();
 
@@ -40,7 +47,8 @@ export default function PostJobForm({ categories, action }: Props) {
         </div>
       )}
 
-      <BaseFields categories={categories} errors={errors} defaults={{}} />
+      {listingId && <input type="hidden" name="listing_id" value={listingId} />}
+      <BaseFields categories={categories} errors={errors} defaults={defaults ?? {}} />
 
       <div className="rounded-xl border border-neutral-200 p-4">
         <p className="text-sm font-semibold text-neutral-800">Job details</p>
@@ -49,6 +57,7 @@ export default function PostJobForm({ categories, action }: Props) {
           <select
             id="work_type"
             name="work_type"
+            defaultValue={v("work_type")}
             className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
           >
             <option value="">Not specified</option>
@@ -65,6 +74,7 @@ export default function PostJobForm({ categories, action }: Props) {
             <select
               id="pay_type"
               name="pay_type"
+              defaultValue={v("pay_type")}
               className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
             >
               <option value="">Not specified</option>
@@ -86,6 +96,7 @@ export default function PostJobForm({ categories, action }: Props) {
               min="0"
               max="99999"
               placeholder="35.00"
+              defaultValue={v("pay_amount")}
               className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
             />
           </Field>
@@ -97,6 +108,7 @@ export default function PostJobForm({ categories, action }: Props) {
               id="start_date"
               name="start_date"
               type="date"
+              defaultValue={v("start_date")}
               className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
             />
           </Field>
@@ -107,6 +119,7 @@ export default function PostJobForm({ categories, action }: Props) {
               name="duration_text"
               type="text"
               maxLength={200}
+              defaultValue={v("duration_text")}
               className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
             />
           </Field>
@@ -117,7 +130,7 @@ export default function PostJobForm({ categories, action }: Props) {
             <input
               type="checkbox"
               name="accommodation_provided"
-              defaultChecked={false}
+              defaultChecked={v("accommodation_provided") === "true"}
               className="mt-1 h-4 w-4"
             />
             <span className="text-sm text-neutral-800">
@@ -133,7 +146,7 @@ export default function PostJobForm({ categories, action }: Props) {
           disabled={pending}
           className="inline-block rounded-xl bg-green-700 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-800 focus:ring-offset-2 disabled:opacity-60"
         >
-          {pending ? "Posting..." : "Post job"}
+          {pending ? "Saving..." : (submitLabel ?? "Post job")}
         </button>
         <p className="mt-2 text-xs text-neutral-600">
           Listings stay up for 30 days, then expire unless you renew.

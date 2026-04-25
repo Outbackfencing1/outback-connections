@@ -7,15 +7,21 @@ import type { ActionResult } from "@/lib/posting";
 type Props = {
   categories: Category[];
   action: (formData: FormData) => Promise<ActionResult>;
-  /**
-   * 'offering' = provider listing themselves in directory.
-   * 'requesting' = customer asking for a service.
-   * Affects copy on rate/travel fields only — server hardcodes direction.
-   */
   mode: "offering" | "requesting";
+  listingId?: string;
+  defaults?: Record<string, string>;
+  submitLabel?: string;
 };
 
-export default function PostServiceForm({ categories, action, mode }: Props) {
+export default function PostServiceForm({
+  categories,
+  action,
+  mode,
+  listingId,
+  defaults,
+  submitLabel,
+}: Props) {
+  const v = (k: string) => defaults?.[k] ?? "";
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, start] = useTransition();
 
@@ -46,7 +52,9 @@ export default function PostServiceForm({ categories, action, mode }: Props) {
         </div>
       )}
 
-      <BaseFields categories={categories} errors={errors} defaults={{}} />
+      {listingId && <input type="hidden" name="listing_id" value={listingId} />}
+
+      <BaseFields categories={categories} errors={errors} defaults={defaults ?? {}} />
 
       <div className="rounded-xl border border-neutral-200 p-4">
         <p className="text-sm font-semibold text-neutral-800">
@@ -63,6 +71,7 @@ export default function PostServiceForm({ categories, action, mode }: Props) {
             <select
               id="rate_type"
               name="rate_type"
+              defaultValue={v("rate_type")}
               className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
             >
               <option value="">Not specified</option>
@@ -85,6 +94,7 @@ export default function PostServiceForm({ categories, action, mode }: Props) {
               min="0"
               max="99999"
               placeholder="120.00"
+              defaultValue={v("rate_amount")}
               className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
             />
           </Field>
@@ -96,6 +106,7 @@ export default function PostServiceForm({ categories, action, mode }: Props) {
           <select
             id="travel_willingness"
             name="travel_willingness"
+            defaultValue={v("travel_willingness")}
             className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
           >
             <option value="">Not specified</option>
@@ -114,7 +125,7 @@ export default function PostServiceForm({ categories, action, mode }: Props) {
           disabled={pending}
           className="inline-block rounded-xl bg-green-700 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-800 focus:ring-offset-2 disabled:opacity-60"
         >
-          {pending ? "Posting..." : mode === "offering" ? "List my service" : "Post request"}
+          {pending ? "Saving..." : submitLabel ?? (mode === "offering" ? "List my service" : "Post request")}
         </button>
         <p className="mt-2 text-xs text-neutral-600">
           Listings stay up for 30 days, then expire unless you renew.
