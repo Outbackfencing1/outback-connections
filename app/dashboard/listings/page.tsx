@@ -24,6 +24,7 @@ type ListingRow = {
   flag_count: number;
   created_at: string;
   expires_at: string;
+  under_review: boolean | null;
   category: { slug: string; label: string } | { slug: string; label: string }[] | null;
 };
 
@@ -38,7 +39,7 @@ export default async function MyListingsPage() {
     .from("listings")
     .select(`
       id, anonymised_id, slug, kind, title, status, postcode, flag_count,
-      created_at, expires_at,
+      created_at, expires_at, under_review,
       category:categories(slug, label)
     `)
     .eq("user_id", data.user.id)
@@ -157,6 +158,21 @@ function ListingGroup({
                   </>
                 )}
               </p>
+              {l.under_review && (
+                <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  <p className="font-semibold">Action required: respond to a complaint.</p>
+                  <p className="mt-1 text-xs">
+                    A complaint has been received about this listing. It&apos;s
+                    hidden from public view until you respond or 7 days pass.
+                  </p>
+                  <Link
+                    href={`/dashboard/listings/${l.id}/respond-to-complaint`}
+                    className="mt-2 inline-block rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800"
+                  >
+                    Respond now →
+                  </Link>
+                </div>
+              )}
               <div className="mt-3 flex flex-wrap items-start gap-3">
                 <OwnerActions listingId={l.id} listingTitle={l.title} />
                 {showClose && (
