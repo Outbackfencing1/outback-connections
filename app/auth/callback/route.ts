@@ -6,6 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getRequestContext, logAuthEvent } from "@/lib/auth-events";
 
 const SIGNUP_CONSENT_COOKIE = "oc_signup_consent";
 
@@ -41,6 +42,7 @@ export async function GET(request: NextRequest) {
       if (userData.user) {
         const admin = createAdminClient();
         if (admin) {
+          const reqCtx = getRequestContext();
           await admin
             .from("user_profiles")
             .update({
@@ -48,6 +50,8 @@ export async function GET(request: NextRequest) {
               terms_consent_version: consent.terms_version,
               dob_confirmed_at: consent.dob_confirmed ? consent.agreed_at : null,
               marketing_consent_at: consent.marketing ? consent.agreed_at : null,
+              creation_ip: reqCtx.ip,
+              creation_user_agent: reqCtx.userAgent,
             })
             .eq("user_id", userData.user.id);
         }
@@ -57,6 +61,20 @@ export async function GET(request: NextRequest) {
     } finally {
       cookieStore.set(SIGNUP_CONSENT_COOKIE, "", { maxAge: 0, path: "/" });
     }
+  }
+
+  // Log the magic link use after the session is established.
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (userData.user) {
+      void logAuthEvent({
+        userId: userData.user.id,
+        email: userData.user.email ?? null,
+        eventType: "magic_link_used",
+      });
+    }
+  } catch {
+    // best-effort
   }
 
   return NextResponse.redirect(`${origin}${next}`);

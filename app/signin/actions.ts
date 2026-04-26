@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { logAuthEvent } from "@/lib/auth-events";
 
 const EmailSchema = z
   .string()
@@ -139,6 +140,7 @@ export async function sendMagicLink(input: {
     });
   }
 
+  void logAuthEvent({ email, eventType: "magic_link_requested" });
   return { ok: true, sentLink: true };
 }
 
@@ -154,9 +156,10 @@ export async function signInWithPassword(input: {
   const { email, password } = parsed.data;
 
   const supabase = createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
+    void logAuthEvent({ email, eventType: "failed_signin" });
     const msg = error.message.toLowerCase();
     if (msg.includes("invalid")) {
       return { ok: false, message: "Email or password is incorrect." };
@@ -175,6 +178,11 @@ export async function signInWithPassword(input: {
     return { ok: false, message: "Couldn't sign you in. Please try again." };
   }
 
+  void logAuthEvent({
+    userId: data.user?.id ?? null,
+    email,
+    eventType: "password_signin",
+  });
   return { ok: true, redirect: "/dashboard" };
 }
 
@@ -237,6 +245,12 @@ export async function signUpWithPassword(input: {
     host,
   });
 
+  void logAuthEvent({
+    userId: data.user?.id ?? null,
+    email,
+    eventType: "password_signup",
+  });
+
   // If session is null, email confirmation is required.
   // If session exists, user is signed in immediately (when confirmation off).
   if (data.session) {
@@ -271,6 +285,7 @@ export async function requestPasswordReset(input: {
     // Don't leak whether the email exists. Treat as success either way.
   }
 
+  void logAuthEvent({ email, eventType: "password_reset_requested" });
   return { ok: true, sentLink: true };
 }
 
@@ -297,5 +312,10 @@ export async function updatePassword(input: {
     console.error("[auth] updateUser password error:", error.message);
     return { ok: false, message: "Couldn't update your password. Please try again." };
   }
+  void logAuthEvent({
+    userId: userData.user.id,
+    email: userData.user.email ?? null,
+    eventType: "password_reset_completed",
+  });
   return { ok: true, redirect: "/dashboard" };
 }
