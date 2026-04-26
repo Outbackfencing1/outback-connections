@@ -58,23 +58,26 @@ export default function Footer() {
             <h3 className="text-sm font-semibold text-neutral-900">
               Contact
             </h3>
-            <p className="mt-3 text-sm text-neutral-700">
-              <a
-                href="mailto:support@outbackfencingsupplies.com.au"
-                className="hover:text-neutral-900"
-              >
-                support@outbackfencingsupplies.com.au
-              </a>
-              <br />
-              <a
-                href="https://outbackfencing.com.au"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-neutral-900"
-              >
-                outbackfencing.com.au
-              </a>
-            </p>
+            <ul className="mt-3 space-y-2 text-sm text-neutral-700">
+              <li>
+                <a
+                  href="mailto:support@outbackfencingsupplies.com.au"
+                  className="inline-block py-1 hover:text-neutral-900"
+                >
+                  support@outbackfencingsupplies.com.au
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://outbackfencing.com.au"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block py-1 hover:text-neutral-900"
+                >
+                  outbackfencing.com.au
+                </a>
+              </li>
+            </ul>
           </div>
         </div>
 
