@@ -69,12 +69,12 @@ export default function Footer() {
               </li>
               <li>
                 <a
-                  href="https://outbackfencing.com.au"
+                  href="https://outbackfencingsupplies.com.au/"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-block py-1 hover:text-neutral-900"
                 >
-                  outbackfencing.com.au
+                  outbackfencingsupplies.com.au
                 </a>
               </li>
             </ul>

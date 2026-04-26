@@ -125,7 +125,7 @@ export default async function HomePage() {
         <p className="mt-4 text-xs text-neutral-500">
           Run by{" "}
           <a
-            href="https://outbackfencing.com.au"
+            href="https://outbackfencingsupplies.com.au/"
             target="_blank"
             rel="noopener noreferrer"
             className="underline"
@@ -284,7 +284,7 @@ export default async function HomePage() {
         <p className="text-sm text-neutral-700">
           Run by{" "}
           <a
-            href="https://outbackfencing.com.au"
+            href="https://outbackfencingsupplies.com.au/"
             target="_blank"
             rel="noopener noreferrer"
             className="underline"
