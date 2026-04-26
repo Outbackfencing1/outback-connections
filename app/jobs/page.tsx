@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCategoryCounts } from "@/lib/category-counts";
 import ListingCard from "@/components/browse/ListingCard";
 import Pagination from "@/components/browse/Pagination";
 import FilterBar from "@/components/browse/FilterBar";
@@ -34,13 +35,16 @@ export default async function JobsBrowsePage({
   const payType = getStr(searchParams, "pay_type").trim();
   const page = Math.max(1, parseInt(getStr(searchParams, "page") || "1", 10) || 1);
 
-  // Categories for the filter dropdown
-  const { data: cats } = await supabase
-    .from("categories")
-    .select("id, slug, label")
-    .eq("pillar", "jobs")
-    .eq("active", true)
-    .order("sort_order");
+  // Categories for the filter dropdown, with active counts.
+  const [{ data: cats }, jobCounts] = await Promise.all([
+    supabase
+      .from("categories")
+      .select("id, slug, label")
+      .eq("pillar", "jobs")
+      .eq("active", true)
+      .order("sort_order"),
+    getCategoryCounts("jobs"),
+  ]);
 
   // Build the listings query
   let query = supabase
@@ -99,7 +103,7 @@ export default async function JobsBrowsePage({
               <option value="">All categories</option>
               {(cats ?? []).map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.label}
+                  {c.label} ({jobCounts.byCategory[c.id] ?? 0})
                 </option>
               ))}
             </select>

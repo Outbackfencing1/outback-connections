@@ -129,18 +129,14 @@ export default async function ServiceCategoryPage({
         {!listings || listings.length === 0 ? (
           <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center">
             <p className="text-sm text-neutral-700">
-              Nothing in {cat.label} yet.
+              No active listings in {cat.label} right now.
             </p>
             <p className="mt-2 text-xs text-neutral-500">
-              Be first —{" "}
-              <Link href="/post/service/offering" className="underline">
-                list your service
+              Check back soon — or{" "}
+              <Link href="/post" className="underline">
+                post yours
               </Link>{" "}
-              or{" "}
-              <Link href="/post/service/request" className="underline">
-                post a request
-              </Link>
-              .
+              and be the first.
             </p>
           </div>
         ) : (

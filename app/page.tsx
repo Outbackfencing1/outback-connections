@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCountsByPillar, type PillarStats } from "@/lib/category-counts";
 import { kindLabel, listingHref, relativeTime } from "@/lib/format";
 
 const RECENT_MIN_TO_SHOW = 5;
 const RECENT_LIMIT = 5;
+const PILLAR_COUNT_MIN = 10;
 
 export const metadata = {
   title: "Outback Connections — rural Australia's free marketplace",
@@ -82,9 +84,18 @@ async function getRecentListings(): Promise<RecentListing[]> {
 }
 
 export default async function HomePage() {
-  const [stats, recent] = await Promise.all([getLiveStats(), getRecentListings()]);
+  const [stats, recent, pillarCounts] = await Promise.all([
+    getLiveStats(),
+    getRecentListings(),
+    getCountsByPillar(),
+  ]);
   const showStats = stats.active >= 10;
   const showRecent = stats.active >= RECENT_MIN_TO_SHOW && recent.length > 0;
+  const totalActive =
+    pillarCounts.services.total +
+    pillarCounts.jobs.total +
+    pillarCounts.freight.total;
+  const showPillarCounts = totalActive >= PILLAR_COUNT_MIN;
 
   return (
     <div>
@@ -148,6 +159,11 @@ export default async function HomePage() {
             icon={<WrenchIcon />}
             heading="I need a tradie or specialist"
             blurb="Bore pumps, mustering, shearing, welding — the rural specialists."
+            countLine={
+              showPillarCounts && pillarCounts.services.total > 0
+                ? formatCountLine("services", pillarCounts.services)
+                : null
+            }
             cta="Browse services"
           />
           <PillarCard
@@ -155,6 +171,11 @@ export default async function HomePage() {
             icon={<HammerIcon />}
             heading="I&rsquo;ve got work that needs doing"
             blurb="Post a job — station hands, harvest, fencing, dairy, truckies."
+            countLine={
+              showPillarCounts && pillarCounts.jobs.total > 0
+                ? formatCountLine("jobs", pillarCounts.jobs)
+                : null
+            }
             cta="Post a job"
           />
           <PillarCard
@@ -162,6 +183,11 @@ export default async function HomePage() {
             icon={<TruckIcon />}
             heading="I need freight moved"
             blurb="Livestock, hay, grain, machinery. No brokers, no cut."
+            countLine={
+              showPillarCounts && pillarCounts.freight.total > 0
+                ? formatCountLine("freight", pillarCounts.freight)
+                : null
+            }
             cta="Browse freight"
           />
         </div>
@@ -303,12 +329,14 @@ function PillarCard({
   icon,
   heading,
   blurb,
+  countLine,
   cta,
 }: {
   href: string;
   icon: React.ReactNode;
   heading: React.ReactNode;
   blurb: string;
+  countLine: string | null;
   cta: string;
 }) {
   return (
@@ -325,10 +353,34 @@ function PillarCard({
       <h2 className="text-lg font-bold leading-tight text-neutral-900">
         {heading}
       </h2>
-      <p className="mt-2 text-sm text-neutral-700">{blurb}</p>
+      {countLine ? (
+        <p className="mt-2 text-sm font-medium text-green-800">{countLine}</p>
+      ) : (
+        <p className="mt-2 text-sm text-neutral-700">{blurb}</p>
+      )}
       <p className="mt-4 text-sm font-medium text-green-800">{cta} →</p>
     </Link>
   );
+}
+
+function formatCountLine(
+  pillar: "services" | "jobs" | "freight",
+  stats: PillarStats
+): string {
+  const noun =
+    pillar === "services"
+      ? stats.total === 1
+        ? "service"
+        : "services"
+      : pillar === "jobs"
+        ? stats.total === 1
+          ? "job"
+          : "jobs"
+        : stats.total === 1
+          ? "freight listing"
+          : "freight listings";
+  const cat = stats.categoriesUsed === 1 ? "category" : "categories";
+  return `${stats.total.toLocaleString("en-AU")} ${noun} listed across ${stats.categoriesUsed} ${cat}.`;
 }
 
 function WrenchIcon() {

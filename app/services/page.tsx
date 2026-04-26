@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCategoryCounts } from "@/lib/category-counts";
 import ListingCard from "@/components/browse/ListingCard";
 
 export const metadata = {
@@ -13,13 +14,23 @@ export const dynamic = "force-dynamic";
 export default async function ServicesLandingPage() {
   const supabase = createClient();
 
-  // Categories grid (all active services, sorted by sort_order)
-  const { data: cats } = await supabase
-    .from("categories")
-    .select("id, slug, label")
-    .eq("pillar", "services")
-    .eq("active", true)
-    .order("sort_order");
+  // Categories grid + counts (sorted: most active first, then alphabetical).
+  const [{ data: cats }, counts] = await Promise.all([
+    supabase
+      .from("categories")
+      .select("id, slug, label")
+      .eq("pillar", "services")
+      .eq("active", true)
+      .order("sort_order"),
+    getCategoryCounts("services"),
+  ]);
+
+  const sortedCats = (cats ?? [])
+    .map((c) => ({ ...c, count: counts.byCategory[c.id] ?? 0 }))
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return a.label.localeCompare(b.label, "en-AU");
+    });
 
   // 5 most recent service listings (offerings + requests pooled)
   const { data: recent } = await supabase
@@ -54,20 +65,42 @@ export default async function ServicesLandingPage() {
         </Link>
       </div>
 
-      <h2 className="mt-10 text-lg font-semibold text-neutral-900">
-        Browse by category
-      </h2>
+      <div className="mt-10 flex items-baseline justify-between gap-4">
+        <h2 className="text-lg font-semibold text-neutral-900">
+          Browse by category
+        </h2>
+        <p className="text-xs text-neutral-500">Sorted: most active first</p>
+      </div>
       <ul className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-        {(cats ?? []).map((c) => (
-          <li key={c.id}>
-            <Link
-              href={`/services/${c.slug}`}
-              className="block rounded-xl border border-neutral-200 bg-white p-4 text-sm shadow-sm transition hover:border-green-700 hover:shadow-md"
-            >
-              <span className="font-medium text-neutral-900">{c.label}</span>
-            </Link>
-          </li>
-        ))}
+        {sortedCats.map((c) => {
+          const empty = c.count === 0;
+          return (
+            <li key={c.id}>
+              <Link
+                href={`/services/${c.slug}`}
+                aria-label={
+                  empty
+                    ? `${c.label} — no active listings`
+                    : `${c.label} — ${c.count} active`
+                }
+                className={`block rounded-xl border bg-white p-4 text-sm shadow-sm transition hover:border-green-700 hover:shadow-md ${
+                  empty
+                    ? "border-neutral-200 opacity-50"
+                    : "border-neutral-200"
+                }`}
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="font-medium text-neutral-900">{c.label}</span>
+                  {!empty && (
+                    <span className="shrink-0 text-xs font-medium text-green-800">
+                      ({c.count})
+                    </span>
+                  )}
+                </div>
+              </Link>
+            </li>
+          );
+        })}
       </ul>
 
       <h2 className="mt-12 text-lg font-semibold text-neutral-900">
