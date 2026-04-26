@@ -65,10 +65,17 @@ export default function ContactBlock({
           </li>
         )}
       </ul>
-      <p className="mt-3 text-xs text-neutral-500">
-        Contact details visible only to signed-in users. Outback Connections
-        doesn&apos;t broker the connection — you&apos;re reaching out directly.
-      </p>
+      <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+        <p>
+          Contact details are visible only to signed-in users. Outback
+          Connections doesn&apos;t broker the connection — you&apos;re
+          reaching out directly.{" "}
+          <strong>Don&apos;t share these details publicly</strong>, don&apos;t
+          add them to mailing lists, and don&apos;t use them for any
+          purpose other than responding to this listing. Contact harvesting
+          can get your account terminated and may breach the Spam Act 2003.
+        </p>
+      </div>
     </div>
   );
 }

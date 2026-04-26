@@ -141,21 +141,47 @@ export default function AcceptableUsePage() {
       </section>
 
       <section className="mt-8 space-y-3">
-        <h2 className="text-xl font-bold">No off-platform harvesting</h2>
+        <h2 className="text-xl font-bold">Don&apos;t harvest contact details</h2>
+        <p className="text-neutral-800">
+          Listing contact details are gated behind sign-in to discourage
+          casual scraping. That gate is not an invitation to bulk-collect
+          contacts once you&apos;re signed in. Specifically, you must not:
+        </p>
         <ul className="list-disc space-y-2 pl-6 text-neutral-800">
           <li>
-            Listing contact details are for contacting the specific
-            poster about that specific listing.
+            <strong>Use a contact for any purpose other than responding
+            to that specific listing.</strong> Don&apos;t add it to a
+            mailing list, sales pipeline, lead-gen database, CRM, or any
+            other secondary use without explicit consent from the
+            person.
           </li>
           <li>
-            Don&apos;t bulk-harvest contact info to add to mailing lists,
-            sales pipelines, or any other secondary use.
+            <strong>Don&apos;t share or republish contact details.</strong>{" "}
+            Not on social media, not in directories, not in third-party
+            tools, not via screenshots.
           </li>
           <li>
-            No automated scraping. No bots. Programmatic access requires
-            our written permission.
+            <strong>No bulk outreach.</strong> Even if you collect details
+            one listing at a time, sending the same message to many
+            recipients is bulk outreach and subject to the{" "}
+            <em>Spam Act 2003</em>. We will report repeat offenders.
+          </li>
+          <li>
+            <strong>No automated scraping, crawling, or bot access.</strong>{" "}
+            Programmatic access of any kind needs our prior written
+            permission. We block, rate-limit, and ban abusive clients.
+          </li>
+          <li>
+            <strong>No training of large-language models or AI
+            systems</strong> on listings or user content unless we
+            explicitly authorise it in writing.
           </li>
         </ul>
+        <p className="text-neutral-800">
+          Penalties: account termination, IP-level blocking, and where
+          warranted referral to the OAIC, the ACMA (Spam Act), or the
+          police.
+        </p>
       </section>
 
       <section className="mt-8 space-y-3">
