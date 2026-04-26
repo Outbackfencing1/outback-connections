@@ -6,8 +6,8 @@ export const metadata = {
     "Platform terms covering user content, indemnities, defamation handling, liability cap, and dispute resolution.",
 };
 
-const POLICY_VERSION = "v3-2026-04-25-defamation-hardened-draft";
-const LAST_UPDATED = "25 April 2026";
+const POLICY_VERSION = "v4-2026-04-26-legal-hardening-draft";
+const LAST_UPDATED = "26 April 2026";
 
 export default function TermsPage() {
   return (
@@ -140,18 +140,28 @@ export default function TermsPage() {
           5. Your content licence to us
         </h2>
         <p className="text-neutral-800">
-          You keep ownership of everything you post. By posting, you
-          grant Outback Fencing &amp; Steel Supplies Pty Ltd a worldwide,
-          non-exclusive, royalty-free, sublicensable, perpetual licence to
-          host, display, copy, distribute, and create technical
-          derivatives of your content for the purpose of operating
-          Outback Connections — while your listing is active and for 60
-          days after expiry or deletion (so that browser caches, backups,
-          and search-engine indices can clear).
+          <strong>You keep ownership of everything you post.</strong> By
+          posting, you grant Outback Fencing &amp; Steel Supplies Pty Ltd a
+          worldwide, non-exclusive, royalty-free, sublicensable licence to
+          host, display, distribute, copy, and create technical derivatives
+          of your content for the purpose of operating Outback Connections,
+          for the duration of the listing and for <strong>60 days after
+          expiry or deletion</strong> (so that browser caches, backups, and
+          search-engine indices can clear).
+        </p>
+        <p className="text-neutral-800">
+          In addition, you grant us a <strong>perpetual, irrevocable
+          licence</strong> to retain a copy of your content for{" "}
+          <strong>legal, audit, regulatory, and dispute-resolution
+          purposes</strong> only — for example, to evidence what was on the
+          platform at a given point in time if a defamation, copyright, or
+          law-enforcement matter arises. This retention copy is not
+          republished and is not searchable; it sits in restricted backups
+          accessible only to admin staff and our legal advisors.
         </p>
         <p className="text-neutral-800">
           You confirm that you have the right to post the content and to
-          grant this licence (i.e. it&apos;s your content, or you have
+          grant these licences (i.e. it&apos;s your content, or you have
           permission to use it).
         </p>
       </section>
@@ -269,6 +279,172 @@ export default function TermsPage() {
           for a breach of a consumer guarantee, our liability is limited
           (where permitted) to re-supply of the service or payment of the
           cost of re-supply.
+        </p>
+      </section>
+
+      <section className="mt-8 space-y-3">
+        <h2 className="text-xl font-bold">
+          10A. What we are <em>not</em>
+        </h2>
+        <p className="text-neutral-800">
+          Outback Connections is a free public noticeboard. So that there
+          is no confusion about the nature of the service:
+        </p>
+        <ul className="list-disc space-y-1 pl-6 text-neutral-800">
+          <li>
+            <strong>We are not lawyers, accountants, or financial advisors.</strong>{" "}
+            Nothing on the site, in our emails, or in our responses to
+            complaints constitutes legal, accounting, taxation, financial,
+            or professional advice. If you need advice, get it from a
+            qualified professional.
+          </li>
+          <li>
+            <strong>We do not vet, verify, accredit, or warrant any
+            person, business, listing, qualification, licence, ABN, or
+            insurance.</strong> Email verification proves only that someone
+            owns an inbox.
+          </li>
+          <li>
+            <strong>We are not a broker, agent, employer, recruiter,
+            employment agency, freight forwarder, contractor, or licensed
+            trade body.</strong>
+          </li>
+          <li>
+            <strong>We do not mediate, arbitrate, broker, or guarantee
+            any transaction</strong> made between users on or through the
+            platform. We don&apos;t hold money in escrow or process
+            payments.
+          </li>
+          <li>
+            <strong>We are not responsible for the outcomes</strong> of
+            any conversation, contract, transaction, work performed, or
+            interaction that arises from contact made via the platform.
+          </li>
+        </ul>
+        <p className="text-neutral-800">
+          Nothing in this section limits any rights you have under the
+          Australian Consumer Law that cannot be excluded.
+        </p>
+      </section>
+
+      <section className="mt-8 space-y-3">
+        <h2 className="text-xl font-bold">
+          10B. What you do at your own risk
+        </h2>
+        <p className="text-neutral-800">
+          When you contact someone through Outback Connections, you do so
+          directly and at your own risk. In particular, you are
+          responsible for:
+        </p>
+        <ul className="list-disc space-y-1 pl-6 text-neutral-800">
+          <li>
+            <strong>Verifying any contractor, tradie, or service
+            provider</strong> — checking licences, insurance, ABN
+            registration, references, and prior work — before engaging
+            them.
+          </li>
+          <li>
+            <strong>Verifying any job poster</strong> — checking the
+            business is real and the offer legitimate — before accepting
+            work, travelling, or providing personal details.
+          </li>
+          <li>
+            <strong>Anyone you meet in person.</strong> Meeting at a
+            property, station, depot, or job site is between you and
+            them. Tell someone where you&apos;re going. Trust your gut.
+          </li>
+          <li>
+            <strong>Money you pay or receive.</strong> Outback Connections
+            does not hold funds, escrow, guarantee payment, or recover
+            funds in any dispute.
+          </li>
+          <li>
+            <strong>Any work performed</strong> that arises from contact
+            made via the platform — quality, delivery, damage, injury,
+            and consumer rights are between the parties.
+          </li>
+        </ul>
+        <p className="text-neutral-800">
+          We are not liable for any loss, harm, injury, or cost arising
+          from a user&apos;s decision to contact, transact with, employ,
+          engage, hire, or meet another user, except to the limited
+          extent the Australian Consumer Law applies and cannot be
+          excluded.
+        </p>
+      </section>
+
+      <section className="mt-8 space-y-3">
+        <h2 className="text-xl font-bold">
+          10C. Prohibited content (zero-tolerance)
+        </h2>
+        <p className="text-neutral-800">
+          The following content is prohibited on Outback Connections.
+          Posting any of it can result in <strong>immediate listing
+          removal and account termination</strong> without notice or
+          refund. We may also{" "}
+          <strong>report illegal content to police, the OAIC, the
+          ACCC, or other relevant authorities</strong> without notifying
+          you, and we may preserve evidence for that purpose.
+        </p>
+        <ul className="list-disc space-y-1 pl-6 text-neutral-800">
+          <li>
+            Content that is unlawful, fraudulent, or scam-like (including
+            phishing, money-mule recruitment, fake job offers,
+            advance-fee scams).
+          </li>
+          <li>
+            Content that defames, harasses, threatens, stalks, doxes, or
+            intimidates any person or business.
+          </li>
+          <li>
+            Sexual content, pornography, escort services, sexual
+            services, and content depicting or facilitating the sexual
+            exploitation of any person.
+          </li>
+          <li>
+            Content depicting, encouraging, or facilitating violence,
+            self-harm, suicide, or terrorism.
+          </li>
+          <li>
+            Hate speech and content vilifying any person or group on the
+            basis of race, ethnicity, religion, sex, gender, sexual
+            orientation, disability, or other protected attribute.
+          </li>
+          <li>
+            Content that infringes copyright, trademark, design, or other
+            intellectual property rights.
+          </li>
+          <li>
+            Content offering or soliciting the sale of regulated or
+            illegal goods or services without proper authorisation —
+            including firearms, explosives, prescription drugs,
+            controlled substances, live native wildlife, stolen goods.
+          </li>
+          <li>
+            Content offering employment that breaches Fair Work Australia
+            laws, modern slavery laws, or workplace safety laws — for
+            example, sub-minimum-wage offers, unpaid &ldquo;trial&rdquo;
+            arrangements that are really unpaid work, dangerous work
+            without PPE, or coerced labour.
+          </li>
+          <li>
+            Content harvesting personal information for spam, marketing,
+            data brokering, or training of large-language models without
+            explicit consent.
+          </li>
+          <li>
+            Anything else that breaches the{" "}
+            <Link href="/acceptable-use" className="underline">
+              Acceptable Use Policy
+            </Link>
+            .
+          </li>
+        </ul>
+        <p className="text-neutral-800">
+          Where required by law (for example child safety material,
+          serious imminent threats), we will <strong>preserve evidence
+          and refer the matter to police or eSafety</strong> immediately
+          and without prior notice to the account holder.
         </p>
       </section>
 
