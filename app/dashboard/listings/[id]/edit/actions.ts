@@ -60,6 +60,11 @@ export async function editListing(formData: FormData): Promise<ActionResult> {
     return { ok: false, errors: { _: "Edit isn't configured. Try again later." } };
   }
 
+  // Capture the full before-state for the audit trail. Best effort — if
+  // this snapshot fails we still proceed with the edit; audit just won't
+  // have the before side.
+  const beforeSnapshot = await captureListingSnapshot(admin, id, existing.kind);
+
   if (existing.kind === "job") {
     const parsed = jobSchema.safeParse(raw);
     if (!parsed.success) {
@@ -177,8 +182,56 @@ export async function editListing(formData: FormData): Promise<ActionResult> {
     if (dErr) return { ok: false, errors: { _: "Couldn't save service details." } };
   }
 
+  // Capture the after-state and write the audit row. Best-effort.
+  try {
+    const afterSnapshot = await captureListingSnapshot(admin, id, existing.kind);
+    await admin.from("listing_edits").insert({
+      listing_id: id,
+      edited_by: userData.user.id,
+      before_data: beforeSnapshot,
+      after_data: afterSnapshot,
+      edit_source: "owner",
+    });
+  } catch (e) {
+    console.error("[edit-audit] insert failed:", e);
+  }
+
   setFlash(`Saved changes to your listing.`);
   revalidatePath("/dashboard/listings");
   revalidatePath(`/dashboard/listings/${id}/edit`);
   redirect("/dashboard/listings");
+}
+
+async function captureListingSnapshot(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  listingId: string,
+  kind: string
+): Promise<Record<string, unknown> | null> {
+  try {
+    const detailTable =
+      kind === "job"
+        ? "job_details"
+        : kind === "freight"
+          ? "freight_details"
+          : "service_details";
+    const [listing, detail] = await Promise.all([
+      admin
+        .from("listings")
+        .select(
+          "title, description, postcode, state, contact_email, contact_phone, contact_best_time, category_id, status, expires_at"
+        )
+        .eq("id", listingId)
+        .maybeSingle(),
+      admin.from(detailTable).select("*").eq("listing_id", listingId).maybeSingle(),
+    ]);
+    return {
+      kind,
+      listing: listing.data,
+      detail: detail.data,
+      captured_at: new Date().toISOString(),
+    };
+  } catch (e) {
+    console.error("[edit-audit] snapshot failed:", e);
+    return null;
+  }
 }
