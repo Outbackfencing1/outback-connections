@@ -6,10 +6,20 @@ export const metadata = {
     "What you can and can't post on Outback Connections. Plain English, with examples.",
 };
 
+const POLICY_VERSION = "v4-2026-04-26-legal-hardening-draft";
+const LAST_UPDATED = "26 April 2026";
+
 export default function AcceptableUsePage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
       <h1 className="text-3xl font-bold tracking-tight">Acceptable use</h1>
+      <p className="mt-2 text-sm text-neutral-600">
+        Version: <span className="font-mono">{POLICY_VERSION}</span> · Last
+        updated {LAST_UPDATED} ·{" "}
+        <Link href="/legal/archive" className="underline">
+          previous versions
+        </Link>
+      </p>
       <p className="mt-2 text-neutral-700">
         This sits alongside our{" "}
         <Link href="/terms" className="underline">

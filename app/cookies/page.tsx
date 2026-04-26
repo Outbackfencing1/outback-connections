@@ -6,11 +6,20 @@ export const metadata = {
     "What cookies we set, why, and how to control them.",
 };
 
+const POLICY_VERSION = "v3-2026-04-25-marketplace-draft";
+const LAST_UPDATED = "25 April 2026";
+
 export default function CookiesPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
       <h1 className="text-3xl font-bold tracking-tight">Cookies notice</h1>
-      <p className="mt-2 text-sm text-neutral-600">Last updated 25 April 2026.</p>
+      <p className="mt-2 text-sm text-neutral-600">
+        Version: <span className="font-mono">{POLICY_VERSION}</span> · Last
+        updated {LAST_UPDATED} ·{" "}
+        <Link href="/legal/archive" className="underline">
+          previous versions
+        </Link>
+      </p>
 
       <section className="mt-8 space-y-3">
         <h2 className="text-xl font-bold">What we set today</h2>

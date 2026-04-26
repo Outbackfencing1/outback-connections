@@ -15,7 +15,10 @@ export default function TermsPage() {
       <h1 className="text-3xl font-bold tracking-tight">Terms of service</h1>
       <p className="mt-2 text-sm text-neutral-600">
         Version: <span className="font-mono">{POLICY_VERSION}</span> · Last
-        updated {LAST_UPDATED}
+        updated {LAST_UPDATED} ·{" "}
+        <Link href="/legal/archive" className="underline">
+          previous versions
+        </Link>
       </p>
 
       <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">

@@ -38,6 +38,9 @@ export default function Footer() {
               <li><Link href="/terms" className="hover:text-neutral-900">Terms of service</Link></li>
               <li><Link href="/acceptable-use" className="hover:text-neutral-900">Acceptable use</Link></li>
               <li><Link href="/cookies" className="hover:text-neutral-900">Cookies</Link></li>
+              <li><Link href="/legal/concerns-notice" className="hover:text-neutral-900">Concerns notice</Link></li>
+              <li><Link href="/legal/archive" className="hover:text-neutral-900">Versioned archive</Link></li>
+              <li><Link href="/transparency" className="hover:text-neutral-900">Transparency</Link></li>
             </ul>
           </div>
 
