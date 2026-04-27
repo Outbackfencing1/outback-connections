@@ -4,6 +4,7 @@ import { z } from "zod";
 import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { logAuthEvent } from "@/lib/auth-events";
+import { getLockdownState } from "@/lib/lockdown";
 
 const EmailSchema = z
   .string()
@@ -99,6 +100,14 @@ export async function sendMagicLink(input: {
   const { email, mode, agreeTerms, confirmAge, marketing } = parsed.data;
 
   if (mode === "signup") {
+    const lockdown = await getLockdownState();
+    if (lockdown.active) {
+      return {
+        ok: false,
+        message:
+          "Sign-ups are temporarily disabled while we investigate an issue. Please check back shortly.",
+      };
+    }
     if (!agreeTerms) {
       return {
         ok: false,
@@ -197,6 +206,14 @@ export async function signUpWithPassword(input: {
   confirmAge: boolean;
   marketing?: boolean;
 }): Promise<AuthResult> {
+  const lockdown = await getLockdownState();
+  if (lockdown.active) {
+    return {
+      ok: false,
+      message:
+        "Sign-ups are temporarily disabled while we investigate an issue. Please check back shortly.",
+    };
+  }
   const parsed = PasswordSignUpSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid input" };

@@ -3,6 +3,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import LockdownBanner from "@/components/LockdownBanner";
 
 const baseUrl =
   process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
@@ -24,6 +25,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="bg-neutral-50 text-neutral-900">
         <div className="flex min-h-dvh flex-col">
+          <LockdownBanner />
           <Header />
           <main className="flex-1">{children}</main>
           <Footer />

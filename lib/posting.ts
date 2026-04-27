@@ -26,13 +26,25 @@ export type PostingGuardOk = {
 export type PostingGuardFail =
   | { ok: false; reason: "not_signed_in"; message: string }
   | { ok: false; reason: "email_unverified"; message: string }
-  | { ok: false; reason: "account_too_new"; message: string; accountAgeDays: number };
+  | { ok: false; reason: "account_too_new"; message: string; accountAgeDays: number }
+  | { ok: false; reason: "lockdown"; message: string };
 
 // Hours of account age required before a user can post. Set to 24 after
 // audit feedback — 7 days was filtering legitimate signups too aggressively.
 const ACCOUNT_AGE_REQUIREMENT_HOURS = 24;
 
 export async function checkPostingGuard(): Promise<PostingGuardOk | PostingGuardFail> {
+  // Lockdown short-circuit. Lookup is cached for 30s.
+  const { getLockdownState } = await import("./lockdown");
+  const lockdown = await getLockdownState();
+  if (lockdown.active) {
+    return {
+      ok: false,
+      reason: "lockdown",
+      message:
+        "Posting is temporarily disabled while we investigate an issue. Please check back shortly.",
+    };
+  }
   const supabase = createClient();
   const { data } = await supabase.auth.getUser();
   if (!data.user) {

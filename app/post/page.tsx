@@ -99,6 +99,8 @@ function titleFor(
       return "Verify your email first";
     case "account_too_new":
       return "Your account is too new";
+    case "lockdown":
+      return "Posting temporarily disabled";
   }
 }
 
