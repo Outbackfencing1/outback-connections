@@ -88,6 +88,20 @@ export default function Footer() {
           &copy; {new Date().getFullYear()} Outback Connections · rural
           Australia&apos;s free marketplace.
         </p>
+
+        <p className="mt-4 text-xs leading-relaxed text-neutral-500">
+          Outback Connections is a free public-facing marketplace operated
+          by Outback Fencing &amp; Steel Supplies Pty Ltd (ABN 76 674 671
+          820), 76 Astill Drive, Orange NSW 2800. Listings are
+          user-submitted and reflect users&apos; own claims. Outback
+          Connections is not a broker, employment agency, freight
+          forwarder, recruiter, or licensed advisor of any kind. Use of
+          this platform is at your own risk; see our{" "}
+          <Link href="/terms" className="underline">
+            Terms
+          </Link>{" "}
+          for the detail.
+        </p>
       </div>
     </footer>
   );
