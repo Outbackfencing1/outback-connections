@@ -23,7 +23,7 @@ A breach can be detected via:
 
 - **Supabase monitoring** — auth anomaly alerts, RLS policy violations, unusual query patterns. Check the Supabase Dashboard logs daily during active operations.
 - **Vercel monitoring** — runtime error logs, deployment alerts, security advisories. Vercel notifies via email.
-- **User reports** — emails to `support@outbackfencingsupplies.com.au` reporting suspicious account activity, exposed data, or requests they didn't make.
+- **User reports** — emails to `help@outbackconnections.com.au` reporting suspicious account activity, exposed data, or requests they didn't make.
 - **Admin discovery** — anything Josh or another admin notices during routine moderation.
 - **Third-party disclosure** — researcher reports, security firms, or other companies notifying us of leaked credentials.
 
@@ -131,7 +131,7 @@ Record the review in `docs/incidents/YYYY-MM-DD-summary.md`.
 >
 > **Contact for OAIC follow-up:**
 > Joshua Crawford
-> support@outbackfencingsupplies.com.au
+> help@outbackconnections.com.au
 > 76 Astill Drive, Orange NSW 2800
 >
 > Documentation and supporting evidence are available on request.
@@ -168,7 +168,7 @@ Record the review in `docs/incidents/YYYY-MM-DD-summary.md`.
 
 | Role | Person | Contact |
 |---|---|---|
-| Primary admin | Joshua Crawford | support@outbackfencingsupplies.com.au |
+| Primary admin | Joshua Crawford | help@outbackconnections.com.au |
 | OAIC | — | https://www.oaic.gov.au/ |
 | Supabase incident response | — | https://supabase.com/dashboard/support |
 | Vercel incident response | — | https://vercel.com/support |

@@ -97,10 +97,10 @@ export default function CookiesPage() {
         <p className="text-neutral-800">
           Email{" "}
           <a
-            href="mailto:support@outbackfencingsupplies.com.au"
+            href="mailto:help@outbackconnections.com.au"
             className="underline"
           >
-            support@outbackfencingsupplies.com.au
+            help@outbackconnections.com.au
           </a>
           .
         </p>

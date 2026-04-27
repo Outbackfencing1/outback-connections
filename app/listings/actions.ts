@@ -210,7 +210,7 @@ export async function submitLegalConcern(formData: FormData): Promise<LegalRepor
   // inserts; we need the form reachable from any listing detail page.
   const admin = createAdminClient();
   if (!admin) {
-    return { ok: false, message: "Couldn't record the complaint right now. Email support@outbackfencingsupplies.com.au instead." };
+    return { ok: false, message: "Couldn't record the complaint right now. Email help@outbackconnections.com.au instead." };
   }
   const { data: inserted, error } = await admin
     .from("defamation_complaints")

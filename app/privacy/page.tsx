@@ -28,10 +28,10 @@ export default function PrivacyPage() {
           the Privacy Act 1988 (Cth). A lawyer will review it before public
           launch. If you spot something wrong, email{" "}
           <a
-            href="mailto:support@outbackfencingsupplies.com.au"
+            href="mailto:help@outbackconnections.com.au"
             className="underline"
           >
-            support@outbackfencingsupplies.com.au
+            help@outbackconnections.com.au
           </a>
           .
         </p>
@@ -47,10 +47,10 @@ export default function PrivacyPage() {
         <p className="text-neutral-800">
           Privacy questions, requests, or complaints go to{" "}
           <a
-            href="mailto:support@outbackfencingsupplies.com.au"
+            href="mailto:help@outbackconnections.com.au"
             className="underline"
           >
-            support@outbackfencingsupplies.com.au
+            help@outbackconnections.com.au
           </a>
           . A real person reads it.
         </p>
@@ -210,10 +210,10 @@ export default function PrivacyPage() {
           You can request a copy of the personal information we hold about
           you. Email{" "}
           <a
-            href="mailto:support@outbackfencingsupplies.com.au"
+            href="mailto:help@outbackconnections.com.au"
             className="underline"
           >
-            support@outbackfencingsupplies.com.au
+            help@outbackconnections.com.au
           </a>{" "}
           with the subject &ldquo;Access request&rdquo;. We&apos;ll respond
           within 30 days. We may need to verify your identity by sending a
@@ -299,10 +299,10 @@ export default function PrivacyPage() {
         <p className="text-neutral-800">
           If you think we&apos;ve mishandled your information, email{" "}
           <a
-            href="mailto:support@outbackfencingsupplies.com.au"
+            href="mailto:help@outbackconnections.com.au"
             className="underline"
           >
-            support@outbackfencingsupplies.com.au
+            help@outbackconnections.com.au
           </a>{" "}
           first. We&apos;ll respond within 30 days. If we can&apos;t
           resolve it, you can take it to the Office of the Australian

@@ -21,7 +21,7 @@ We do not make legal findings. We make **moderation decisions** — whether cont
 
 Complaints arrive via:
 
-- **Email:** `support@outbackfencingsupplies.com.au` with subject `Defamation complaint`
+- **Email:** `help@outbackconnections.com.au` with subject `Defamation complaint`
 - **On-site form:** the *Report a legal concern* link below the flag button on every listing detail page (`/listings/[id]/legal-concern` or similar). Writes to the `defamation_complaints` table.
 
 Both channels feed the same triage queue. All complaints are recorded in `defamation_complaints` whether they came in by email (manually entered by Josh) or by form.

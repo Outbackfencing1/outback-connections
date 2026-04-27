@@ -27,10 +27,10 @@ export default function TermsPage() {
           will review these terms before public launch. If you spot
           something wrong or unclear, email{" "}
           <a
-            href="mailto:support@outbackfencingsupplies.com.au"
+            href="mailto:help@outbackconnections.com.au"
             className="underline"
           >
-            support@outbackfencingsupplies.com.au
+            help@outbackconnections.com.au
           </a>
           .
         </p>
@@ -59,10 +59,10 @@ export default function TermsPage() {
           <strong>Outback Fencing &amp; Steel Supplies Pty Ltd</strong>{" "}
           (ABN 76 674 671 820), 76 Astill Drive, Orange NSW 2800. Contact:{" "}
           <a
-            href="mailto:support@outbackfencingsupplies.com.au"
+            href="mailto:help@outbackconnections.com.au"
             className="underline"
           >
-            support@outbackfencingsupplies.com.au
+            help@outbackconnections.com.au
           </a>
           .
         </p>
@@ -201,10 +201,10 @@ export default function TermsPage() {
           If you believe a listing defames you or a business you represent,
           email{" "}
           <a
-            href="mailto:support@outbackfencingsupplies.com.au"
+            href="mailto:help@outbackconnections.com.au"
             className="underline"
           >
-            support@outbackfencingsupplies.com.au
+            help@outbackconnections.com.au
           </a>{" "}
           (subject: &ldquo;Defamation complaint&rdquo;), or use the{" "}
           <em>Report a legal concern</em> link on the listing detail page.

@@ -12,8 +12,8 @@ export default function FaqPage() {
       <h1 className="text-3xl font-bold tracking-tight">FAQ</h1>
       <p className="mt-2 text-neutral-700">
         Plain answers. If something isn&apos;t covered, email{" "}
-        <a href="mailto:support@outbackfencingsupplies.com.au" className="underline">
-          support@outbackfencingsupplies.com.au
+        <a href="mailto:help@outbackconnections.com.au" className="underline">
+          help@outbackconnections.com.au
         </a>
         .
       </p>

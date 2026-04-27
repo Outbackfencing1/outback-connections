@@ -64,10 +64,10 @@ export default function Footer() {
             <ul className="mt-3 space-y-2 text-sm text-neutral-700">
               <li>
                 <a
-                  href="mailto:support@outbackfencingsupplies.com.au"
+                  href="mailto:help@outbackconnections.com.au"
                   className="inline-block py-1 hover:text-neutral-900"
                 >
-                  support@outbackfencingsupplies.com.au
+                  help@outbackconnections.com.au
                 </a>
               </li>
               <li>
