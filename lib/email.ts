@@ -173,3 +173,75 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
+
+// ------------------------------------------------------------
+// Standard transactional footer (item 16). Every transactional email
+// should be wrapped with these footers so the user gets:
+//   - sender identity (already set by from address)
+//   - postal address
+//   - links to privacy + terms
+//   - the email's reference number
+//   - 'why am I getting this?' line
+//   - 'didn't expect this?' contact line
+// ------------------------------------------------------------
+const POSTAL_ADDRESS = "76 Astill Drive, Orange NSW 2800";
+const COMPANY_NAME = "Outback Fencing & Steel Supplies Pty Ltd";
+const ABN = "76 674 671 820";
+const SUPPORT_EMAIL = "help@outbackconnections.com.au";
+const BASE_URL =
+  process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
+
+export type TransactionalFooterArgs = {
+  /** Reference number for this specific email (e.g. DEF-XXXXXXXX, EXP-XXXXXXXX). */
+  reference: string;
+  /** One short sentence explaining what action of the user's triggered this email. */
+  whyAreYouGettingThis: string;
+};
+
+export function buildTextFooter(args: TransactionalFooterArgs): string {
+  return `
+
+---
+Reference: ${args.reference}
+
+Why am I getting this?
+${args.whyAreYouGettingThis}
+
+If you didn't expect this, contact ${SUPPORT_EMAIL} immediately.
+
+Outback Connections — ${COMPANY_NAME}
+ABN ${ABN}
+${POSTAL_ADDRESS}
+Privacy: ${BASE_URL}/privacy
+Terms: ${BASE_URL}/terms`;
+}
+
+export function buildHtmlFooter(args: TransactionalFooterArgs): string {
+  return `<hr style="border:none;border-top:1px solid #ddd;margin:24px 0;">
+<p style="font-size:12px;color:#666;">Reference: <strong>${escapeHtml(args.reference)}</strong></p>
+<p style="font-size:12px;color:#666;"><strong>Why am I getting this?</strong><br>${escapeHtml(args.whyAreYouGettingThis)}</p>
+<p style="font-size:12px;color:#666;">If you didn't expect this, contact <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a> immediately.</p>
+<p style="font-size:11px;color:#888;margin-top:16px;">Outback Connections — ${COMPANY_NAME}<br>ABN ${ABN}<br>${POSTAL_ADDRESS}<br><a href="${BASE_URL}/privacy">Privacy</a> · <a href="${BASE_URL}/terms">Terms</a></p>`;
+}
+
+/**
+ * Convenience: wraps a body in the standard transactional shell.
+ * Use sparingly — only for the simplest, fully-textual emails. Most
+ * call sites build their own HTML and just append buildHtmlFooter at
+ * the end.
+ */
+export function wrapTransactional(args: {
+  bodyText: string;
+  bodyHtml: string;
+  reference: string;
+  whyAreYouGettingThis: string;
+}): { text: string; html: string } {
+  const footerArgs = {
+    reference: args.reference,
+    whyAreYouGettingThis: args.whyAreYouGettingThis,
+  };
+  return {
+    text: args.bodyText + buildTextFooter(footerArgs),
+    html: `<div style="font-family:-apple-system,system-ui,sans-serif;max-width:600px;margin:0 auto;padding:16px;color:#111;line-height:1.5;">${args.bodyHtml}${buildHtmlFooter(footerArgs)}</div>`,
+  };
+}
