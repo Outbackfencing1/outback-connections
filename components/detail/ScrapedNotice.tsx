@@ -4,6 +4,7 @@
 // the path to the business is the original source). The "claim it" CTA is a
 // mailto for now — the real claim flow is a separate build gate.
 import Link from "next/link";
+import ClaimButton from "./ClaimButton";
 
 function prettyPlatform(p: string | null): string | null {
   if (!p) return null;
@@ -15,10 +16,16 @@ export default function ScrapedNotice({
   title,
   sourcePlatform,
   sourceUrl,
+  businessId = null,
+  signedIn = false,
+  signInRedirect = "/",
 }: {
   title: string;
   sourcePlatform: string | null;
   sourceUrl: string | null;
+  businessId?: string | null;
+  signedIn?: boolean;
+  signInRedirect?: string;
 }) {
   const platform = prettyPlatform(sourcePlatform);
   const claimHref =
@@ -51,11 +58,18 @@ export default function ScrapedNotice({
       )}
       <p className="mt-3 text-sm text-amber-900">
         Is this your business?{" "}
-        <a href={claimHref} className="font-medium underline">
-          Claim it
-        </a>{" "}
-        to confirm the details and post real job ads. (Claiming opens soon —
-        email us and we&apos;ll set you up.)
+        {businessId ? (
+          <ClaimButton
+            businessId={businessId}
+            signedIn={signedIn}
+            signInRedirect={signInRedirect}
+          />
+        ) : (
+          <a href={claimHref} className="font-medium underline">
+            Claim it
+          </a>
+        )}{" "}
+        to confirm the details and manage the listing.
       </p>
       <p className="mt-3 text-xs text-amber-800">
         Listed something that shouldn&apos;t be here?{" "}

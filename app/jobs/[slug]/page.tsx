@@ -61,7 +61,7 @@ export default async function JobDetailPage({
       id, anonymised_id, slug, kind, title, description, postcode, state,
       contact_email, contact_phone, contact_best_time,
       created_at, expires_at, user_id, status,
-      data_source, source_platform, source_url,
+      data_source, source_platform, source_url, business_id,
       category:categories(slug, label),
       job_details(work_type, pay_type, pay_amount, start_date, duration_text, accommodation_provided)
     `
@@ -173,6 +173,9 @@ export default async function JobDetailPage({
             title={listing.title}
             sourcePlatform={listing.source_platform}
             sourceUrl={listing.source_url}
+            businessId={listing.business_id}
+            signedIn={!!viewer}
+            signInRedirect={`/jobs/${listing.slug}`}
           />
         ) : (
           <ContactBlock

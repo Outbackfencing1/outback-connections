@@ -55,7 +55,7 @@ export default async function FreightDetailPage({
       id, anonymised_id, slug, kind, title, description, postcode, state,
       contact_email, contact_phone, contact_best_time,
       created_at, expires_at, user_id, status,
-      data_source, source_platform, source_url,
+      data_source, source_platform, source_url, business_id,
       category:categories(slug, label),
       freight_details(direction, origin_postcode, destination_postcode,
         vehicle_type, cargo_type, weight_kg,
@@ -139,6 +139,9 @@ export default async function FreightDetailPage({
             title={listing.title}
             sourcePlatform={listing.source_platform}
             sourceUrl={listing.source_url}
+            businessId={listing.business_id}
+            signedIn={!!viewer}
+            signInRedirect={`/freight/${listing.slug}`}
           />
         ) : (
           <ContactBlock

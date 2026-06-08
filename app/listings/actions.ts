@@ -350,3 +350,50 @@ export async function closeListing(formData: FormData): Promise<CloseResult> {
   return { ok: true };
 }
 
+// ============================================================
+// Claim-this-business (Gate 1B). A signed-in user requests ownership of a
+// scraped/unclaimed business; an admin reviews it (see /dashboard/admin/claims).
+// Insert uses the user's RLS context ("Users file own claims").
+// ============================================================
+
+export type ClaimResult = { ok: true } | { ok: false; message: string };
+
+export async function submitClaim(businessId: string): Promise<ClaimResult> {
+  if (typeof businessId !== "string" || !/^[0-9a-f-]{36}$/i.test(businessId)) {
+    return { ok: false, message: "Bad request." };
+  }
+  const supabase = createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { ok: false, message: "Sign in to claim a business." };
+
+  // Don't let the same user stack duplicate pending/approved claims.
+  const { data: existing } = await supabase
+    .from("claims")
+    .select("id, status")
+    .eq("business_id", businessId)
+    .eq("claimant_user_id", userData.user.id)
+    .in("status", ["pending", "approved"])
+    .maybeSingle();
+  if (existing) {
+    return {
+      ok: false,
+      message:
+        existing.status === "approved"
+          ? "You already manage this business."
+          : "You've already got a claim in for this — we're reviewing it.",
+    };
+  }
+
+  const { error } = await supabase.from("claims").insert({
+    business_id: businessId,
+    claimant_user_id: userData.user.id,
+    method: "admin_approval",
+    status: "pending",
+  });
+  if (error) {
+    console.error("[claim] insert failed:", error.message);
+    return { ok: false, message: "Couldn't submit the claim. Please try again." };
+  }
+  return { ok: true };
+}
+
