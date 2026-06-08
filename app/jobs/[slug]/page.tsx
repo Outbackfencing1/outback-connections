@@ -81,26 +81,34 @@ export default async function JobDetailPage({
     : listing.job_details;
   const cat = Array.isArray(listing.category) ? listing.category[0] : listing.category;
 
-  const jsonLd = jobPostingJsonLd({
-    title: listing.title,
-    description: listing.description,
-    postcode: listing.postcode,
-    state: listing.state,
-    createdAt: listing.created_at,
-    expiresAt: listing.expires_at,
-    workType: detail?.work_type ?? null,
-    payType: detail?.pay_type ?? null,
-    payAmount: detail?.pay_amount ?? null,
-    baseUrl: BASE_URL,
-    slug: listing.slug,
-  });
+  // Only emit JobPosting structured data for real job ads — NEVER for scraped
+  // directory entries. A directory listing is not a job posting; we don't tell
+  // Google otherwise (avoids structured-data mismatch on the public pages).
+  const isScraped = listing.data_source === "scraped";
+  const jsonLd = isScraped
+    ? null
+    : jobPostingJsonLd({
+        title: listing.title,
+        description: listing.description,
+        postcode: listing.postcode,
+        state: listing.state,
+        createdAt: listing.created_at,
+        expiresAt: listing.expires_at,
+        workType: detail?.work_type ?? null,
+        payType: detail?.pay_type ?? null,
+        payAmount: detail?.pay_amount ?? null,
+        baseUrl: BASE_URL,
+        slug: listing.slug,
+      });
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
-      />
+      {jsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
+        />
+      )}
       <p className="text-sm">
         <Link href="/jobs" className="text-neutral-600 underline">
           ← All jobs
