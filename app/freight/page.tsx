@@ -38,7 +38,7 @@ export default async function FreightBrowsePage({
     .from("listings")
     .select(
       `
-      anonymised_id, slug, kind, title, description, postcode, state, created_at,
+      anonymised_id, slug, kind, title, description, postcode, state, created_at, data_source,
       category:categories(slug, label),
       freight_details!inner(direction, vehicle_type, origin_postcode, destination_postcode)
     `,
@@ -142,6 +142,7 @@ export default async function FreightBrowsePage({
                     state: l.state,
                     created_at: l.created_at,
                     category: Array.isArray(l.category) ? l.category[0] ?? null : l.category,
+                    data_source: l.data_source,
                   }}
                 />
               </li>

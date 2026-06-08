@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ContactBlock from "@/components/detail/ContactBlock";
+import ScrapedNotice from "@/components/detail/ScrapedNotice";
 import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
@@ -53,6 +54,7 @@ export default async function FreightDetailPage({
       id, anonymised_id, slug, kind, title, description, postcode, state,
       contact_email, contact_phone, contact_best_time,
       created_at, expires_at, user_id, status,
+      data_source, source_platform, source_url,
       category:categories(slug, label),
       freight_details(direction, origin_postcode, destination_postcode,
         vehicle_type, cargo_type, weight_kg,
@@ -113,13 +115,21 @@ export default async function FreightDetailPage({
       {detail && <FreightDetails detail={detail} />}
 
       <section className="mt-8">
-        <ContactBlock
-          signedIn={!!viewer}
-          contactEmail={listing.contact_email}
-          contactPhone={listing.contact_phone}
-          contactBestTime={listing.contact_best_time}
-          signInRedirect={`/freight/${listing.slug}`}
-        />
+        {listing.data_source === "scraped" ? (
+          <ScrapedNotice
+            title={listing.title}
+            sourcePlatform={listing.source_platform}
+            sourceUrl={listing.source_url}
+          />
+        ) : (
+          <ContactBlock
+            signedIn={!!viewer}
+            contactEmail={listing.contact_email}
+            contactPhone={listing.contact_phone}
+            contactBestTime={listing.contact_best_time}
+            signInRedirect={`/freight/${listing.slug}`}
+          />
+        )}
       </section>
 
       {!isOwner && (

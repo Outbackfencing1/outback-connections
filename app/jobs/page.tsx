@@ -51,7 +51,7 @@ export default async function JobsBrowsePage({
     .from("listings")
     .select(
       `
-      anonymised_id, slug, kind, title, description, postcode, state, created_at,
+      anonymised_id, slug, kind, title, description, postcode, state, created_at, data_source,
       category:categories(slug, label),
       job_details!inner(work_type, pay_type, pay_amount)
     `,
@@ -145,6 +145,7 @@ export default async function JobsBrowsePage({
                     state: l.state,
                     created_at: l.created_at,
                     category: Array.isArray(l.category) ? l.category[0] ?? null : l.category,
+                    data_source: l.data_source,
                   }}
                 />
               </li>

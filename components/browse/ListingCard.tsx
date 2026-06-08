@@ -13,9 +13,11 @@ type Listing = {
   state: string | null;
   created_at: string;
   category: { slug: string; label: string } | null;
+  data_source?: string | null;
 };
 
 export default function ListingCard({ listing }: { listing: Listing }) {
+  const isScraped = listing.data_source === "scraped";
   return (
     <Link
       href={listingHref(listing.kind, listing.slug)}
@@ -25,9 +27,16 @@ export default function ListingCard({ listing }: { listing: Listing }) {
         <h3 className="text-base font-semibold text-neutral-900 sm:text-lg">
           {listing.title}
         </h3>
-        <span className="shrink-0 rounded bg-neutral-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-neutral-700">
-          {kindLabel(listing.kind)}
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          {isScraped && (
+            <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-amber-800">
+              Unclaimed
+            </span>
+          )}
+          <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-neutral-700">
+            {kindLabel(listing.kind)}
+          </span>
+        </div>
       </div>
 
       <p className="mt-1 text-xs text-neutral-600">
