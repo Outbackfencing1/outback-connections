@@ -176,6 +176,7 @@ export default async function JobDetailPage({
             businessId={listing.business_id}
             signedIn={!!viewer}
             signInRedirect={`/jobs/${listing.slug}`}
+            listingId={listing.id}
           />
         ) : (
           <ContactBlock

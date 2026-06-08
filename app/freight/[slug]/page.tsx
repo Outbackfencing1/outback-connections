@@ -142,6 +142,7 @@ export default async function FreightDetailPage({
             businessId={listing.business_id}
             signedIn={!!viewer}
             signInRedirect={`/freight/${listing.slug}`}
+            listingId={listing.id}
           />
         ) : (
           <ContactBlock

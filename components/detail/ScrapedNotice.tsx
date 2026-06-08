@@ -19,6 +19,7 @@ export default function ScrapedNotice({
   businessId = null,
   signedIn = false,
   signInRedirect = "/",
+  listingId = null,
 }: {
   title: string;
   sourcePlatform: string | null;
@@ -26,6 +27,7 @@ export default function ScrapedNotice({
   businessId?: string | null;
   signedIn?: boolean;
   signInRedirect?: string;
+  listingId?: string | null;
 }) {
   const platform = prettyPlatform(sourcePlatform);
   const claimHref =
@@ -47,7 +49,7 @@ export default function ScrapedNotice({
       {sourceUrl && (
         <p className="mt-3 text-sm">
           <a
-            href={sourceUrl}
+            href={listingId ? `/listings/${listingId}/source` : sourceUrl}
             target="_blank"
             rel="nofollow noopener noreferrer"
             className="font-medium text-amber-900 underline"
