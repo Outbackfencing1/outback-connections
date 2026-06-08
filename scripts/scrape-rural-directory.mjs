@@ -3,8 +3,10 @@
 // Phase 1 ingestion 1A — employer + carrier DIRECTORY scraper.
 // Ported from the proven outback-ops store-scraper pattern (Outscraper Google
 // Maps, dedupe by place_id, --test flag, file out). Acquisition only: this
-// produces a JSON file (+ a CSV preview). Pushing into the DB is a SEPARATE
-// step — scripts/ingest-rural-directory.mjs — so you can eyeball the file first.
+// produces a JSON file (+ a CSV preview). Push into the DB via the REVIEWED web
+// path: paste the .json into /dashboard/admin/import (Preview -> Commit). That
+// keeps the service_role key server-side on Vercel. Do NOT use the CLI ingest
+// for manual runs — it takes the service_role key on the command line.
 //
 // Usage:
 //   node scripts/scrape-rural-directory.mjs jobs    [--test] [--limit 20] [--out data/x.json]
@@ -12,11 +14,9 @@
 //
 // Key: OUTSCRAPER_API_KEY in .env.local (this repo). Josh runs the real scrape.
 //
-// ⚠️ VERIFY AGAINST outback-ops/scripts/scrape-rural-leads.ts: I could not read
-//    that file from this machine. The Outscraper endpoint, async mode, and
-//    response indexing below follow Outscraper's public Maps API — confirm they
-//    match your working store scraper (esp. data[] shape + field names) before
-//    relying on a full run. --test keeps it tiny so you can check cheaply.
+// Verified 2026-06-08 against the live Outscraper Maps API (async submit + poll)
+// — real Orange/Dubbo results. toRecord coalesces common field-name variants;
+// run with --raw if a future response shape ever differs.
 // ------------------------------------------------------------
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
@@ -292,8 +292,9 @@ async function main() {
   console.error(`\nDone. ${calls} Outscraper calls -> ${records.length} unique businesses.`);
   console.error(`JSON: ${out}`);
   console.error(`CSV preview: ${out.replace(/\.json$/, ".csv")}`);
-  console.error(`Next: inspect the CSV, then:`);
-  console.error(`  node scripts/ingest-rural-directory.mjs ${out} <supabase_url> <service_role_key>`);
+  console.error(`Next: glance at the CSV, then open the .json, copy it, and paste into`);
+  console.error(`the reviewed web import (keeps your service_role key server-side):`);
+  console.error(`  https://www.outbackconnections.com.au/dashboard/admin/import`);
 }
 
 main().catch((e) => {
