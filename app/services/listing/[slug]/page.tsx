@@ -7,6 +7,7 @@ import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
 import { kindLabel, relativeTime } from "@/lib/format";
 import { buildDescription, buildTitle, jsonLdScript, serviceJsonLd } from "@/lib/seo";
+import { logEvent } from "@/lib/analytics";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +76,24 @@ export default async function ServiceDetailPage({
     ? listing.service_details[0]
     : listing.service_details;
   const cat = Array.isArray(listing.category) ? listing.category[0] : listing.category;
+
+  await logEvent({
+    eventType: "listing_view",
+    entityType: "listing",
+    entityId: listing.id,
+    vertical: "service",
+    userId: viewer?.id ?? null,
+    properties: { slug: listing.slug },
+  });
+  if (viewer && (listing.contact_email || listing.contact_phone)) {
+    await logEvent({
+      eventType: "contact_reveal",
+      entityType: "listing",
+      entityId: listing.id,
+      vertical: "service",
+      userId: viewer.id,
+    });
+  }
 
   // JSON-LD only emitted for offerings (a real Service in schema.org sense).
   // Service requests are demand-side and don't have a clean schema mapping.

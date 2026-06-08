@@ -8,6 +8,7 @@ import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
 import { kindLabel, relativeTime } from "@/lib/format";
 import { buildDescription, buildTitle } from "@/lib/seo";
+import { logEvent } from "@/lib/analytics";
 
 export const dynamic = "force-dynamic";
 
@@ -76,6 +77,24 @@ export default async function FreightDetailPage({
     ? listing.freight_details[0]
     : listing.freight_details;
   const cat = Array.isArray(listing.category) ? listing.category[0] : listing.category;
+
+  await logEvent({
+    eventType: "listing_view",
+    entityType: "listing",
+    entityId: listing.id,
+    vertical: "freight",
+    userId: viewer?.id ?? null,
+    properties: { slug: listing.slug, data_source: listing.data_source },
+  });
+  if (viewer && listing.data_source !== "scraped" && (listing.contact_email || listing.contact_phone)) {
+    await logEvent({
+      eventType: "contact_reveal",
+      entityType: "listing",
+      entityId: listing.id,
+      vertical: "freight",
+      userId: viewer.id,
+    });
+  }
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">

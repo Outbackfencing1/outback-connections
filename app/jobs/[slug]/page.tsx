@@ -8,6 +8,7 @@ import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
 import { kindLabel, relativeTime } from "@/lib/format";
 import { buildDescription, buildTitle, jobPostingJsonLd, jsonLdScript } from "@/lib/seo";
+import { logEvent } from "@/lib/analytics";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +81,24 @@ export default async function JobDetailPage({
     ? listing.job_details[0]
     : listing.job_details;
   const cat = Array.isArray(listing.category) ? listing.category[0] : listing.category;
+
+  await logEvent({
+    eventType: "listing_view",
+    entityType: "listing",
+    entityId: listing.id,
+    vertical: "job",
+    userId: viewer?.id ?? null,
+    properties: { slug: listing.slug, data_source: listing.data_source },
+  });
+  if (viewer && listing.data_source !== "scraped" && (listing.contact_email || listing.contact_phone)) {
+    await logEvent({
+      eventType: "contact_reveal",
+      entityType: "listing",
+      entityId: listing.id,
+      vertical: "job",
+      userId: viewer.id,
+    });
+  }
 
   // Only emit JobPosting structured data for real job ads — NEVER for scraped
   // directory entries. A directory listing is not a job posting; we don't tell

@@ -4,6 +4,7 @@ import { getCategoryCounts } from "@/lib/category-counts";
 import ListingCard from "@/components/browse/ListingCard";
 import Pagination from "@/components/browse/Pagination";
 import FilterBar from "@/components/browse/FilterBar";
+import { logSearch } from "@/lib/analytics";
 
 export const metadata = {
   title: "Jobs — Outback Connections",
@@ -73,6 +74,14 @@ export default async function JobsBrowsePage({
   const { data: listings, count } = await query;
 
   const total = count ?? 0;
+  if (page === 1) {
+    await logSearch({
+      vertical: "job",
+      filters: { postcode: postcode || null, category: category || null, pay_type: payType || null },
+      resultCount: total,
+      postcode: postcode || null,
+    });
+  }
   const filterQS = buildQs({ postcode, category, pay_type: payType });
 
   return (

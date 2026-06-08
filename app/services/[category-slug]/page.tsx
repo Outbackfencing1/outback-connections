@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import ListingCard from "@/components/browse/ListingCard";
 import Pagination from "@/components/browse/Pagination";
 import FilterBar from "@/components/browse/FilterBar";
+import { logSearch } from "@/lib/analytics";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +80,14 @@ export default async function ServiceCategoryPage({
 
   const { data: listings, count } = await query;
   const total = count ?? 0;
+  if (page === 1) {
+    await logSearch({
+      vertical: "service",
+      filters: { category: categorySlug, postcode: postcode || null, direction: direction || null },
+      resultCount: total,
+      postcode: postcode || null,
+    });
+  }
 
   const filterQS = new URLSearchParams(
     Object.fromEntries(Object.entries({ postcode, direction }).filter(([, v]) => v))
