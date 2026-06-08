@@ -365,12 +365,32 @@ export async function insertListing<DetailRow extends Record<string, unknown>>(
   // Strip user_email before inserting — it's not a column on listings
   const { user_email: _user_email, ...listingRow } = listing;
 
+  // Spine classification (Migration 2). vertical derives from kind; side is the
+  // market side of the resource transacted. For freight, side comes from the
+  // detail row's direction (need_freight => demand, offering_truck => supply).
+  const vertical =
+    listing.kind === "freight"
+      ? "freight"
+      : listing.kind === "job"
+        ? "job"
+        : "service";
+  const side =
+    listing.kind === "job"
+      ? "demand"
+      : listing.kind === "service_offering"
+        ? "supply"
+        : listing.kind === "service_request"
+          ? "demand"
+          : (detail as { direction?: string }).direction === "offering_truck"
+            ? "supply"
+            : "demand"; // freight: need_freight => demand
+
   // Step 1: insert listings with a placeholder slug (we don't have the
   // anonymised_id until after insert). We'll update the slug immediately.
   const placeholderSlug = `pending-${listing.postcode}-${Math.random().toString(36).slice(2, 10)}`;
   const { data: inserted, error: listingErr } = await supa
     .from("listings")
-    .insert({ ...listingRow, slug: placeholderSlug })
+    .insert({ ...listingRow, slug: placeholderSlug, vertical, side })
     .select("id, anonymised_id, expires_at")
     .single();
 
