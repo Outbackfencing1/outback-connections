@@ -66,70 +66,148 @@ const QUERIES = {
     { term: "fencing contractor", category_slug: "fencing-labour" },
     { term: "grain farm", category_slug: "harvest-worker" },
   ],
+  // Carrier directory (the freight "twin" — same script in freight mode, so the
+  // ImportRecord shape, dedupe, async-poll and honesty marking are shared; only
+  // the query/category map differs). Transport companies, depots and carriers
+  // across every freight cargo type. vertical=freight; side=supply is derived
+  // downstream in ingest_scraped_business / preview_scraped_import.
   freight: [
+    // livestock
     { term: "livestock transport", category_slug: "livestock-freight" },
     { term: "stock cartage", category_slug: "livestock-freight" },
+    { term: "cattle transport", category_slug: "livestock-freight" },
+    // grain / bulk
     { term: "grain haulage", category_slug: "grain-freight" },
+    { term: "bulk grain transport", category_slug: "grain-freight" },
+    // hay / fodder
     { term: "hay transport", category_slug: "hay-freight" },
-    { term: "rural freight transport", category_slug: "general-rural-freight" },
+    { term: "fodder transport", category_slug: "hay-freight" },
+    // machinery / oversize
     { term: "heavy haulage", category_slug: "machinery-freight" },
+    { term: "machinery transport", category_slug: "machinery-freight" },
+    { term: "oversize float transport", category_slug: "machinery-freight" },
+    // fuel / water
+    { term: "fuel cartage", category_slug: "fuel-water-freight" },
+    { term: "water cartage tanker", category_slug: "fuel-water-freight" },
+    // refrigerated
+    { term: "refrigerated transport", category_slug: "refrigerated-freight" },
+    // general carriers / depots
+    { term: "rural freight transport", category_slug: "general-rural-freight" },
+    { term: "transport company", category_slug: "general-rural-freight" },
+    { term: "freight depot", category_slug: "general-rural-freight" },
+    { term: "carrier transport", category_slug: "general-rural-freight" },
   ],
 };
 
 // ------------------------------------------------------------
 function parseArgs(argv) {
-  const a = { vertical: argv[2], test: false, limit: 20, out: null };
+  const a = { vertical: argv[2], test: false, limit: 20, out: null, raw: false };
   for (let i = 3; i < argv.length; i++) {
     if (argv[i] === "--test") a.test = true;
+    else if (argv[i] === "--raw") a.raw = true;            // dump raw Outscraper response
     else if (argv[i] === "--limit") a.limit = parseInt(argv[++i], 10) || 20;
     else if (argv[i] === "--out") a.out = argv[++i];
   }
   return a;
 }
 
-async function outscraperMapsSearch(query, limit, apiKey) {
-  // Sync mode (async=false). For very large pulls the proven scraper may use
-  // async + polling — match that if you scale up.
-  const url =
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Outscraper's Google Maps endpoint is heavy: it normally returns a PENDING
+// request you must poll (async), even when you ask for async=false. So we
+// submit, poll the results location until Success, then normalise the envelope
+// to a flat place[] array. Run with --raw to print the actual shapes if this
+// still doesn't line up with your account's response.
+async function outscraperMapsSearch(query, limit, apiKey, raw = false) {
+  const submitUrl =
     "https://api.outscraper.com/maps/search-v3" +
-    `?query=${encodeURIComponent(query)}&limit=${limit}&async=false`;
-  const res = await fetch(url, { headers: { "X-API-KEY": apiKey } });
+    `?query=${encodeURIComponent(query)}&limit=${limit}&async=true`;
+  const res = await fetch(submitUrl, { headers: { "X-API-KEY": apiKey } });
+  const json = await res.json().catch(() => ({}));
+  if (raw) console.error(`[raw submit] ${JSON.stringify(json).slice(0, 1000)}`);
   if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`Outscraper ${res.status} for "${query}": ${txt.slice(0, 300)}`);
+    throw new Error(`Outscraper submit ${res.status}: ${JSON.stringify(json).slice(0, 300)}`);
   }
-  const json = await res.json();
-  // data is an array per query; sync single-query => data[0] is the place list.
-  const list = Array.isArray(json?.data) ? json.data[0] ?? [] : [];
-  return list;
+
+  // Some plans return results inline; otherwise poll the request id / location.
+  let payload = json;
+  if (!Array.isArray(json?.data)) {
+    const loc =
+      json?.results_location ||
+      (json?.id ? `https://api.outscraper.com/requests/${json.id}` : null);
+    if (!loc) {
+      throw new Error(`Outscraper: no data and no results_location/id: ${JSON.stringify(json).slice(0, 300)}`);
+    }
+    payload = await pollResults(loc, apiKey, raw);
+  }
+  return unwrapPlaces(payload, raw);
+}
+
+async function pollResults(loc, apiKey, raw) {
+  const MAX = 40;
+  const DELAY = 5000; // ~3.3 min max
+  for (let i = 0; i < MAX; i++) {
+    await sleep(DELAY);
+    const res = await fetch(loc, { headers: { "X-API-KEY": apiKey } });
+    const json = await res.json().catch(() => ({}));
+    const status = String(json?.status || "").toLowerCase();
+    if (raw && i === 0) console.error(`[raw poll] status=${status} ${JSON.stringify(json).slice(0, 600)}`);
+    if (status === "success" || Array.isArray(json?.data)) return json;
+    if (status === "error" || status === "failed") {
+      throw new Error(`Outscraper request failed: ${JSON.stringify(json).slice(0, 300)}`);
+    }
+    // pending / inprogress -> keep polling
+  }
+  throw new Error("Outscraper: polling timed out (still pending after ~3 min)");
+}
+
+// Normalise the Outscraper envelope to a flat array of place objects. Outscraper
+// returns `data` aligned to queries ([[place,...]] for a single query), and
+// occasionally a flat [place,...]. Handle both.
+function unwrapPlaces(payload, raw) {
+  const data = payload?.data;
+  if (raw) {
+    console.error(`[raw data] type=${Array.isArray(data) ? "array[" + data.length + "]" : typeof data}`);
+    const first = Array.isArray(data) ? (Array.isArray(data[0]) ? data[0]?.[0] : data[0]) : null;
+    if (first && typeof first === "object") console.error(`[raw place keys] ${Object.keys(first).join(", ")}`);
+  }
+  if (!Array.isArray(data) || data.length === 0) return [];
+  if (Array.isArray(data[0])) return data.flat();          // per-query nesting
+  if (data[0] && typeof data[0] === "object") return data; // flat
+  return [];
 }
 
 // Map an Outscraper place + the query context into an ingest-ready record.
 function toRecord(place, q, town, vertical) {
-  const placeId = place.place_id || place.google_id;
+  const placeId = place.place_id || place.google_id || place.cid;
   if (!placeId) return null; // no stable dedupe key -> skip (honest)
-  const name = (place.name || "").trim();
+  const name = String(place.name || place.title || "").trim();
   if (!name) return null;
-  const postcode = (place.postal_code || town.postcode || "").toString().trim();
+  // Prefer the place's own postcode; else pull the last 4-digit group from the
+  // full address; else fall back to the query town's postcode.
+  const addrMatch = String(place.full_address || place.address || "").match(/\b\d{4}\b/g);
+  const addrPc = addrMatch ? addrMatch[addrMatch.length - 1] : null;
+  const postcode = String(place.postal_code || place.postcode || addrPc || town.postcode || "").trim();
   if (!/^\d{4}$/.test(postcode)) return null; // postcode is required + must be real
+  const website = place.site || place.website || null;
   const sourceUrl =
     place.location_link || // Google Maps listing URL (best source attribution)
     (place.google_id ? `https://www.google.com/maps/place/?q=place_id:${place.google_id}` : null) ||
-    place.site ||
+    website ||
     `https://www.google.com/maps/search/${encodeURIComponent(name + " " + town.suburb)}`;
   return {
     vertical,
     source_platform: "google_maps",
-    source_external_id: placeId,
+    source_external_id: String(placeId),
     source_url: sourceUrl,
     name,
     category_slug: q.category_slug,
     postcode,
-    suburb: place.city || town.suburb,
-    state: place.state || town.state,
-    website: place.site || null,
-    geo_lat: place.latitude ?? null,
-    geo_lng: place.longitude ?? null,
+    suburb: place.city || place.borough || town.suburb,
+    state: place.state || place.us_state || town.state,
+    website,
+    geo_lat: place.latitude ?? place.lat ?? null,
+    geo_lng: place.longitude ?? place.lng ?? null,
     // Full source record kept for the private raw_payload archive (incl. phone).
     raw_payload: place,
   };
@@ -177,7 +255,7 @@ async function main() {
       const query = `${q.term} ${town.suburb} ${town.state}`;
       calls++;
       try {
-        const places = await outscraperMapsSearch(query, limit, apiKey);
+        const places = await outscraperMapsSearch(query, limit, apiKey, args.raw);
         let kept = 0;
         for (const place of places) {
           const rec = toRecord(place, q, town, vertical);
@@ -197,6 +275,14 @@ async function main() {
   }
 
   const records = [...byPlaceId.values()];
+  if (records.length === 0) {
+    console.error(
+      "\nNo records produced — nothing written. The Outscraper response shape " +
+      "likely didn't match (async/polling or envelope). Re-run with --raw to dump " +
+      "the raw response + place keys, then share them and I'll tune the mapping."
+    );
+    process.exit(1);
+  }
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const out = args.out || `data/scraped-${args.vertical}-${stamp}.json`;
   if (!existsSync(dirname(out))) mkdirSync(dirname(out), { recursive: true });
