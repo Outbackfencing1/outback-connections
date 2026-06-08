@@ -85,14 +85,24 @@ Transitions: scraped ingest creates `unclaimed`; claim approval → `claimed` + 
 
 ---
 
-## 6. Open gates / follow-ups
+## 6. Gate status
 
-- **First real import** (Josh): ~50–100 Central West employers/carriers → preview → commit → agent reconciles preview-vs-created + honesty audit → green-light scale 1k→10k.
-- **Gate 1B**: events + `search_queries` emitting (contact/apply tracking, zero-result logging); claim flow (claims → admin review → ladder bump + business_members).
-- **Freshness cron**: expire/stale scraped listings past `expires_at`.
-- **ABR verification**: claimed → abn_verified on ABN Lookup match (needs `ABR_GUID`).
-- **Owner analytics**: supply/demand/zero-result by region/vertical.
-- **Deferred**: live job-ad/load posting source; security hardening (search_path pins — `gen_short_id` needs `public,extensions`; review SECURITY DEFINER views; enable leaked-password protection in Auth dashboard); Prisma removal + drop dead `jobs`/`profiles`; `vertical` NOT NULL once all write paths set it; M6 `regions` geo/lat-lng + `region_id` FKs.
+**BUILT + deployed (Gate 1B + supporting):**
+- **events + `search_queries` emitting** — browse logs searches incl. zero-result; detail logs listing_view + contact_reveal (`lib/analytics.ts`).
+- **Claim flow** — `submitClaim` → ScrapedNotice ClaimButton → `/dashboard/admin/claims` review → `approve_claim`/`reject_claim` (ladder unclaimed→claimed + `business_members`).
+- **Source-click tracking** — `/listings/[id]/source` logs `source_click` then 302s to the source (apply intent for scraped rows).
+- **Freshness/expiry cron** — `expire_stale_scraped_listings()` + `/api/cron/expire-scraped` (daily 04:00 UTC).
+- **ABN capability** — `lib/abr.ts` + `mark_business_abn_verified()` + `verifyBusinessAbn` action (claimed→abn_verified). ⚠️ untested against the live ABR (needs `ABR_GUID`); transition logic tested on mock.
+- **Owner analytics** — `admin_analytics_summary()` + `/dashboard/admin/analytics` (read-only).
+- **Security hardening — APPLIED** — search_path pinned on the 6 functions (`gen_short_id` = `public,extensions`); `admin_duplicate_accounts_by_ip` → security_invoker + anon/authenticated SELECT revoked (latent leak closed).
+- **Admin nav** — gated nav across `/dashboard/admin/*` + dashboard entry card.
+
+**STILL OPEN:**
+- **First real import** (Josh): pilot 8 → preview → commit → agent reconciles + honesty audit → staged scale 10→50→250→1k→5k.
+- **Live job-AD ingestion** (distinct from the business directory): see `docs/JOBS-INGESTION-PLAN.md`; the job-ad SOURCE is an open decision for Josh; schema columns drafted in `supabase/migrations/_drafts/`.
+- **ABR live-key testing** (`ABR_GUID`); **leaked-password protection** (Supabase Auth dashboard toggle).
+- **Drafted, not applied**: drop dead `jobs`/`profiles` + Prisma removal (`_drafts/drop_legacy_jobs_profiles.sql`); job-postings columns (`_drafts/`).
+- **Deferred**: `vertical` NOT NULL once all write paths set it; M6 `regions` geo/lat-lng + `region_id` FKs; the SECURITY DEFINER **EXECUTE** revocations (separate lower-priority pass).
 
 ---
 
