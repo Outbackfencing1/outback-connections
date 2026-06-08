@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/purge-auth-events",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/expire-scraped",
+      "schedule": "0 4 * * *"
     }
   ]
 }
