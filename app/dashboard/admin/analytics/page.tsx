@@ -21,6 +21,19 @@ type Summary = {
   zero_by_vertical: { vertical: string; zero: number; total: number }[];
   events_by_type: { event_type: string; n: number }[];
   businesses_by_claim: { claim_status: string; n: number }[];
+  funnel: {
+    jobs_live: number;
+    jobs_expired: number;
+    jobs_stale: number;
+    listing_views: number;
+    source_clicks: number;
+    source_click_rate_pct: number;
+    search_volume: number;
+    zero_result: number;
+    claim_starts: number;
+    claims_approved: number;
+    claimed_businesses: number;
+  };
 };
 
 export default async function AnalyticsPage() {
@@ -76,6 +89,22 @@ export default async function AnalyticsPage() {
 
       {summary && (
         <div className="mt-8 space-y-8">
+          <Section title="Funnel" subtitle="Jobs directory + engagement (collection layer — raw counts, not a data product yet).">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Stat label="Jobs live" value={summary.funnel.jobs_live} />
+              <Stat label="Expired" value={summary.funnel.jobs_expired} />
+              <Stat label="Stale" value={summary.funnel.jobs_stale} />
+              <Stat label="Claimed businesses" value={summary.funnel.claimed_businesses} />
+              <Stat label="Listing views" value={summary.funnel.listing_views} />
+              <Stat label="Source clicks" value={summary.funnel.source_clicks} />
+              <Stat label="Source-click rate" value={`${summary.funnel.source_click_rate_pct}%`} />
+              <Stat label="Searches" value={summary.funnel.search_volume} />
+              <Stat label="Zero-result" value={summary.funnel.zero_result} />
+              <Stat label="Claim starts" value={summary.funnel.claim_starts} />
+              <Stat label="Claims approved" value={summary.funnel.claims_approved} />
+            </div>
+          </Section>
+
           <Section title="Supply vs demand (active listings)">
             <Table
               cols={["Vertical", "Side", "Count"]}
@@ -124,6 +153,15 @@ export default async function AnalyticsPage() {
       <p className="mt-10 text-xs text-neutral-500">
         <Link href="/dashboard" className="underline">← Back to dashboard</Link>
       </p>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-white p-4">
+      <p className="text-2xl font-bold tabular-nums text-neutral-900">{value}</p>
+      <p className="mt-1 text-xs text-neutral-600">{label}</p>
     </div>
   );
 }
