@@ -28,6 +28,13 @@ export default async function DashboardPage() {
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id);
 
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("is_admin")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const isAdmin = !!profile?.is_admin;
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
       <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
@@ -86,6 +93,21 @@ export default async function DashboardPage() {
             .{!canPost && " You can post once your account is 24 hours old."}
           </p>
         </Link>
+
+        {isAdmin && (
+          <Link
+            href="/dashboard/admin/flags"
+            className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm transition hover:border-amber-400 hover:shadow-md sm:col-span-2"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+              Admin
+            </p>
+            <h2 className="mt-1 text-lg font-bold text-neutral-900">Admin tools</h2>
+            <p className="mt-2 text-sm text-neutral-700">
+              Flags, moderation, claims, import, analytics, lockdown, duplicate accounts.
+            </p>
+          </Link>
+        )}
       </div>
 
       <form action={signOut} className="mt-10">
