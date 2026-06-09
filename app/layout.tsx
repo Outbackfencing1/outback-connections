@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import LockdownBanner from "@/components/LockdownBanner";
+import { organizationJsonLd, jsonLdScript } from "@/lib/seo";
 
 const baseUrl =
   process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
@@ -24,6 +25,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-neutral-50 text-neutral-900">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(organizationJsonLd(baseUrl)) }}
+        />
         <div className="flex min-h-dvh flex-col">
           <LockdownBanner />
           <Header />

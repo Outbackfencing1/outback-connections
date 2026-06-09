@@ -7,7 +7,14 @@ import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
 import { kindLabel, relativeTime } from "@/lib/format";
-import { buildDescription, buildTitle, jobPostingJsonLd, jsonLdScript } from "@/lib/seo";
+import {
+  buildDescription,
+  buildTitle,
+  jobPostingJsonLd,
+  localBusinessJsonLd,
+  breadcrumbJsonLd,
+  jsonLdScript,
+} from "@/lib/seo";
 import { logEvent } from "@/lib/analytics";
 
 export const dynamic = "force-dynamic";
@@ -63,6 +70,7 @@ export default async function JobDetailPage({
       created_at, expires_at, user_id, status,
       data_source, source_platform, source_url, business_id,
       category:categories(slug, label),
+      business:businesses(geo_lat, geo_lng),
       job_details(work_type, pay_type, pay_amount, start_date, duration_text, accommodation_provided)
     `
     )
@@ -100,12 +108,22 @@ export default async function JobDetailPage({
     });
   }
 
-  // Only emit JobPosting structured data for real job ads — NEVER for scraped
-  // directory entries. A directory listing is not a job posting; we don't tell
-  // Google otherwise (avoids structured-data mismatch on the public pages).
+  // Real job ads -> JobPosting (Google-for-Jobs eligible). Scraped directory
+  // rows are NOT job postings, so they NEVER emit JobPosting — they get a
+  // LocalBusiness block instead (a directory entry for a real business).
   const isScraped = listing.data_source === "scraped";
-  const jsonLd = isScraped
-    ? null
+  const biz = Array.isArray(listing.business) ? listing.business[0] : listing.business;
+  const pageUrl = `${BASE_URL}/jobs/${listing.slug}`;
+  const primaryLd = isScraped
+    ? localBusinessJsonLd({
+        name: listing.title,
+        postcode: listing.postcode,
+        state: listing.state,
+        geoLat: biz?.geo_lat ?? null,
+        geoLng: biz?.geo_lng ?? null,
+        category: cat?.label ?? null,
+        url: pageUrl,
+      })
     : jobPostingJsonLd({
         title: listing.title,
         description: listing.description,
@@ -120,14 +138,24 @@ export default async function JobDetailPage({
         slug: listing.slug,
       });
 
+  const jsonLdBlocks = [
+    primaryLd,
+    breadcrumbJsonLd([
+      { name: "Home", url: BASE_URL },
+      { name: "Jobs", url: `${BASE_URL}/jobs` },
+      { name: listing.title, url: pageUrl },
+    ]),
+  ];
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
-      {jsonLd && (
+      {jsonLdBlocks.map((ld, i) => (
         <script
+          key={i}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(ld) }}
         />
-      )}
+      ))}
       <p className="text-sm">
         <Link href="/jobs" className="text-neutral-600 underline">
           ← All jobs

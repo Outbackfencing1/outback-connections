@@ -6,7 +6,14 @@ import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
 import { kindLabel, relativeTime } from "@/lib/format";
-import { buildDescription, buildTitle, jsonLdScript, serviceJsonLd } from "@/lib/seo";
+import {
+  buildDescription,
+  buildTitle,
+  jsonLdScript,
+  serviceJsonLd,
+  localBusinessJsonLd,
+  breadcrumbJsonLd,
+} from "@/lib/seo";
 import { logEvent } from "@/lib/analytics";
 
 export const dynamic = "force-dynamic";
@@ -95,31 +102,50 @@ export default async function ServiceDetailPage({
     });
   }
 
-  // JSON-LD only emitted for offerings (a real Service in schema.org sense).
-  // Service requests are demand-side and don't have a clean schema mapping.
-  const jsonLd =
-    listing.kind === "service_offering"
-      ? serviceJsonLd({
-          title: listing.title,
-          description: listing.description,
-          postcode: listing.postcode,
-          state: listing.state,
-          category: cat?.label ?? "Service",
-          rateType: detail?.rate_type ?? null,
-          rateAmount: detail?.rate_amount ?? null,
-          baseUrl: BASE_URL,
-          slug: listing.slug,
-        })
-      : null;
+  // Offerings -> Service + LocalBusiness (a real provider). Requests are
+  // demand-side and get neither (no clean schema mapping). Breadcrumb always.
+  const pageUrl = `${BASE_URL}/services/listing/${listing.slug}`;
+  const jsonLdBlocks: Record<string, unknown>[] = [];
+  if (listing.kind === "service_offering") {
+    jsonLdBlocks.push(
+      serviceJsonLd({
+        title: listing.title,
+        description: listing.description,
+        postcode: listing.postcode,
+        state: listing.state,
+        category: cat?.label ?? "Service",
+        rateType: detail?.rate_type ?? null,
+        rateAmount: detail?.rate_amount ?? null,
+        baseUrl: BASE_URL,
+        slug: listing.slug,
+      }),
+      localBusinessJsonLd({
+        name: listing.title,
+        postcode: listing.postcode,
+        state: listing.state,
+        category: cat?.label ?? null,
+        url: pageUrl,
+      })
+    );
+  }
+  jsonLdBlocks.push(
+    breadcrumbJsonLd([
+      { name: "Home", url: BASE_URL },
+      { name: "Services", url: `${BASE_URL}/services` },
+      ...(cat ? [{ name: cat.label, url: `${BASE_URL}/services/${cat.slug}` }] : []),
+      { name: listing.title, url: pageUrl },
+    ])
+  );
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
-      {jsonLd && (
+      {jsonLdBlocks.map((ld, i) => (
         <script
+          key={i}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(ld) }}
         />
-      )}
+      ))}
       <p className="text-sm">
         <Link
           href={cat ? `/services/${cat.slug}` : "/services"}

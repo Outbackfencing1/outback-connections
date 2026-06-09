@@ -138,6 +138,90 @@ export function serviceJsonLd(args: {
   return ld;
 }
 
+export function organizationJsonLd(baseUrl: string): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "Outback Connections",
+    url: baseUrl,
+    description:
+      "Australia's free rural marketplace — jobs, freight and services across the bush.",
+    parentOrganization: {
+      "@type": "Organization",
+      name: "Outback Fencing & Steel Supplies Pty Ltd",
+      identifier: {
+        "@type": "PropertyValue",
+        propertyID: "ABN",
+        value: "76 674 671 820",
+      },
+      address: {
+        "@type": "PostalAddress",
+        streetAddress: "76 Astill Drive",
+        addressLocality: "Orange",
+        addressRegion: "NSW",
+        postalCode: "2800",
+        addressCountry: "AU",
+      },
+    },
+  };
+}
+
+// LocalBusiness for directory (scraped) + services listing pages. Deliberately
+// carries NO telephone/email: contact details are gated behind sign-in on the
+// site, so they must never leak into public structured data. Location (postcode/
+// region/country) and geo are public; contact is not.
+export function localBusinessJsonLd(args: {
+  name: string;
+  postcode: string;
+  state: string | null;
+  geoLat?: number | null;
+  geoLng?: number | null;
+  category?: string | null;
+  url: string;
+}): Record<string, unknown> {
+  const ld: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": "LocalBusiness",
+    name: args.name,
+    address: {
+      "@type": "PostalAddress",
+      postalCode: args.postcode,
+      addressRegion: args.state ?? undefined,
+      addressCountry: "AU",
+    },
+    url: args.url,
+  };
+  if (args.category) ld.description = `${args.category} — listed on Outback Connections`;
+  if (
+    args.geoLat !== null &&
+    args.geoLat !== undefined &&
+    args.geoLng !== null &&
+    args.geoLng !== undefined
+  ) {
+    ld.geo = {
+      "@type": "GeoCoordinates",
+      latitude: args.geoLat,
+      longitude: args.geoLng,
+    };
+  }
+  return ld;
+}
+
+export function breadcrumbJsonLd(
+  items: Array<{ name: string; url: string }>
+): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: items.map((it, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      name: it.name,
+      item: it.url,
+    })),
+  };
+}
+
 export function jsonLdScript(data: unknown): string {
   // Escape closing-tag sequences inside the JSON, per OWASP advice.
   return JSON.stringify(data).replace(/</g, "\\u003c");

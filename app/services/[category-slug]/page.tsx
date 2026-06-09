@@ -5,10 +5,14 @@ import ListingCard from "@/components/browse/ListingCard";
 import Pagination from "@/components/browse/Pagination";
 import FilterBar from "@/components/browse/FilterBar";
 import { logSearch } from "@/lib/analytics";
+import { breadcrumbJsonLd, jsonLdScript } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 20;
+
+const BASE_URL =
+  process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -93,8 +97,18 @@ export default async function ServiceCategoryPage({
     Object.fromEntries(Object.entries({ postcode, direction }).filter(([, v]) => v))
   ).toString();
 
+  const breadcrumb = breadcrumbJsonLd([
+    { name: "Home", url: BASE_URL },
+    { name: "Services", url: `${BASE_URL}/services` },
+    { name: cat.label, url: `${BASE_URL}/services/${cat.slug}` },
+  ]);
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumb) }}
+      />
       <p className="text-sm">
         <Link href="/services" className="text-neutral-600 underline">
           ← All services

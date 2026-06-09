@@ -1,0 +1,20 @@
+# Outback Connections
+
+> Australia's free rural marketplace — jobs, freight, and services across the bush. Operated by Outback Fencing & Steel Supplies Pty Ltd (ABN 76 674 671 820), 76 Astill Drive, Orange NSW 2800.
+
+Outback Connections connects rural and regional Australians: find and post farm/station and agricultural jobs, freight and transport, and rural services (contractors and suppliers). Browsing is free and open to everyone. A free account is required to post a listing or to see a poster's contact details. Some listings are sourced from public business directories — these are clearly marked as "unclaimed" and were not posted by the business.
+
+## Key sections
+- [Jobs](https://www.outbackconnections.com.au/jobs): rural and agricultural jobs across Australia.
+- [Freight](https://www.outbackconnections.com.au/freight): transport operators, carriers, and freight needs.
+- [Services](https://www.outbackconnections.com.au/services): rural contractors and suppliers, browsable by category.
+- [Post a listing](https://www.outbackconnections.com.au/post): create a job, freight, or service listing (free account required).
+- [About](https://www.outbackconnections.com.au/about)
+- [FAQ](https://www.outbackconnections.com.au/faq)
+
+## How an agent should use this site
+- Browse and read listing pages freely. Contact details and posting require a free, signed-in account, so they are not present in page markup for anonymous visitors.
+- Listing pages carry schema.org structured data: JobPosting on real job ads, LocalBusiness on directory and service listings, Service on service offerings, plus BreadcrumbList and a sitewide Organization.
+- A full sitemap of public pages is at https://www.outbackconnections.com.au/sitemap.xml
+- Directory listings sourced from public data are labelled "unclaimed" and must not be represented as posted by the business itself.
+- Questions or corrections: help@outbackconnections.com.au

@@ -7,10 +7,13 @@ import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
 import { kindLabel, relativeTime } from "@/lib/format";
-import { buildDescription, buildTitle } from "@/lib/seo";
+import { buildDescription, buildTitle, localBusinessJsonLd, breadcrumbJsonLd, jsonLdScript } from "@/lib/seo";
 import { logEvent } from "@/lib/analytics";
 
 export const dynamic = "force-dynamic";
+
+const BASE_URL =
+  process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
 
 export async function generateMetadata({ params }: { params: { slug: string } }) {
   const supabase = createClient();
@@ -57,6 +60,7 @@ export default async function FreightDetailPage({
       created_at, expires_at, user_id, status,
       data_source, source_platform, source_url, business_id,
       category:categories(slug, label),
+      business:businesses(geo_lat, geo_lng),
       freight_details(direction, origin_postcode, destination_postcode,
         vehicle_type, cargo_type, weight_kg,
         pickup_from_date, pickup_by_date, budget_bracket)
@@ -78,6 +82,33 @@ export default async function FreightDetailPage({
     : listing.freight_details;
   const cat = Array.isArray(listing.category) ? listing.category[0] : listing.category;
 
+  // Scraped directory rows -> LocalBusiness (a real carrier we found listed).
+  // Breadcrumb on every freight listing page.
+  const isScraped = listing.data_source === "scraped";
+  const biz = Array.isArray(listing.business) ? listing.business[0] : listing.business;
+  const pageUrl = `${BASE_URL}/freight/${listing.slug}`;
+  const jsonLdBlocks: Record<string, unknown>[] = [];
+  if (isScraped) {
+    jsonLdBlocks.push(
+      localBusinessJsonLd({
+        name: listing.title,
+        postcode: listing.postcode,
+        state: listing.state,
+        geoLat: biz?.geo_lat ?? null,
+        geoLng: biz?.geo_lng ?? null,
+        category: cat?.label ?? null,
+        url: pageUrl,
+      })
+    );
+  }
+  jsonLdBlocks.push(
+    breadcrumbJsonLd([
+      { name: "Home", url: BASE_URL },
+      { name: "Freight", url: `${BASE_URL}/freight` },
+      { name: listing.title, url: pageUrl },
+    ])
+  );
+
   await logEvent({
     eventType: "listing_view",
     entityType: "listing",
@@ -98,6 +129,13 @@ export default async function FreightDetailPage({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
+      {jsonLdBlocks.map((ld, i) => (
+        <script
+          key={i}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(ld) }}
+        />
+      ))}
       <p className="text-sm">
         <Link href="/freight" className="text-neutral-600 underline">
           ← All freight
