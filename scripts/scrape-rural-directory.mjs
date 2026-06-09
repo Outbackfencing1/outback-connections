@@ -9,14 +9,19 @@
 // for manual runs — it takes the service_role key on the command line.
 //
 // Usage:
-//   node scripts/scrape-rural-directory.mjs jobs    [--test] [--limit 20] [--out data/x.json]
-//   node scripts/scrape-rural-directory.mjs freight [--test] [--limit 20] [--out data/x.json]
+//   node scripts/scrape-rural-directory.mjs jobs     [--test] [--limit 20] [--out data/x.json]
+//   node scripts/scrape-rural-directory.mjs freight  [--test] [--limit 20] [--out data/x.json]
+//   node scripts/scrape-rural-directory.mjs services [--test] [--limit 20] [--out data/x.json]
 //
 // Key: OUTSCRAPER_API_KEY in .env.local (this repo). Josh runs the real scrape.
 //
 // Verified 2026-06-08 against the live Outscraper Maps API (async submit + poll)
 // — real Orange/Dubbo results. toRecord coalesces common field-name variants;
 // run with --raw if a future response shape ever differs.
+// `services` mode added 2026-06-09 — rural SUPPLY STORES into the Services
+// vertical (vertical=service, side=supply, kind=service_offering downstream).
+// It rides the identical Maps path / ImportRecord shape, so it is verified by
+// construction; --test it once to confirm your account's response shape.
 // ------------------------------------------------------------
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
@@ -96,6 +101,39 @@ const QUERIES = {
     { term: "transport company", category_slug: "general-rural-freight" },
     { term: "freight depot", category_slug: "general-rural-freight" },
     { term: "carrier transport", category_slug: "general-rural-freight" },
+  ],
+  // Supplier directory (the services "twin" — same script in services mode, so
+  // the ImportRecord shape, dedupe, async-poll and honesty marking are shared;
+  // only the query/category map differs). Rural supply stores, produce, stock
+  // feed, machinery dealers + the national rural-retail majors. vertical=service
+  // and side=supply are derived downstream in ingest_scraped_business /
+  // preview_scraped_import.
+  //
+  // CATEGORY NOTE: the live Services taxonomy is contractor-services only —
+  // there is no ACTIVE "rural supplies / produce / stock feed / machinery
+  // dealer / fodder" category yet (the only supply-ish slugs, feed-hay &
+  // steel-supply, are inactive). So every supply term maps to the active
+  // catch-all `services-other` ("Other rural service"), via the SAME
+  // query->category fallback jobs/freight use. When supply categories are
+  // added, swap these slugs and a re-scrape reclassifies (idempotent).
+  services: [
+    // generic rural retail / merchandise
+    { term: "rural supplies store", category_slug: "services-other" },
+    { term: "farm supplies", category_slug: "services-other" },
+    { term: "agricultural supplies", category_slug: "services-other" },
+    { term: "rural merchandise", category_slug: "services-other" },
+    { term: "produce store", category_slug: "services-other" },
+    // feed / fodder
+    { term: "stock feed supplier", category_slug: "services-other" },
+    { term: "fodder hay supplier", category_slug: "services-other" },
+    // machinery dealers
+    { term: "farm machinery dealer", category_slug: "services-other" },
+    // national rural-retail majors + CRT network (independents surface under the
+    // generic terms above)
+    { term: "Nutrien Ag Solutions", category_slug: "services-other" },
+    { term: "Landmark rural store", category_slug: "services-other" },
+    { term: "Elders rural store", category_slug: "services-other" },
+    { term: "CRT rural store", category_slug: "services-other" },
   ],
 };
 
@@ -226,8 +264,8 @@ function toCsvPreview(records) {
 
 async function main() {
   const args = parseArgs(process.argv);
-  if (args.vertical !== "jobs" && args.vertical !== "freight") {
-    console.error("Usage: node scripts/scrape-rural-directory.mjs <jobs|freight> [--test] [--limit N] [--out path]");
+  if (!["jobs", "freight", "services"].includes(args.vertical)) {
+    console.error("Usage: node scripts/scrape-rural-directory.mjs <jobs|freight|services> [--test] [--limit N] [--out path]");
     process.exit(1);
   }
   const apiKey = process.env.OUTSCRAPER_API_KEY;
@@ -235,8 +273,9 @@ async function main() {
     console.error("OUTSCRAPER_API_KEY missing. Add it to .env.local (this repo).");
     process.exit(1);
   }
-  // The ingest fn uses singular vertical ('job'|'freight'); CLI uses plural.
-  const vertical = args.vertical === "jobs" ? "job" : "freight";
+  // The ingest fn uses singular vertical ('job'|'freight'|'service'); CLI uses plural.
+  const vertical =
+    args.vertical === "jobs" ? "job" : args.vertical === "freight" ? "freight" : "service";
 
   let queries = QUERIES[args.vertical];
   let towns = TOWNS;
