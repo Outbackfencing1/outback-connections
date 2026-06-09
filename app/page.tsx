@@ -226,8 +226,8 @@ export default async function HomePage() {
           <li className="flex gap-3">
             <span className="shrink-0 font-bold text-green-800">1.</span>
             <span>
-              <strong>Sign in to post.</strong> Email magic link — no
-              password to remember.
+              <strong>Sign in to post.</strong> Use a password, or a
+              one-time email link if you prefer.
             </span>
           </li>
           <li className="flex gap-3">

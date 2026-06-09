@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 export const metadata = {
   title: "Sign up — Outback Connections",
   description:
-    "Create a free Outback Connections account. Magic link or password — your choice.",
+    "Create a free Outback Connections account with a password, or a one-time email link.",
 };
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ export default async function SignUpPage() {
     <div className="mx-auto max-w-md px-4 py-14">
       <h1 className="text-3xl font-bold tracking-tight">Sign up</h1>
       <p className="mt-2 text-sm text-neutral-700">
-        Free account. Magic link or password — your choice.
+        Free account. Sign up with a password — or use a one-time email link.
       </p>
 
       <div className="mt-8">

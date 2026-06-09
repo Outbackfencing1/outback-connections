@@ -19,7 +19,9 @@ export default function AuthForm({ mode }: Props) {
   const router = useRouter();
   const isSignup = mode === "signup";
 
-  const [method, setMethod] = useState<Method>("magic");
+  // Password is the primary method (familiar to our older/rural users);
+  // the one-time email link is the labelled backup below the form.
+  const [method, setMethod] = useState<Method>("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
@@ -144,41 +146,6 @@ export default function AuthForm({ mode }: Props) {
 
   return (
     <form onSubmit={onSubmit} className="space-y-5" noValidate>
-      <div role="tablist" aria-label="Sign-in method" className="flex gap-2">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={method === "magic"}
-          onClick={() => {
-            setMethod("magic");
-            setError(null);
-          }}
-          className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium ${
-            method === "magic"
-              ? "border-green-700 bg-green-50 text-green-900"
-              : "border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
-          }`}
-        >
-          Magic link
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={method === "password"}
-          onClick={() => {
-            setMethod("password");
-            setError(null);
-          }}
-          className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium ${
-            method === "password"
-              ? "border-green-700 bg-green-50 text-green-900"
-              : "border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
-          }`}
-        >
-          Password
-        </button>
-      </div>
-
       <div>
         <label
           htmlFor="email"
@@ -320,6 +287,36 @@ export default function AuthForm({ mode }: Props) {
               ? "Create account"
               : "Sign in"}
       </button>
+
+      {method === "password" ? (
+        <p className="text-sm text-neutral-600">
+          Prefer a one-time email link instead?{" "}
+          <button
+            type="button"
+            className="font-medium text-green-800 underline"
+            onClick={() => {
+              setMethod("magic");
+              setError(null);
+            }}
+          >
+            Email me a link
+          </button>{" "}
+          — no password needed.
+        </p>
+      ) : (
+        <p className="text-sm text-neutral-600">
+          <button
+            type="button"
+            className="font-medium text-green-800 underline"
+            onClick={() => {
+              setMethod("password");
+              setError(null);
+            }}
+          >
+            ← Use your password instead
+          </button>
+        </p>
+      )}
     </form>
   );
 }
