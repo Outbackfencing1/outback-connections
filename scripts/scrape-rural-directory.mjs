@@ -109,31 +109,33 @@ const QUERIES = {
   // and side=supply are derived downstream in ingest_scraped_business /
   // preview_scraped_import.
   //
-  // CATEGORY NOTE: the live Services taxonomy is contractor-services only —
-  // there is no ACTIVE "rural supplies / produce / stock feed / machinery
-  // dealer / fodder" category yet (the only supply-ish slugs, feed-hay &
-  // steel-supply, are inactive). So every supply term maps to the active
-  // catch-all `services-other` ("Other rural service"), via the SAME
-  // query->category fallback jobs/freight use. When supply categories are
-  // added, swap these slugs and a re-scrape reclassifies (idempotent).
+  // CATEGORY NOTE: supply stores are NOT contractor services, so they map to
+  // dedicated SUPPLY buckets (rural-supplies, produce-stock-feed,
+  // farm-machinery-dealer, fodder-hay) — NOT to a contractor category, which
+  // would mislabel them. Those buckets are DRAFTED (not yet applied) in
+  // supabase/migrations/_drafts/add_services_supply_categories.sql. Until that
+  // migration is applied, the ingest/preview fallback resolves these to
+  // services-other (same fallback jobs/freight use); once it is applied, a
+  // re-scrape reclassifies them automatically (idempotent).
   services: [
     // generic rural retail / merchandise
-    { term: "rural supplies store", category_slug: "services-other" },
-    { term: "farm supplies", category_slug: "services-other" },
-    { term: "agricultural supplies", category_slug: "services-other" },
-    { term: "rural merchandise", category_slug: "services-other" },
-    { term: "produce store", category_slug: "services-other" },
-    // feed / fodder
-    { term: "stock feed supplier", category_slug: "services-other" },
-    { term: "fodder hay supplier", category_slug: "services-other" },
+    { term: "rural supplies store", category_slug: "rural-supplies" },
+    { term: "farm supplies", category_slug: "rural-supplies" },
+    { term: "agricultural supplies", category_slug: "rural-supplies" },
+    { term: "rural merchandise", category_slug: "rural-supplies" },
+    // produce / stock feed
+    { term: "produce store", category_slug: "produce-stock-feed" },
+    { term: "stock feed supplier", category_slug: "produce-stock-feed" },
+    // fodder / hay
+    { term: "fodder hay supplier", category_slug: "fodder-hay" },
     // machinery dealers
-    { term: "farm machinery dealer", category_slug: "services-other" },
+    { term: "farm machinery dealer", category_slug: "farm-machinery-dealer" },
     // national rural-retail majors + CRT network (independents surface under the
-    // generic terms above)
-    { term: "Nutrien Ag Solutions", category_slug: "services-other" },
-    { term: "Landmark rural store", category_slug: "services-other" },
-    { term: "Elders rural store", category_slug: "services-other" },
-    { term: "CRT rural store", category_slug: "services-other" },
+    // generic terms above) — all rural supply chains
+    { term: "Nutrien Ag Solutions", category_slug: "rural-supplies" },
+    { term: "Landmark rural store", category_slug: "rural-supplies" },
+    { term: "Elders rural store", category_slug: "rural-supplies" },
+    { term: "CRT rural store", category_slug: "rural-supplies" },
   ],
 };
 
