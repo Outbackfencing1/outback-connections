@@ -14,10 +14,13 @@ type Listing = {
   created_at: string;
   category: { slug: string; label: string } | null;
   data_source?: string | null;
+  source_platform?: string | null;
 };
 
 export default function ListingCard({ listing }: { listing: Listing }) {
-  const isScraped = listing.data_source === "scraped";
+  const isSyndicated =
+    listing.data_source === "scraped" && listing.source_platform === "adzuna";
+  const isScraped = listing.data_source === "scraped" && !isSyndicated;
   return (
     <Link
       href={listingHref(listing.kind, listing.slug)}
@@ -28,6 +31,11 @@ export default function ListingCard({ listing }: { listing: Listing }) {
           {listing.title}
         </h3>
         <div className="flex shrink-0 items-center gap-2">
+          {isSyndicated && (
+            <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-sky-800">
+              via Adzuna
+            </span>
+          )}
           {isScraped && (
             <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-amber-800">
               Unclaimed

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ContactBlock from "@/components/detail/ContactBlock";
 import ScrapedNotice from "@/components/detail/ScrapedNotice";
+import SyndicatedNotice from "@/components/detail/SyndicatedNotice";
 import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
@@ -68,7 +69,7 @@ export default async function JobDetailPage({
       id, anonymised_id, slug, kind, title, description, postcode, state,
       contact_email, contact_phone, contact_best_time,
       created_at, expires_at, user_id, status,
-      data_source, source_platform, source_url, business_id,
+      data_source, source_platform, source_url, business_id, metadata,
       category:categories(slug, label),
       business:businesses(geo_lat, geo_lng),
       job_details(work_type, pay_type, pay_amount, start_date, duration_text, accommodation_provided)
@@ -111,10 +112,16 @@ export default async function JobDetailPage({
   // Real job ads -> JobPosting (Google-for-Jobs eligible). Scraped directory
   // rows are NOT job postings, so they NEVER emit JobPosting — they get a
   // LocalBusiness block instead (a directory entry for a real business).
+  // Syndicated ads (Adzuna) are a third case: a real vacancy that lives on
+  // another board — no JobPosting (not ours to advertise) and no
+  // LocalBusiness (the title is a vacancy, not a business).
   const isScraped = listing.data_source === "scraped";
+  const isSyndicated = isScraped && listing.source_platform === "adzuna";
   const biz = Array.isArray(listing.business) ? listing.business[0] : listing.business;
   const pageUrl = `${BASE_URL}/jobs/${listing.slug}`;
-  const primaryLd = isScraped
+  const primaryLd = isSyndicated
+    ? null
+    : isScraped
     ? localBusinessJsonLd({
         name: listing.title,
         postcode: listing.postcode,
@@ -139,7 +146,7 @@ export default async function JobDetailPage({
       });
 
   const jsonLdBlocks = [
-    primaryLd,
+    ...(primaryLd ? [primaryLd] : []),
     breadcrumbJsonLd([
       { name: "Home", url: BASE_URL },
       { name: "Jobs", url: `${BASE_URL}/jobs` },
@@ -196,7 +203,14 @@ export default async function JobDetailPage({
       {detail && <JobDetails detail={detail} />}
 
       <section className="mt-8">
-        {listing.data_source === "scraped" ? (
+        {isSyndicated ? (
+          <SyndicatedNotice
+            company={(listing.metadata as { company?: string } | null)?.company ?? null}
+            locationDisplay={(listing.metadata as { location_display?: string } | null)?.location_display ?? null}
+            sourceUrl={listing.source_url}
+            listingId={listing.id}
+          />
+        ) : listing.data_source === "scraped" ? (
           <ScrapedNotice
             title={listing.title}
             sourcePlatform={listing.source_platform}

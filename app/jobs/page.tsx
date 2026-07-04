@@ -52,7 +52,7 @@ export default async function JobsBrowsePage({
     .from("listings")
     .select(
       `
-      anonymised_id, slug, kind, title, description, postcode, state, created_at, data_source,
+      anonymised_id, slug, kind, title, description, postcode, state, created_at, data_source, source_platform,
       category:categories(slug, label),
       job_details!inner(work_type, pay_type, pay_amount)
     `,
@@ -155,11 +155,26 @@ export default async function JobsBrowsePage({
                     created_at: l.created_at,
                     category: Array.isArray(l.category) ? l.category[0] ?? null : l.category,
                     data_source: l.data_source,
+                    source_platform: l.source_platform,
                   }}
                 />
               </li>
             ))}
           </ul>
+        )}
+        {(listings ?? []).some((l) => l.source_platform === "adzuna") && (
+          <p className="mt-4 text-xs text-neutral-500">
+            Some ads syndicated — jobs by{" "}
+            <a
+              href="https://www.adzuna.com.au"
+              target="_blank"
+              rel="nofollow noopener noreferrer"
+              className="underline"
+            >
+              Adzuna
+            </a>
+            .
+          </p>
         )}
       </div>
 
