@@ -21,26 +21,39 @@ Nothing deploys until that watched push.
 3. **Directory pilot validated (sprint item 3 prep):** `preview_scraped_import` dry-run
    on the staged 8 → 8/8 valid, 8 would_create, 0 dupes, `station-hand` resolves. Junk
    audit: **"Dubbo Farmers' Markets" is junk** (type=Market, an event not an employer);
-   Karim is a real farm (sparse Google data). Curated file:
-   **`data/staged-directory-pilot-7.json`** (7 records, junk row dropped).
+   Karim is a real farm (sparse Google data). *(Superseded same evening: the full-payload
+   audit cut it to 5 — see the executed-runbook section below.)*
 
-## Runbook — Josh's next actions, in order
+## 4 Jul 2026 — runbook EXECUTED (evening session, Josh-authorised push)
 
-1. **Watched push** (~10 min): `git push origin main`, watch the Vercel build, then
-   spot-check `/robots.txt`, `/sitemap.xml`, `/services`, and a jobs detail page.
-   Run the Rich Results test on the Farm Hand ad (expect valid JobPosting) — and once
-   Adzuna rows exist (step 4), run it on a syndicated ad too and confirm Rich Results
-   detects **nothing** (the two-layer model needs the negative case verified, not just
-   the positive). Cron auth verified 4 Jul: `authorise()` is the first statement in
-   adzuna-sync (401 before any fetch/write, dry path included) — but it open-passes if
-   `CRON_SECRET` is unset, so step 2's env check matters.
-2. **Vercel env — 2 quick wins while in there:** Resend DNS for
-   outbackconnections.com.au is **verified live** (DKIM + SPF checked 4 Jul), so update
-   `FROM_EMAIL` to `Outback Connections <help@outbackconnections.com.au>`; and confirm
-   `CRON_SECRET` is set.
-3. **Directory import** (sprint item 3): `node scripts/ingest-rural-directory.mjs
-   data/staged-directory-pilot-7.json` (uses .env.local), then the honesty audit:
-   badges/ScrapedNotice/claim/source-redirect on `/jobs`, no junk rows.
+- **Watched push DONE**: `c949426..6978707` (8 commits) → Vercel build READY. Live checks
+  all pass: robots.txt (AI bots allowed), sitemap.xml (42 URLs), /services (20 categories),
+  Farm Hand emits JobPosting+Organization+BreadcrumbList JSON-LD, adzuna-sync returns 401
+  unauthenticated (= CRON_SECRET is set in prod and the auth gate works).
+- **Pilot import DONE — 5, not 7**: full-payload junk audit caught 2 more noise rows before
+  import: Cadagi Farm (Google type "Wedding venue" — the plan's canonical example) and
+  Rosedale Farm ("Bed & breakfast" farm-stay). Imported via `ingest_scraped_business()`:
+  Martelli Orchards, Hillside Harvest, Paraway Pastoral Co., Karim, DNW Livestock Services
+  (all created; curated file now `data/staged-directory-pilot-5.json`). NOTE: `.env.local`
+  has no Supabase keys — the import ran via the RPC over MCP; the CLI script needs
+  NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in .env.local to be usable.
+- **Honesty audit PASS**: /jobs shows 6 (5 Unclaimed-badged + Farm Hand); detail pages show
+  ScrapedNotice + LocalBusiness JSON-LD (no JobPosting), claim CTA present, contact columns
+  NULL (phone only in private raw_payload), 45-day expiry, claim_status=unclaimed.
+- ⚠️ **Farm Hand ad expires 08 Jul 2026** — renew it (owner renew flow) or it drops off,
+  taking the only JobPosting-emitting page with it.
+
+## Runbook — Josh's remaining actions, in order
+
+1. ~~Watched push~~ **DONE 4 Jul** (see session log above). Still open from this step:
+   run the official Rich Results test on the Farm Hand ad (JSON-LD confirmed emitting,
+   formal test pending) — and once Adzuna rows exist (step 4), run it on a syndicated ad
+   and confirm Rich Results detects **nothing** (the two-layer model needs the negative
+   case verified, not just the positive).
+2. **Vercel env:** Resend DNS for outbackconnections.com.au is **verified live**
+   (DKIM + SPF checked 4 Jul) — update `FROM_EMAIL` to
+   `Outback Connections <help@outbackconnections.com.au>`. (`CRON_SECRET` confirmed set.)
+3. ~~Directory import~~ **DONE 4 Jul** (5 records — see session log above).
 4. **Adzuna key** (sprint item 2): register free at https://developer.adzuna.com/
    (instant; free tier 250 calls/day vs our 8/day), set `ADZUNA_APP_ID` +
    `ADZUNA_APP_KEY` in Vercel, redeploy, then staged rollout:
