@@ -235,14 +235,29 @@ export interface AdzunaSyncSummary {
   created: number;
   updated: number;
   skippedNoPostcode: number;
+  /** Creations blocked by the 4:1 syndicated:first-party ratio cap. */
+  skippedRatioCap: number;
+  firstPartyJobs: number;
+  activeSyndicated: number;
+  ratioCap: number;
   errors: string[];
   sample?: Array<Record<string, unknown>>;
 }
 
 /**
  * Fetch → normalise → resolve postcodes → upsert. `limit` caps how many ads
- * are written per run (staged-rollout discipline: start at 10, widen after
- * the honesty audit). With dryRun, everything runs except the writes.
+ * are written per run (staged-rollout discipline: start small, widen after
+ * the honesty audit + a full expire-scraped cycle).
+ *
+ * Ratio discipline (decision 4 Jul 2026): TOTAL active syndicated ads stay
+ * under 4× the active first-party job count (floor 4). A /jobs page that is
+ * hundreds of link-outs wrapped around one real listing reads as a scraper
+ * site. The cap gates NEW creations only — re-sightings of existing ads
+ * always refresh (they keep current stock fresh without changing the ratio).
+ * As first-party count climbs, the cap climbs automatically.
+ *
+ * With dryRun, everything runs (including existence checks and the ratio
+ * headroom) except the writes.
  */
 export async function syncAdzunaJobs(
   admin: SupabaseClient,
@@ -257,11 +272,38 @@ export async function syncAdzunaJobs(
     created: 0,
     updated: 0,
     skippedNoPostcode: 0,
+    skippedRatioCap: 0,
+    firstPartyJobs: 0,
+    activeSyndicated: 0,
+    ratioCap: 0,
     errors: [],
   };
   if (!summary.configured) return summary;
 
   const limit = Math.max(1, Math.min(opts.limit ?? 50, 250));
+
+  // Ratio headroom: how many NEW syndicated ads may be created this run.
+  const nowIso = new Date().toISOString();
+  const [{ count: firstParty }, { count: activeSynd }] = await Promise.all([
+    admin
+      .from("listings")
+      .select("id", { count: "exact", head: true })
+      .eq("kind", "job")
+      .eq("status", "active")
+      .neq("data_source", "scraped")
+      .gt("expires_at", nowIso),
+    admin
+      .from("listings")
+      .select("id", { count: "exact", head: true })
+      .eq("kind", "job")
+      .eq("status", "active")
+      .eq("source_platform", "adzuna")
+      .gt("expires_at", nowIso),
+  ]);
+  summary.firstPartyJobs = firstParty ?? 0;
+  summary.activeSyndicated = activeSynd ?? 0;
+  summary.ratioCap = Math.max(4, 4 * summary.firstPartyJobs);
+  const creationHeadroom = Math.max(0, summary.ratioCap - summary.activeSyndicated);
 
   // 1. Fetch all searches, dedupe by ad id (the same ad matches several terms).
   const byId = new Map<string, NormalisedAd>();
@@ -331,22 +373,6 @@ export async function syncAdzunaJobs(
       metadata: ad.metadata,
     };
 
-    if (sample.length < 10) {
-      sample.push({
-        title: ad.title,
-        company: ad.company,
-        location: ad.locationDisplay,
-        postcode: resolved.postcode,
-        category: ad.categorySlug,
-        work_type: ad.workType,
-      });
-    }
-    if (opts.dryRun) {
-      written++;
-      summary.created++;
-      continue;
-    }
-
     try {
       const { data: existing } = await admin
         .from("listings")
@@ -354,6 +380,30 @@ export async function syncAdzunaJobs(
         .eq("source_platform", "adzuna")
         .eq("source_external_id", ad.sourceExternalId)
         .maybeSingle();
+
+      // Ratio cap gates NEW creations only; re-sightings always refresh.
+      if (!existing && summary.created >= creationHeadroom) {
+        summary.skippedRatioCap++;
+        continue;
+      }
+
+      if (sample.length < 10) {
+        sample.push({
+          action: existing ? "update" : "create",
+          title: ad.title,
+          company: ad.company,
+          location: ad.locationDisplay,
+          postcode: resolved.postcode,
+          category: ad.categorySlug,
+          work_type: ad.workType,
+        });
+      }
+      if (opts.dryRun) {
+        if (existing) summary.updated++;
+        else summary.created++;
+        written++;
+        continue;
+      }
 
       let listingId: string;
       if (existing) {

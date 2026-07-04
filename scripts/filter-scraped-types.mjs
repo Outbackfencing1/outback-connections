@@ -21,7 +21,19 @@
 //
 // Usage:
 //   node scripts/filter-scraped-types.mjs <scraped.json> [--summary-only]
-//     [--allow "extra,types"] [--block "extra,types"]
+//     [--allow "extra,types"] [--block "extra,types"] [--touch]
+//
+// --touch implements the first-touch rule (decision 4 Jul 2026): the NSW list
+// is dual-use (clip-gun wholesale outreach from ops + OC claim-invites) and a
+// business must get ONE coherent first contact. Assignment by primary type:
+//   first_touch = "clipgun"       rural STORES (feed/supplies/dealer/hardware
+//                                 — the wholesale pipeline; Daryl needs it
+//                                 warm). Claim-invite follows >= 3-4 weeks
+//                                 later as a soft P.S., never a second cold ask.
+//   first_touch = "claim_invite"  contractors, services, farms — not wholesale
+//                                 targets; they only ever get the claim touch.
+//   first_touch = "suppressed"    cut + review rows — nobody contacts these.
+// Ali and Ericka work from the same output files, keyed on place_id.
 //
 // Accepts both shapes: staged ImportRecords (type under raw_payload) and raw
 // Outscraper rows (type at top level). Writes <input>.kept.json,
@@ -58,9 +70,25 @@ const JUNK_BLOCK = [
   "association", "non-profit", "charity", "community",
 ];
 
+// Primary-type tokens that mark a rural STORE (clip-gun wholesale target)
+// rather than a contractor/service/farm. Checked on the primary type only —
+// e.g. DNW ("Agricultural service" with a "Farm equipment supplier" subtype)
+// is a service first, so it stays claim_invite.
+const STORE_NEEDLES = [
+  "store", "shop", "supplier", "supplies", "supply", "dealer", "hardware",
+  "saddlery", "merchandise", "feed", "wholesaler", "retail",
+];
+
 function matches(haystack, needles) {
   const h = (haystack || "").toLowerCase();
   return needles.find((n) => h.includes(n)) ?? null;
+}
+
+function assignFirstTouch(record, verdict) {
+  if (verdict !== "keep") return "suppressed";
+  const raw = record.raw_payload ?? record;
+  const type = raw.type ?? raw.category ?? "";
+  return matches(type, STORE_NEEDLES) ? "clipgun" : "claim_invite";
 }
 
 function classify(record, allow, block) {
@@ -85,11 +113,13 @@ function classify(record, allow, block) {
 // ---- CLI ----
 const positional = [];
 let summaryOnly = false;
+let touch = false;
 const extraAllow = [];
 const extraBlock = [];
 for (let i = 2; i < process.argv.length; i++) {
   const a = process.argv[i];
   if (a === "--summary-only") summaryOnly = true;
+  else if (a === "--touch") touch = true;
   else if (a === "--allow") extraAllow.push(...process.argv[++i].split(",").map((s) => s.trim().toLowerCase()));
   else if (a === "--block") extraBlock.push(...process.argv[++i].split(",").map((s) => s.trim().toLowerCase()));
   else positional.push(a);
@@ -111,11 +141,19 @@ const allow = [...RURAL_ALLOW, ...extraAllow];
 const block = [...JUNK_BLOCK, ...extraBlock];
 const buckets = { keep: [], cut: [], review: [] };
 
+const touchCounts = { clipgun: 0, claim_invite: 0, suppressed: 0 };
 for (const r of records) {
   const { verdict, reason } = classify(r, allow, block);
+  let touchNote = "";
+  if (touch) {
+    const ft = assignFirstTouch(r, verdict);
+    r.first_touch = ft;
+    touchCounts[ft]++;
+    touchNote = ` [${ft}]`;
+  }
   buckets[verdict].push(r);
   const name = r.name ?? r.raw_payload?.name ?? "(unnamed)";
-  console.log(`${verdict.toUpperCase().padEnd(7)} ${name} — ${reason}`);
+  console.log(`${verdict.toUpperCase().padEnd(7)} ${name} — ${reason}${touchNote}`);
 }
 
 const total = records.length;
@@ -123,6 +161,11 @@ const junkRate = total ? Math.round((buckets.cut.length / total) * 100) : 0;
 console.log(
   `\n${total} records → keep ${buckets.keep.length} · cut ${buckets.cut.length} (${junkRate}%) · review ${buckets.review.length}`
 );
+if (touch) {
+  console.log(
+    `first_touch → clipgun ${touchCounts.clipgun} · claim_invite ${touchCounts.claim_invite} · suppressed ${touchCounts.suppressed}`
+  );
+}
 if (buckets.review.length > 0) {
   console.log("Review bucket is NOT importable — eyeball it, then re-run with --allow/--block to zero it out.");
 }
