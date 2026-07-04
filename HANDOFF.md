@@ -28,7 +28,12 @@ Nothing deploys until that watched push.
 
 1. **Watched push** (~10 min): `git push origin main`, watch the Vercel build, then
    spot-check `/robots.txt`, `/sitemap.xml`, `/services`, and a jobs detail page.
-   Run the Rich Results test on the Farm Hand ad.
+   Run the Rich Results test on the Farm Hand ad (expect valid JobPosting) — and once
+   Adzuna rows exist (step 4), run it on a syndicated ad too and confirm Rich Results
+   detects **nothing** (the two-layer model needs the negative case verified, not just
+   the positive). Cron auth verified 4 Jul: `authorise()` is the first statement in
+   adzuna-sync (401 before any fetch/write, dry path included) — but it open-passes if
+   `CRON_SECRET` is unset, so step 2's env check matters.
 2. **Vercel env — 2 quick wins while in there:** Resend DNS for
    outbackconnections.com.au is **verified live** (DKIM + SPF checked 4 Jul), so update
    `FROM_EMAIL` to `Outback Connections <help@outbackconnections.com.au>`; and confirm
@@ -36,10 +41,14 @@ Nothing deploys until that watched push.
 3. **Directory import** (sprint item 3): `node scripts/ingest-rural-directory.mjs
    data/staged-directory-pilot-7.json` (uses .env.local), then the honesty audit:
    badges/ScrapedNotice/claim/source-redirect on `/jobs`, no junk rows.
-4. **Adzuna key** (sprint item 2): register free at https://developer.adzuna.com/, set
-   `ADZUNA_APP_ID` + `ADZUNA_APP_KEY` in Vercel, redeploy, then staged rollout:
+4. **Adzuna key** (sprint item 2): register free at https://developer.adzuna.com/
+   (instant; free tier 250 calls/day vs our 8/day), set `ADZUNA_APP_ID` +
+   `ADZUNA_APP_KEY` in Vercel, redeploy, then staged rollout:
    `node scripts/adzuna-pull.mjs --dry` → review sample → `--limit 10` → spot-check
-   `/jobs` → widen. The daily cron takes over after that.
+   `/jobs` → **hold at 10 for 24h** so one full expire-scraped cycle runs against
+   Adzuna rows — confirm re-sighting refreshes live ads and dead ads retire. A dead ad
+   surviving the cycle means a dedupe/expiry bug, far easier to diagnose at 10 rows
+   than 250. Then widen; the daily cron takes over.
 5. **Supabase Auth dashboard** (unchanged, needs you): leaked-password protection
    toggle; email-confirmation + SMTP settings per LEGAL-HARDENING-PASS.md.
 
