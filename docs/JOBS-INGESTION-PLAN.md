@@ -1,6 +1,15 @@
-# Jobs Ingestion Engine v1 — PLAN (blueprint, not built)
+# Jobs Ingestion Engine v1 — PLAN (blueprint; syndicated layer now built)
 
-**Status:** reviewed blueprint. **Nothing built.** Gated on (a) this plan's review, (b) the 8-business directory pilot passing, and (c) Josh picking a job-ad SOURCE (§7). Schema columns it needs are drafted (not applied) in `supabase/migrations/_drafts/` (see §8).
+**Status update (4 Jul 2026):** the SOURCE decision (§7) was made — **Adzuna**, but as a
+**syndicated layer**, which supersedes parts of this plan: Adzuna ads are attributed,
+link-out, **no JSON-LD**, **not claimable**, and **not linked to businesses** (no
+employer→business resolution). That layer is BUILT (`lib/adzuna.ts` +
+`/api/cron/adzuna-sync` + `SyndicatedNotice`), env-gated on `ADZUNA_APP_ID`/`ADZUNA_APP_KEY`,
+and needs **no schema change** (ad extras live in `listings.metadata`; the `_drafts/`
+columns stay parked). This plan's full business-linked, claimable model still applies to
+**first-party jobs** (the 50-jobs milestone) — never conflate the two layers.
+
+**Original status:** reviewed blueprint. Gated on (a) this plan's review, (b) the 8-business directory pilot passing, and (c) Josh picking a job-ad SOURCE (§7). Schema columns it needs are drafted (not applied) in `supabase/migrations/_drafts/` (see §8).
 
 ## 1. Scope — and how it differs from what's already built
 
