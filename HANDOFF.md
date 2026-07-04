@@ -41,7 +41,16 @@ Nothing deploys until that watched push.
   ScrapedNotice + LocalBusiness JSON-LD (no JobPosting), claim CTA present, contact columns
   NULL (phone only in private raw_payload), 45-day expiry, claim_status=unclaimed.
 - ⚠️ **Farm Hand ad expires 08 Jul 2026** — renew it (owner renew flow) or it drops off,
-  taking the only JobPosting-emitting page with it.
+  taking the only JobPosting-emitting page with it. (The renewal-reminders cron should
+  also email a signed renew link ~3 days out — check the inbox.)
+- **Junk-rate carry-forward — `scripts/filter-scraped-types.mjs`**: the hand-staged pilot
+  was 37% junk even after a name-level audit; the 5,890-lead NSW scrape will be dirtier.
+  The script classifies by raw Google `type` (KEEP rural / CUT accommodation-events-food-
+  tourism / REVIEW unknowns — review is never silently kept), accepts staged or raw
+  Outscraper shapes, `--allow`/`--block` overrides. Validated against the pilot ground
+  truth: keeps exactly the imported 5, cuts exactly the 3 junk rows. **The NSW list must
+  pass through this before it becomes the claim-invite campaign** — otherwise Ali emails
+  a wedding venue about claiming their rural business listing.
 
 ## Runbook — Josh's remaining actions, in order
 
