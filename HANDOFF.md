@@ -52,6 +52,44 @@ Nothing deploys until that watched push.
   pass through this before it becomes the claim-invite campaign** — otherwise Ali emails
   a wedding venue about claiming their rural business listing.
 
+## Decisions locked 4 Jul 2026 (Josh, binding — do not relitigate)
+
+1. **Traction gate = numbers, not vibes**: within 30 days of Jess's FB push —
+   **25 organic human searches/week + 5 claim submissions + 10 first-party posts.**
+   On a miss, the diagnosis matters more than the miss: searches-without-claims =
+   claim-flow problem; claims-without-posts = posting-friction problem; nothing-at-all =
+   distribution didn't land.
+2. **UTM discipline is non-negotiable**: every link Jess posts carries
+   `utm_source=facebook&utm_medium=jess_organic` — otherwise the one best distribution
+   shot produces an unattributable spike and teaches nothing.
+3. **Syndicated ratio: total active Adzuna ads < 4× active first-party jobs (floor 4)**
+   — ENFORCED IN CODE in `lib/adzuna.ts` (creation headroom; re-sightings always
+   refresh; cap climbs automatically as first-party grows). With 1 first-party job the
+   first import creates only ~4 ads — that is correct behaviour, not a bug.
+4. **First-touch rule for the NSW list** (implemented as `--touch` in
+   `scripts/filter-scraped-types.mjs`, keyed on place_id): rural STORES → clip-gun pitch
+   first (revenue message; Daryl's wholesale pipeline), claim-invite no sooner than
+   3–4 weeks later as a soft P.S.; contractors/services/farms → claim-invite only;
+   cut/review → suppressed. Ali and Ericka work from the same filtered file. Nobody gets
+   two cold asks.
+5. **Directory freshness = calendar, not code**: first Monday of each month, re-run the
+   directory ingest (idempotent). Do NOT build automated re-sighting — claims are the
+   real retention mechanism; automating the stopgap is the productive-procrastination
+   trap the June reframe named.
+6. **JSON-LD rule**: nothing ships that breaks it. Every future spot-check includes the
+   negative Rich Results case on a syndicated row, not just the positive on first-party.
+7. **Claim Outback Fencing as listing #1** (disclosed-COI model behaving consistently):
+   dogfood claim → approve → ABN-verify before any farmer touches it; register the free
+   `ABR_GUID` the same afternoon (also unblocks parked item "ABN verification");
+   screenshot-log the whole flow — that walkthrough IS the invite-campaign how-to asset.
+
+## This week's sequence (Josh)
+
+Farm Hand renewal (before Wed 8 Jul, #1) → FROM_EMAIL + HIBP in one sitting →
+claim Outback Fencing + ABR GUID (the afternoon job) → run the NSW list through
+`filter-scraped-types.mjs --touch` (suppression column) → Adzuna key with the 4:1 cap
+(now automatic) → gate numbers live from the moment of Jess's push.
+
 ## Runbook — Josh's remaining actions, in order
 
 1. ~~Watched push~~ **DONE 4 Jul** (see session log above). Still open from this step:
