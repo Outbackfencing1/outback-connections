@@ -15,12 +15,16 @@ type Listing = {
   category: { slug: string; label: string } | null;
   data_source?: string | null;
   source_platform?: string | null;
+  business_claim_status?: string | null;
 };
 
 export default function ListingCard({ listing }: { listing: Listing }) {
   const isSyndicated =
     listing.data_source === "scraped" && listing.source_platform === "adzuna";
-  const isScraped = listing.data_source === "scraped" && !isSyndicated;
+  const isScraped =
+    listing.data_source === "scraped" &&
+    !isSyndicated &&
+    (!listing.business_claim_status || listing.business_claim_status === "unclaimed");
   return (
     <Link
       href={listingHref(listing.kind, listing.slug)}

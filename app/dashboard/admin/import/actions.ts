@@ -121,7 +121,7 @@ export async function commitImport(jsonText: string): Promise<CommitResult> {
     const vertical = r.vertical as string | undefined;
     const postcode = (r.postcode as string | undefined) ?? "";
     if (
-      (vertical !== "job" && vertical !== "freight") ||
+      (vertical !== "job" && vertical !== "freight" && vertical !== "service") ||
       !r.source_external_id ||
       !r.source_url ||
       !r.source_platform ||
@@ -157,6 +157,7 @@ export async function commitImport(jsonText: string): Promise<CommitResult> {
 
   revalidatePath("/jobs");
   revalidatePath("/freight");
+  revalidatePath("/services");
 
   return { ok: true, created, updated, failed, skipped, total: parsed.records.length };
 }

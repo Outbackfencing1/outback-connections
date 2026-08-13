@@ -18,12 +18,27 @@ export default function ContactBlock({
   contactBestTime,
   signInRedirect,
 }: Props) {
+  // Signed-out pages deliberately do not fetch restricted contact columns.
+  // Only an authenticated empty result proves that this listing currently has
+  // no owner-confirmed contact. Never fall back to raw scraped source data.
+  if (signedIn && !contactEmail && !contactPhone && !contactBestTime) {
+    return (
+      <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-5">
+        <p className="font-semibold text-neutral-900">Contact</p>
+        <p className="mt-2 text-sm text-neutral-700">
+          Contact details are being updated. Please check back soon.
+        </p>
+      </div>
+    );
+  }
+
   if (!signedIn) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
         <p className="font-semibold text-amber-900">Contact details</p>
         <p className="mt-2 text-sm text-amber-900">
-          Sign in to see how to get in touch — we hide these to stop spam.
+          Sign in to check the available contact options — we keep contact
+          details private to reduce spam.
         </p>
         <Link
           href={`/signin?next=${encodeURIComponent(signInRedirect)}`}

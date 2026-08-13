@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ContactBlock from "@/components/detail/ContactBlock";
+import ScrapedNotice from "@/components/detail/ScrapedNotice";
 import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
@@ -21,12 +22,17 @@ export const dynamic = "force-dynamic";
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
 
-export async function generateMetadata({ params }: { params: { slug: string } }) {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
   const supabase = createClient();
   const { data } = await supabase
     .from("listings")
     .select(`title, description, postcode, category:categories(label)`)
-    .eq("slug", params.slug)
+    .eq("slug", slug)
     .in("kind", ["service_offering", "service_request"])
     .maybeSingle();
 
@@ -51,8 +57,9 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 export default async function ServiceDetailPage({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
+  const { slug } = await params;
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
   const viewer = userData.user;
@@ -62,17 +69,26 @@ export default async function ServiceDetailPage({
     .select(
       `
       id, anonymised_id, slug, kind, title, description, postcode, state,
-      contact_email, contact_phone, contact_best_time,
       created_at, expires_at, user_id, status,
+      data_source, source_platform, source_url, business_id,
       category:categories(slug, label),
+      business:businesses(claim_status, geo_lat, geo_lng),
       service_details(direction, rate_type, rate_amount, travel_willingness)
     `
     )
-    .eq("slug", params.slug)
+    .eq("slug", slug)
     .in("kind", ["service_offering", "service_request"])
     .maybeSingle();
 
   if (!listing) notFound();
+
+  const { data: contact } = viewer
+    ? await supabase
+        .from("listings")
+        .select("contact_email, contact_phone, contact_best_time")
+        .eq("id", listing.id)
+        .maybeSingle()
+    : { data: null };
 
   const isOwner = viewer?.id === listing.user_id;
   if (!isOwner && (listing.status !== "active" || new Date(listing.expires_at) <= new Date())) {
@@ -83,6 +99,12 @@ export default async function ServiceDetailPage({
     ? listing.service_details[0]
     : listing.service_details;
   const cat = Array.isArray(listing.category) ? listing.category[0] : listing.category;
+  const business = Array.isArray(listing.business)
+    ? listing.business[0]
+    : listing.business;
+  const isUnclaimedScraped =
+    listing.data_source === "scraped" &&
+    (!business || business.claim_status === "unclaimed");
 
   await logEvent({
     eventType: "listing_view",
@@ -92,7 +114,7 @@ export default async function ServiceDetailPage({
     userId: viewer?.id ?? null,
     properties: { slug: listing.slug },
   });
-  if (viewer && (listing.contact_email || listing.contact_phone)) {
+  if (viewer && !isUnclaimedScraped && (contact?.contact_email || contact?.contact_phone)) {
     await logEvent({
       eventType: "contact_reveal",
       entityType: "listing",
@@ -123,6 +145,8 @@ export default async function ServiceDetailPage({
         name: listing.title,
         postcode: listing.postcode,
         state: listing.state,
+        geoLat: business?.geo_lat ?? null,
+        geoLng: business?.geo_lng ?? null,
         category: cat?.label ?? null,
         url: pageUrl,
       })
@@ -185,13 +209,25 @@ export default async function ServiceDetailPage({
       {detail && <ServiceDetails detail={detail} />}
 
       <section className="mt-8">
-        <ContactBlock
-          signedIn={!!viewer}
-          contactEmail={listing.contact_email}
-          contactPhone={listing.contact_phone}
-          contactBestTime={listing.contact_best_time}
-          signInRedirect={`/services/listing/${listing.slug}`}
-        />
+        {isUnclaimedScraped ? (
+          <ScrapedNotice
+            title={listing.title}
+            sourcePlatform={listing.source_platform}
+            sourceUrl={listing.source_url}
+            businessId={listing.business_id}
+            signedIn={!!viewer}
+            signInRedirect={`/services/listing/${listing.slug}`}
+            listingId={listing.id}
+          />
+        ) : (
+          <ContactBlock
+            signedIn={!!viewer}
+            contactEmail={contact?.contact_email ?? null}
+            contactPhone={contact?.contact_phone ?? null}
+            contactBestTime={contact?.contact_best_time ?? null}
+            signInRedirect={`/services/listing/${listing.slug}`}
+          />
+        )}
       </section>
 
       {!isOwner && (

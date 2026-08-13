@@ -16,11 +16,12 @@ export const dynamic = "force-dynamic";
 export default async function EditListingPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) redirect(`/signin?next=/dashboard/listings/${params.id}/edit`);
+  if (!userData.user) redirect(`/signin?next=/dashboard/listings/${id}/edit`);
 
   // Load listing + the right detail row depending on kind. We fetch
   // everything in two queries: listings first to get kind, then detail.
@@ -31,7 +32,7 @@ export default async function EditListingPage({
       category_id, title, description, postcode,
       contact_email, contact_phone, contact_best_time
     `)
-    .eq("id", params.id)
+    .eq("id", id)
     .maybeSingle();
 
   if (!listing) notFound();

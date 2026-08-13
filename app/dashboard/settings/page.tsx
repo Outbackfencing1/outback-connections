@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { requestTimestamp } from "@/lib/request-time";
 import { signOut } from "../actions";
 import DeleteAccountForm from "./DeleteAccountForm";
 
@@ -18,8 +19,9 @@ export default async function SettingsPage() {
 
   const user = data.user;
   const createdAt = user.created_at ? new Date(user.created_at) : null;
+  const now = await requestTimestamp();
   const ageDays = createdAt
-    ? Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24))
+    ? Math.floor((now - createdAt.getTime()) / (1000 * 60 * 60 * 24))
     : 0;
 
   // Listings count for the delete-account confirmation copy

@@ -56,7 +56,7 @@ export default async function AdminFlagQueuePage() {
     );
   }
 
-  const flash = readAndClearFlash();
+  const flash = await readAndClearFlash();
 
   const { data: rows } = await supabase
     .from("listings")

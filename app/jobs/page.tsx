@@ -27,14 +27,15 @@ function getStr(p: SearchParams, key: string): string {
 export default async function JobsBrowsePage({
   searchParams,
 }: {
-  searchParams: SearchParams;
+  searchParams: Promise<SearchParams>;
 }) {
+  const resolvedSearchParams = await searchParams;
   const supabase = createClient();
 
-  const postcode = getStr(searchParams, "postcode").trim();
-  const category = getStr(searchParams, "category").trim();
-  const payType = getStr(searchParams, "pay_type").trim();
-  const page = Math.max(1, parseInt(getStr(searchParams, "page") || "1", 10) || 1);
+  const postcode = getStr(resolvedSearchParams, "postcode").trim();
+  const category = getStr(resolvedSearchParams, "category").trim();
+  const payType = getStr(resolvedSearchParams, "pay_type").trim();
+  const page = Math.max(1, parseInt(getStr(resolvedSearchParams, "page") || "1", 10) || 1);
 
   // Categories for the filter dropdown, with active counts.
   const [{ data: cats }, jobCounts] = await Promise.all([
@@ -54,6 +55,7 @@ export default async function JobsBrowsePage({
       `
       anonymised_id, slug, kind, title, description, postcode, state, created_at, data_source, source_platform,
       category:categories(slug, label),
+      business:businesses(claim_status),
       job_details!inner(work_type, pay_type, pay_amount)
     `,
       { count: "exact" }
@@ -156,6 +158,9 @@ export default async function JobsBrowsePage({
                     category: Array.isArray(l.category) ? l.category[0] ?? null : l.category,
                     data_source: l.data_source,
                     source_platform: l.source_platform,
+                    business_claim_status: Array.isArray(l.business)
+                      ? l.business[0]?.claim_status ?? null
+                      : (l.business as { claim_status?: string } | null)?.claim_status ?? null,
                   }}
                 />
               </li>

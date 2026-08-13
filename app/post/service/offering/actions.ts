@@ -74,6 +74,6 @@ export async function postServiceOffering(formData: FormData): Promise<ActionRes
     return { ok: false, errors: { _: result.message }, values: valuesFrom(formData) };
   }
 
-  setFlash(`Posted: ${data.title}`);
+  await setFlash(`Posted: ${data.title}`);
   redirect("/dashboard/listings");
 }

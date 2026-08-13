@@ -56,7 +56,7 @@ export default function ImportPreviewForm() {
         onChange={(e) => setJson(e.target.value)}
         rows={10}
         spellCheck={false}
-        placeholder='[{"vertical":"job","source_platform":"google_maps","source_external_id":"...","source_url":"...","name":"...","category_slug":"station-hand","postcode":"2800","suburb":"Orange","state":"NSW"}]'
+        placeholder='[{"vertical":"service","source_platform":"google_maps","source_external_id":"...","source_url":"...","name":"...","category_slug":"fencing-contractor","postcode":"2800","suburb":"Orange","state":"NSW"}]'
         className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white p-3 font-mono text-xs"
       />
 

@@ -26,14 +26,15 @@ function getStr(p: SearchParams, key: string): string {
 export default async function FreightBrowsePage({
   searchParams,
 }: {
-  searchParams: SearchParams;
+  searchParams: Promise<SearchParams>;
 }) {
+  const resolvedSearchParams = await searchParams;
   const supabase = createClient();
 
-  const postcode = getStr(searchParams, "postcode").trim();
-  const direction = getStr(searchParams, "direction").trim();
-  const vehicle = getStr(searchParams, "vehicle_type").trim();
-  const page = Math.max(1, parseInt(getStr(searchParams, "page") || "1", 10) || 1);
+  const postcode = getStr(resolvedSearchParams, "postcode").trim();
+  const direction = getStr(resolvedSearchParams, "direction").trim();
+  const vehicle = getStr(resolvedSearchParams, "vehicle_type").trim();
+  const page = Math.max(1, parseInt(getStr(resolvedSearchParams, "page") || "1", 10) || 1);
 
   let query = supabase
     .from("listings")
@@ -41,6 +42,7 @@ export default async function FreightBrowsePage({
       `
       anonymised_id, slug, kind, title, description, postcode, state, created_at, data_source,
       category:categories(slug, label),
+      business:businesses(claim_status),
       freight_details!inner(direction, vehicle_type, origin_postcode, destination_postcode)
     `,
       { count: "exact" }
@@ -152,6 +154,9 @@ export default async function FreightBrowsePage({
                     created_at: l.created_at,
                     category: Array.isArray(l.category) ? l.category[0] ?? null : l.category,
                     data_source: l.data_source,
+                    business_claim_status: Array.isArray(l.business)
+                      ? l.business[0]?.claim_status ?? null
+                      : (l.business as { claim_status?: string } | null)?.claim_status ?? null,
                   }}
                 />
               </li>

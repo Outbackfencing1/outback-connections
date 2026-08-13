@@ -5,6 +5,7 @@ import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { logAuthEvent } from "@/lib/auth-events";
 import { getLockdownState } from "@/lib/lockdown";
+import { safeNextPath } from "@/lib/safe-next";
 
 const EmailSchema = z
   .string()
@@ -24,11 +25,13 @@ const MagicLinkSchema = z.object({
   agreeTerms: z.boolean().optional(),
   confirmAge: z.boolean().optional(),
   marketing: z.boolean().optional(),
+  next: z.string().max(2048).optional(),
 });
 
 const PasswordSignInSchema = z.object({
   email: EmailSchema,
   password: z.string().min(1, "Enter your password").max(128),
+  next: z.string().max(2048).optional(),
 });
 
 const PasswordSignUpSchema = z.object({
@@ -37,6 +40,7 @@ const PasswordSignUpSchema = z.object({
   agreeTerms: z.boolean(),
   confirmAge: z.boolean(),
   marketing: z.boolean().optional(),
+  next: z.string().max(2048).optional(),
 });
 
 const ResetSchema = z.object({ email: EmailSchema });
@@ -50,20 +54,20 @@ export type AuthResult =
 const SIGNUP_CONSENT_COOKIE = "oc_signup_consent";
 const TERMS_VERSION = "v3-2026-04-25-defamation-hardened-draft";
 
-function getRedirectBase(): string {
-  const h = headers();
+async function getRedirectBase(): Promise<string> {
+  const h = await headers();
   const host = h.get("host") ?? "localhost:3000";
   const proto =
     h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   return `${proto}://${host}`;
 }
 
-function stashSignupConsent(opts: {
+async function stashSignupConsent(opts: {
   marketing: boolean;
   dob_confirmed: boolean;
   host: string;
 }) {
-  cookies().set(
+  (await cookies()).set(
     SIGNUP_CONSENT_COOKIE,
     JSON.stringify({
       terms_version: TERMS_VERSION,
@@ -92,12 +96,13 @@ export async function sendMagicLink(input: {
   agreeTerms?: boolean;
   confirmAge?: boolean;
   marketing?: boolean;
+  next?: string;
 }): Promise<AuthResult> {
   const parsed = MagicLinkSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const { email, mode, agreeTerms, confirmAge, marketing } = parsed.data;
+  const { email, mode, agreeTerms, confirmAge, marketing, next } = parsed.data;
 
   if (mode === "signup") {
     const lockdown = await getLockdownState();
@@ -120,13 +125,13 @@ export async function sendMagicLink(input: {
   }
 
   const supabase = createClient();
-  const base = getRedirectBase();
-  const host = headers().get("host") ?? "localhost:3000";
+  const base = await getRedirectBase();
+  const host = (await headers()).get("host") ?? "localhost:3000";
 
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: `${base}/auth/callback`,
+      emailRedirectTo: `${base}/auth/callback?next=${encodeURIComponent(safeNextPath(next))}`,
       shouldCreateUser: true,
     },
   });
@@ -142,7 +147,7 @@ export async function sendMagicLink(input: {
   }
 
   if (mode === "signup") {
-    stashSignupConsent({
+    await stashSignupConsent({
       marketing: !!marketing,
       dob_confirmed: !!confirmAge,
       host,
@@ -157,12 +162,13 @@ export async function sendMagicLink(input: {
 export async function signInWithPassword(input: {
   email: string;
   password: string;
+  next?: string;
 }): Promise<AuthResult> {
   const parsed = PasswordSignInSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const { email, password } = parsed.data;
+  const { email, password, next } = parsed.data;
 
   const supabase = createClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -192,7 +198,7 @@ export async function signInWithPassword(input: {
     email,
     eventType: "password_signin",
   });
-  return { ok: true, redirect: "/dashboard" };
+  return { ok: true, redirect: safeNextPath(next) };
 }
 
 /**
@@ -205,6 +211,7 @@ export async function signUpWithPassword(input: {
   agreeTerms: boolean;
   confirmAge: boolean;
   marketing?: boolean;
+  next?: string;
 }): Promise<AuthResult> {
   const lockdown = await getLockdownState();
   if (lockdown.active) {
@@ -218,7 +225,7 @@ export async function signUpWithPassword(input: {
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const { email, password, agreeTerms, confirmAge, marketing } = parsed.data;
+  const { email, password, agreeTerms, confirmAge, marketing, next } = parsed.data;
 
   if (!agreeTerms) {
     return {
@@ -231,13 +238,15 @@ export async function signUpWithPassword(input: {
   }
 
   const supabase = createClient();
-  const base = getRedirectBase();
-  const host = headers().get("host") ?? "localhost:3000";
+  const base = await getRedirectBase();
+  const host = (await headers()).get("host") ?? "localhost:3000";
 
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: `${base}/auth/callback` },
+    options: {
+      emailRedirectTo: `${base}/auth/callback?next=${encodeURIComponent(safeNextPath(next))}`,
+    },
   });
 
   if (error) {
@@ -256,7 +265,7 @@ export async function signUpWithPassword(input: {
     return { ok: false, message: "Couldn't create your account. Please try again." };
   }
 
-  stashSignupConsent({
+  await stashSignupConsent({
     marketing: !!marketing,
     dob_confirmed: !!confirmAge,
     host,
@@ -271,7 +280,7 @@ export async function signUpWithPassword(input: {
   // If session is null, email confirmation is required.
   // If session exists, user is signed in immediately (when confirmation off).
   if (data.session) {
-    return { ok: true, redirect: "/dashboard" };
+    return { ok: true, redirect: safeNextPath(next) };
   }
   return { ok: true, sentLink: true };
 }
@@ -287,7 +296,7 @@ export async function requestPasswordReset(input: {
   const { email } = parsed.data;
 
   const supabase = createClient();
-  const base = getRedirectBase();
+  const base = await getRedirectBase();
 
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${base}/auth/callback?next=/reset-password/confirm`,

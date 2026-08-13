@@ -11,11 +11,12 @@ import {
 type Props = {
   /** "sign in" or "sign up" — copy + which extra fields render */
   mode: "signin" | "signup";
+  returnTo?: string;
 };
 
 type Method = "magic" | "password";
 
-export default function AuthForm({ mode }: Props) {
+export default function AuthForm({ mode, returnTo = "/dashboard" }: Props) {
   const router = useRouter();
   const isSignup = mode === "signup";
 
@@ -56,6 +57,7 @@ export default function AuthForm({ mode }: Props) {
           agreeTerms,
           confirmAge,
           marketing,
+          next: returnTo,
         });
         if (result.ok) {
           setSent("magic");
@@ -73,6 +75,7 @@ export default function AuthForm({ mode }: Props) {
           agreeTerms,
           confirmAge,
           marketing,
+          next: returnTo,
         });
         if (!result.ok) {
           setError(result.message);
@@ -88,6 +91,7 @@ export default function AuthForm({ mode }: Props) {
         const result = await signInWithPassword({
           email: trimmedEmail,
           password,
+          next: returnTo,
         });
         if (!result.ok) {
           setError(result.message);

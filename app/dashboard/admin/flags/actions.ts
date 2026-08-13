@@ -17,7 +17,7 @@ async function requireAdmin() {
     .maybeSingle();
 
   if (!profile?.is_admin) {
-    setFlash("Not authorised.");
+    await setFlash("Not authorised.");
     redirect("/dashboard");
   }
   return supabase;
@@ -36,9 +36,9 @@ export async function hideListing(formData: FormData): Promise<void> {
 
   if (error) {
     console.error("[admin] hide failed:", error.message);
-    setFlash("Couldn't hide listing.");
+    await setFlash("Couldn't hide listing.");
   } else {
-    setFlash("Listing hidden.");
+    await setFlash("Listing hidden.");
     revalidatePath("/dashboard/admin/flags");
     revalidatePath("/jobs");
     revalidatePath("/freight");
@@ -58,9 +58,9 @@ export async function clearFlags(formData: FormData): Promise<void> {
 
   if (error) {
     console.error("[admin] clear flags failed:", error.message);
-    setFlash("Couldn't clear flags.");
+    await setFlash("Couldn't clear flags.");
   } else {
-    setFlash("Flags cleared.");
+    await setFlash("Flags cleared.");
     revalidatePath("/dashboard/admin/flags");
   }
   redirect("/dashboard/admin/flags");

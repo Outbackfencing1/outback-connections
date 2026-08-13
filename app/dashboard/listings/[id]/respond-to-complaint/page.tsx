@@ -14,19 +14,20 @@ export const dynamic = "force-dynamic";
 export default async function RespondPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) {
-    redirect(`/signin?next=/dashboard/listings/${params.id}/respond-to-complaint`);
+    redirect(`/signin?next=/dashboard/listings/${id}/respond-to-complaint`);
   }
 
   // Verify ownership and load listing + open complaints
   const { data: listing } = await supabase
     .from("listings")
     .select("id, title, slug, kind, user_id, status, under_review, under_review_reason, under_review_since")
-    .eq("id", params.id)
+    .eq("id", id)
     .maybeSingle();
 
   if (!listing || listing.user_id !== userData.user.id) {

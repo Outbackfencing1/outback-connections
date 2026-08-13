@@ -87,6 +87,6 @@ export async function postJob(formData: FormData): Promise<ActionResult> {
     };
   }
 
-  setFlash(`Posted: ${data.title}`);
+  await setFlash(`Posted: ${data.title}`);
   redirect("/dashboard/listings");
 }

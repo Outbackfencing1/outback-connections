@@ -7,13 +7,14 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRequestContext, logAuthEvent } from "@/lib/auth-events";
+import { safeNextPath } from "@/lib/safe-next";
 
 const SIGNUP_CONSENT_COOKIE = "oc_signup_consent";
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
+  const next = safeNextPath(searchParams.get("next"));
 
   if (!code) {
     return NextResponse.redirect(`${origin}/signin?error=no_code`);
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Persist signup consent if it's stashed
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const consentRaw = cookieStore.get(SIGNUP_CONSENT_COOKIE)?.value;
   if (consentRaw) {
     try {
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
       if (userData.user) {
         const admin = createAdminClient();
         if (admin) {
-          const reqCtx = getRequestContext();
+          const reqCtx = await getRequestContext();
           await admin
             .from("user_profiles")
             .update({

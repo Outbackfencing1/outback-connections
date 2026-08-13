@@ -15,12 +15,17 @@ export const dynamic = "force-dynamic";
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
 
-export async function generateMetadata({ params }: { params: { slug: string } }) {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
   const supabase = createClient();
   const { data } = await supabase
     .from("listings")
     .select(`title, description, postcode, category:categories(label)`)
-    .eq("slug", params.slug)
+    .eq("slug", slug)
     .eq("kind", "freight")
     .maybeSingle();
 
@@ -45,8 +50,9 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 export default async function FreightDetailPage({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
+  const { slug } = await params;
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
   const viewer = userData.user;
@@ -56,21 +62,28 @@ export default async function FreightDetailPage({
     .select(
       `
       id, anonymised_id, slug, kind, title, description, postcode, state,
-      contact_email, contact_phone, contact_best_time,
       created_at, expires_at, user_id, status,
       data_source, source_platform, source_url, business_id,
       category:categories(slug, label),
-      business:businesses(geo_lat, geo_lng),
+      business:businesses(claim_status, geo_lat, geo_lng),
       freight_details(direction, origin_postcode, destination_postcode,
         vehicle_type, cargo_type, weight_kg,
         pickup_from_date, pickup_by_date, budget_bracket)
     `
     )
-    .eq("slug", params.slug)
+    .eq("slug", slug)
     .eq("kind", "freight")
     .maybeSingle();
 
   if (!listing) notFound();
+
+  const { data: contact } = viewer
+    ? await supabase
+        .from("listings")
+        .select("contact_email, contact_phone, contact_best_time")
+        .eq("id", listing.id)
+        .maybeSingle()
+    : { data: null };
 
   const isOwner = viewer?.id === listing.user_id;
   if (!isOwner && (listing.status !== "active" || new Date(listing.expires_at) <= new Date())) {
@@ -86,6 +99,8 @@ export default async function FreightDetailPage({
   // Breadcrumb on every freight listing page.
   const isScraped = listing.data_source === "scraped";
   const biz = Array.isArray(listing.business) ? listing.business[0] : listing.business;
+  const isUnclaimedScraped =
+    isScraped && (!biz || biz.claim_status === "unclaimed");
   const pageUrl = `${BASE_URL}/freight/${listing.slug}`;
   const jsonLdBlocks: Record<string, unknown>[] = [];
   if (isScraped) {
@@ -117,7 +132,7 @@ export default async function FreightDetailPage({
     userId: viewer?.id ?? null,
     properties: { slug: listing.slug, data_source: listing.data_source },
   });
-  if (viewer && listing.data_source !== "scraped" && (listing.contact_email || listing.contact_phone)) {
+  if (viewer && listing.data_source !== "scraped" && (contact?.contact_email || contact?.contact_phone)) {
     await logEvent({
       eventType: "contact_reveal",
       entityType: "listing",
@@ -172,7 +187,7 @@ export default async function FreightDetailPage({
       {detail && <FreightDetails detail={detail} />}
 
       <section className="mt-8">
-        {listing.data_source === "scraped" ? (
+        {isUnclaimedScraped ? (
           <ScrapedNotice
             title={listing.title}
             sourcePlatform={listing.source_platform}
@@ -185,9 +200,9 @@ export default async function FreightDetailPage({
         ) : (
           <ContactBlock
             signedIn={!!viewer}
-            contactEmail={listing.contact_email}
-            contactPhone={listing.contact_phone}
-            contactBestTime={listing.contact_best_time}
+            contactEmail={contact?.contact_email ?? null}
+            contactPhone={contact?.contact_phone ?? null}
+            contactBestTime={contact?.contact_best_time ?? null}
             signInRedirect={`/freight/${listing.slug}`}
           />
         )}

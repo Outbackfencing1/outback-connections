@@ -1,4 +1,4 @@
-# Scraped Import Format (Jobs/Freight directory ingestion)
+# Scraped Import Format (Jobs/Freight/Services directory ingestion)
 
 The contract between the **scrape** step, the **preview**, and the **commit**.
 One JSON array of `ImportRecord` objects flows through all three:
@@ -12,13 +12,13 @@ scripts/scrape-rural-directory.mjs              (this file)        /dashboard/ad
 
 | field | type | required | notes |
 |---|---|---|---|
-| `vertical` | `"job" \| "freight"` | ✅ | directory vertical. job ⇒ `side=demand`; freight ⇒ `side=supply`. |
+| `vertical` | `"job" \| "freight" \| "service"` | ✅ | directory vertical. job ⇒ `side=demand`; freight/service ⇒ `side=supply`. Fencing contractors belong in `service`. |
 | `source_platform` | string | ✅ | e.g. `"google_maps"`. Part of the dedupe key + attribution. |
 | `source_external_id` | string | ✅ | the **place_id**. The dedupe key — re-imports update, never duplicate. |
 | `source_url` | string | ✅ | the original listing URL. Satisfies the `listings_scraped_needs_source` + `listings_contact_required` trust guards and is the public "how to reach them" path. |
 | `name` | string | ✅ | business name → listing title + business legal/trading name. |
 | `postcode` | string | ✅ | 4 digits. The rural geo model depends on it; rows without a real postcode are rejected. |
-| `category_slug` | string | optional | vertical-scoped taxonomy slug (AU). Unknown/missing ⇒ falls back to `jobs-other` / `freight-other` (preview shows a warning). |
+| `category_slug` | string | optional | vertical-scoped taxonomy slug (AU). Unknown/missing ⇒ falls back to `jobs-other`, `freight-other`, or `services-other` (preview shows a warning). Fencing contractors use `fencing-contractor`. |
 | `suburb` | string | optional | stored in listing `metadata`. |
 | `state` | string | optional | `state_code` on the business; `state` derived on the listing from postcode regardless. |
 | `website` | string | optional | public on the business record. |
