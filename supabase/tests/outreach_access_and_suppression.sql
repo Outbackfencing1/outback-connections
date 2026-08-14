@@ -336,6 +336,17 @@ begin
   if has_table_privilege('authenticated', 'public.outreach_staff', 'select') then
     raise exception 'authenticated can read the private outreach_staff table';
   end if;
+  if not has_table_privilege(
+    'authenticated', 'public.admin_contractor_outreach', 'select'
+  ) or has_table_privilege(
+    'authenticated', 'public.admin_contractor_outreach', 'insert'
+  ) or has_table_privilege(
+    'authenticated', 'public.admin_contractor_outreach', 'update'
+  ) or has_table_privilege(
+    'authenticated', 'public.admin_contractor_outreach', 'delete'
+  ) then
+    raise exception 'authenticated outreach view privileges are broader than SELECT';
+  end if;
   if has_function_privilege(
     'anon', 'public.current_user_can_outreach()', 'execute'
   ) or has_function_privilege(
@@ -399,6 +410,16 @@ begin
       'emailed', 'email', 'must fail', now() + interval '2 days', null, false
     );
     raise exception 'email suppression did not block email';
+  exception when sqlstate '55000' then
+    null;
+  end;
+  begin
+    perform public.record_contractor_outreach_outcome(
+      '92000000-0000-0000-0000-000000000001',
+      '95000000-0000-0000-0000-000000000015',
+      'contacted', 'email', 'must also fail', null, null, false
+    );
+    raise exception 'email suppression did not block contacted outcome';
   exception when sqlstate '55000' then
     null;
   end;
@@ -622,6 +643,33 @@ begin
 end
 $test$;
 
+select set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', '91000000-0000-0000-0000-000000000003',
+    'role', 'authenticated'
+  )::text,
+  true
+);
+set local role authenticated;
+
+do $test$
+begin
+  begin
+    perform public.record_contractor_outreach_outcome(
+      '92000000-0000-0000-0000-000000000003',
+      '95000000-0000-0000-0000-000000000034',
+      'note', null, 'revoked operator must fail', null, null, false
+    );
+    raise exception 'revoked operator retained outreach write access';
+  exception when sqlstate '42501' then
+    null;
+  end;
+end
+$test$;
+
+reset role;
+
 -- ---------- Claim state is authoritative and manual joined is impossible ----------
 update public.businesses
    set claim_status = 'claimed',
@@ -645,7 +693,7 @@ begin
     perform public.record_contractor_outreach_outcome(
       '92000000-0000-0000-0000-000000000003',
       '95000000-0000-0000-0000-000000000032',
-      'contacted', null, 'must fail joined guard', null, null, false
+      'contacted', 'phone', 'must fail joined guard', null, null, false
     );
     raise exception 'operator changed a claimed/joined record';
   exception when sqlstate '55000' then

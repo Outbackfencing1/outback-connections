@@ -70,7 +70,7 @@ export default async function TeamAccessPage() {
       <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
         <p className="font-semibold">They need their own account first.</p>
         <p className="mt-1">
-          Ask Ali or another helper to create an account on the{" "}
+          Ask the team member to create an account on the{" "}
           <Link
             href="/signup?next=/dashboard/outreach"
             target="_blank"

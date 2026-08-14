@@ -568,10 +568,20 @@ declare
   v_suppressed_channels text[] := array[]::text[];
   v_result jsonb;
 begin
-  if not public.current_user_can_outreach() then
-    raise exception 'Not authorised' using errcode = '42501';
-  end if;
   v_is_admin := public.current_user_is_admin();
+  if not v_is_admin then
+    -- Serialize operator writes with admin revocation. Whichever transaction
+    -- locks this row first completes first; a waiting write rechecks is_active
+    -- after a revoke and cannot recreate a stranded assignment.
+    perform 1
+      from public.outreach_staff s
+     where s.user_id = v_actor
+       and s.is_active = true
+     for update;
+    if not found then
+      raise exception 'Not authorised' using errcode = '42501';
+    end if;
+  end if;
 
   if p_business_id is null or p_client_action_id is null then
     raise exception 'business_id and client_action_id are required'
@@ -628,6 +638,8 @@ begin
       raise exception 'invite_sent requires email, sms or whatsapp'
         using errcode = '22023';
     end if;
+  elsif v_outcome = 'contacted' and v_method is null then
+    raise exception 'contacted requires a contact method' using errcode = '22023';
   end if;
 
   if coalesce(p_clear_follow_up, false) and p_next_follow_up_at is not null then
@@ -768,7 +780,7 @@ begin
 
   v_is_outbound := v_outcome in (
     'called', 'emailed', 'sms_sent', 'whatsapp_sent', 'invite_sent',
-    'sequence_complete'
+    'contacted', 'sequence_complete'
   );
   v_marks_contact := v_is_outbound or v_outcome in ('replied', 'contacted');
 
@@ -1153,7 +1165,7 @@ select
   end as queue_sort_at
 from prioritized p;
 
-revoke all on table public.admin_contractor_outreach from public, anon;
+revoke all on table public.admin_contractor_outreach from public, anon, authenticated;
 grant select on table public.admin_contractor_outreach to authenticated, service_role;
 
 create or replace function public.admin_contractor_outreach_counts()
@@ -1238,16 +1250,14 @@ revoke all on function public.admin_contractor_outreach_counts() from public, an
 grant execute on function public.admin_contractor_outreach_counts()
   to authenticated, service_role;
 
--- Retire the superseded authenticated write path. It predates channel
--- suppression, identity assignment and idempotency and would otherwise let a
--- full admin accidentally bypass those guarantees. Trusted backend maintenance
--- retains service_role execution; every signed-in admin/operator uses the new
--- atomic outcome RPC above.
+-- Keep the superseded admin writer available for the short rolling-deploy
+-- window. The follow-up migration revokes authenticated execution after the
+-- new app is live, avoiding a database-first outage for the current admin UI.
 revoke all on function public.record_contractor_outreach(
   uuid, text, text, text, text, timestamptz, text
-) from public, anon, authenticated;
+) from public, anon;
 grant execute on function public.record_contractor_outreach(
   uuid, text, text, text, text, timestamptz, text
-) to service_role;
+) to authenticated, service_role;
 
 notify pgrst, 'reload schema';
