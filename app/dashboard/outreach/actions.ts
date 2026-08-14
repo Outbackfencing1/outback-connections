@@ -190,7 +190,8 @@ export async function getOutreachHistory(
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) {
-    return { ok: false, message: `Couldn't load history: ${error.message}` };
+    console.error("Couldn't load outreach history", error);
+    return { ok: false, message: "Couldn't load outreach history. Please try again." };
   }
 
   const rows = (data ?? []) as Omit<OutreachHistoryRow, "actor_name">[];
