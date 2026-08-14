@@ -196,7 +196,7 @@ export async function editListing(formData: FormData): Promise<ActionResult> {
     console.error("[edit-audit] insert failed:", e);
   }
 
-  setFlash(`Saved changes to your listing.`);
+  await setFlash(`Saved changes to your listing.`);
   revalidatePath("/dashboard/listings");
   revalidatePath(`/dashboard/listings/${id}/edit`);
   redirect("/dashboard/listings");

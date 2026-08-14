@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import AuthForm from "@/components/AuthForm";
 import { createClient } from "@/lib/supabase/server";
+import { safeNextPath } from "@/lib/safe-next";
 
 export const metadata = {
   title: "Sign in — Outback Connections",
@@ -11,11 +12,20 @@ export const metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function SignInPage() {
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
+  const resolvedSearchParams = await searchParams;
+  const rawNext = Array.isArray(resolvedSearchParams.next)
+    ? resolvedSearchParams.next[0]
+    : resolvedSearchParams.next;
+  const returnTo = safeNextPath(rawNext);
   // Already signed in? Send them to the dashboard.
   const supabase = createClient();
   const { data } = await supabase.auth.getUser();
-  if (data.user) redirect("/dashboard");
+  if (data.user) redirect(returnTo);
 
   return (
     <div className="mx-auto max-w-md px-4 py-14">
@@ -25,12 +35,12 @@ export default async function SignInPage() {
       </p>
 
       <div className="mt-8">
-        <AuthForm mode="signin" />
+        <AuthForm mode="signin" returnTo={returnTo} />
       </div>
 
       <p className="mt-8 text-sm text-neutral-700">
         Don&apos;t have an account?{" "}
-        <Link href="/signup" className="underline">
+        <Link href={`/signup?next=${encodeURIComponent(returnTo)}`} className="underline">
           Sign up
         </Link>
         .

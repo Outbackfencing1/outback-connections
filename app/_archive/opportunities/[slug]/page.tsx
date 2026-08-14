@@ -1,11 +1,12 @@
-type Props = { params: { slug: string } };
+type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props) {
-  return { title: `${params.slug.replace(/-/g, " ")} – Opportunity` };
+  const { slug } = await params;
+  return { title: `${slug.replace(/-/g, " ")} – Opportunity` };
 }
 
 export default async function OpportunityDetailPage({ params }: Props) {
-  const { slug } = params;
+  const { slug } = await params;
   // placeholder details
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">

@@ -8,9 +8,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 type Json = Record<string, unknown>;
 
-function reqMeta(): { ip: string | null; user_agent: string | null } {
+async function reqMeta(): Promise<{ ip: string | null; user_agent: string | null }> {
   try {
-    const h = headers();
+    const h = await headers();
     const xff = h.get("x-forwarded-for");
     const ip = xff ? xff.split(",")[0]?.trim() || null : h.get("x-real-ip");
     return { ip: ip || null, user_agent: h.get("user-agent") || null };
@@ -30,7 +30,7 @@ export async function logEvent(args: {
 }): Promise<void> {
   const admin = createAdminClient();
   if (!admin) return;
-  const { ip, user_agent } = reqMeta();
+  const { ip, user_agent } = await reqMeta();
   try {
     await admin.from("events").insert({
       event_type: args.eventType,
@@ -59,7 +59,7 @@ export async function logSearch(args: {
 }): Promise<void> {
   const admin = createAdminClient();
   if (!admin) return;
-  const { ip, user_agent } = reqMeta();
+  const { ip, user_agent } = await reqMeta();
   try {
     await admin.from("search_queries").insert({
       vertical: args.vertical ?? null,

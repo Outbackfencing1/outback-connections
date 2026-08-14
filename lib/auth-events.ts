@@ -22,9 +22,9 @@ export type LogAuthEventInput = {
   eventType: AuthEventType;
 };
 
-export function getRequestContext(): { ip: string | null; userAgent: string | null } {
+export async function getRequestContext(): Promise<{ ip: string | null; userAgent: string | null }> {
   try {
-    const h = headers();
+    const h = await headers();
     const fwd = h.get("x-forwarded-for");
     const ip = fwd ? fwd.split(",")[0]?.trim() ?? null : h.get("x-real-ip");
     const ua = h.get("user-agent");
@@ -38,7 +38,7 @@ export async function logAuthEvent(input: LogAuthEventInput): Promise<void> {
   try {
     const admin = createAdminClient();
     if (!admin) return;
-    const { ip, userAgent } = getRequestContext();
+    const { ip, userAgent } = await getRequestContext();
     await admin.from("auth_events").insert({
       user_id: input.userId ?? null,
       email: input.email ?? null,

@@ -25,9 +25,10 @@ function getStr(p: SearchParams, key: string): string {
 export async function generateMetadata({
   params,
 }: {
-  params: { "category-slug": string };
+  params: Promise<{ "category-slug": string }>;
 }) {
-  const slug = params["category-slug"];
+  const resolvedParams = await params;
+  const slug = resolvedParams["category-slug"];
   return {
     title: `${slug.replace(/-/g, " ")} — Outback Connections`,
     description: `Rural ${slug.replace(/-/g, " ")} services and requests on Outback Connections.`,
@@ -38,11 +39,12 @@ export default async function ServiceCategoryPage({
   params,
   searchParams,
 }: {
-  params: { "category-slug": string };
-  searchParams: SearchParams;
+  params: Promise<{ "category-slug": string }>;
+  searchParams: Promise<SearchParams>;
 }) {
+  const [resolvedParams, resolvedSearchParams] = await Promise.all([params, searchParams]);
   const supabase = createClient();
-  const categorySlug = params["category-slug"];
+  const categorySlug = resolvedParams["category-slug"];
 
   // Resolve category
   const { data: cat } = await supabase
@@ -55,16 +57,18 @@ export default async function ServiceCategoryPage({
     notFound();
   }
 
-  const postcode = getStr(searchParams, "postcode").trim();
-  const direction = getStr(searchParams, "direction").trim();
-  const page = Math.max(1, parseInt(getStr(searchParams, "page") || "1", 10) || 1);
+  const postcode = getStr(resolvedSearchParams, "postcode").trim();
+  const direction = getStr(resolvedSearchParams, "direction").trim();
+  const page = Math.max(1, parseInt(getStr(resolvedSearchParams, "page") || "1", 10) || 1);
 
   let query = supabase
     .from("listings")
     .select(
       `
       anonymised_id, slug, kind, title, description, postcode, state, created_at,
+      data_source, source_platform,
       category:categories(slug, label),
+      business:businesses(claim_status),
       service_details!inner(direction, rate_type, rate_amount, travel_willingness)
     `,
       { count: "exact" }
@@ -177,6 +181,11 @@ export default async function ServiceCategoryPage({
                     state: l.state,
                     created_at: l.created_at,
                     category: Array.isArray(l.category) ? l.category[0] ?? null : l.category,
+                    data_source: l.data_source,
+                    source_platform: l.source_platform,
+                    business_claim_status: Array.isArray(l.business)
+                      ? l.business[0]?.claim_status ?? null
+                      : (l.business as { claim_status?: string } | null)?.claim_status ?? null,
                   }}
                 />
               </li>

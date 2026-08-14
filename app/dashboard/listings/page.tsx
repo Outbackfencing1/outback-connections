@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { readAndClearFlash } from "@/lib/posting";
 import { kindLabel, listingHref, relativeTime } from "@/lib/format";
+import { requestTimestamp } from "@/lib/request-time";
 import OwnerActions from "@/components/detail/OwnerActions";
 import CloseListingForm from "@/components/detail/CloseListingForm";
 
@@ -33,7 +34,7 @@ export default async function MyListingsPage() {
   const { data } = await supabase.auth.getUser();
   if (!data.user) redirect("/signin?next=/dashboard/listings");
 
-  const flash = readAndClearFlash();
+  const flash = await readAndClearFlash();
 
   const { data: rows } = await supabase
     .from("listings")
@@ -47,7 +48,7 @@ export default async function MyListingsPage() {
     .limit(200);
 
   const listings: ListingRow[] = (rows ?? []) as unknown as ListingRow[];
-  const now = Date.now();
+  const now = await requestTimestamp();
 
   const active = listings.filter(
     (l) => l.status === "active" && new Date(l.expires_at).getTime() > now

@@ -275,7 +275,7 @@ Admin queue: ${BASE_URL}/dashboard/admin/flags`;
 
   // Light-touch capture of submitter context (not stored on the row to keep
   // the table free of incidental PII; logged only at request time)
-  const h = headers();
+  const h = await headers();
   console.info("[concerns] notice", reference, "from", h.get("x-forwarded-for") ?? "?");
 
   return {

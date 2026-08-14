@@ -68,7 +68,6 @@ const QUERIES = {
     { term: "agricultural contractor", category_slug: "jobs-other" },
     { term: "feedlot", category_slug: "dairy-feedlot" },
     { term: "dairy farm", category_slug: "dairy-feedlot" },
-    { term: "fencing contractor", category_slug: "fencing-labour" },
     { term: "grain farm", category_slug: "harvest-worker" },
   ],
   // Carrier directory (the freight "twin" — same script in freight mode, so the
@@ -118,6 +117,8 @@ const QUERIES = {
   // services-other (same fallback jobs/freight use); once it is applied, a
   // re-scrape reclassifies them automatically (idempotent).
   services: [
+    // Contractor businesses are service suppliers, not job advertisements.
+    { term: "fencing contractor", category_slug: "fencing-contractor" },
     // generic rural retail / merchandise
     { term: "rural supplies store", category_slug: "rural-supplies" },
     { term: "farm supplies", category_slug: "rural-supplies" },

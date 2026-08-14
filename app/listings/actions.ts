@@ -140,18 +140,18 @@ export async function deleteListing(formData: FormData): Promise<void> {
     .maybeSingle();
 
   if (!listing || listing.user_id !== userData.user.id) {
-    setFlash("That listing isn't yours to delete.");
+    await setFlash("That listing isn't yours to delete.");
     redirect("/dashboard/listings");
   }
 
   const { error } = await supabase.from("listings").delete().eq("id", id);
   if (error) {
     console.error("[delete] failed:", error.message);
-    setFlash("Couldn't delete the listing. Please try again.");
+    await setFlash("Couldn't delete the listing. Please try again.");
     redirect("/dashboard/listings");
   }
 
-  setFlash(`Deleted: ${listing.title}`);
+  await setFlash(`Deleted: ${listing.title}`);
   revalidatePath("/dashboard/listings");
   revalidatePath("/jobs");
   revalidatePath("/freight");

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { requestTimestamp } from "@/lib/request-time";
 import { signOut } from "./actions";
 
 export const metadata = {
@@ -17,7 +18,8 @@ export default async function DashboardPage() {
 
   const user = data.user;
   const createdAt = user.created_at ? new Date(user.created_at) : null;
-  const ageMs = createdAt ? Date.now() - createdAt.getTime() : 0;
+  const now = await requestTimestamp();
+  const ageMs = createdAt ? now - createdAt.getTime() : 0;
   const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
   const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
   const canPost = ageHours >= 24;

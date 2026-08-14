@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidateTag } from "next/cache";
+import { updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
 export type ToggleResult =
@@ -37,6 +37,6 @@ export async function setLockdown(input: {
     return { ok: false, message: "Couldn't toggle lockdown." };
   }
 
-  revalidateTag("lockdown");
+  updateTag("lockdown");
   return { ok: true, active: input.active };
 }

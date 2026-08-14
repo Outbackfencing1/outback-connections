@@ -38,7 +38,9 @@ export default async function ServicesLandingPage() {
     .select(
       `
       anonymised_id, slug, kind, title, description, postcode, state, created_at,
-      category:categories(slug, label)
+      data_source, source_platform,
+      category:categories(slug, label),
+      business:businesses(claim_status)
     `
     )
     .in("kind", ["service_offering", "service_request"])
@@ -133,6 +135,11 @@ export default async function ServicesLandingPage() {
                   state: l.state,
                   created_at: l.created_at,
                   category: Array.isArray(l.category) ? l.category[0] ?? null : l.category,
+                  data_source: l.data_source,
+                  source_platform: l.source_platform,
+                  business_claim_status: Array.isArray(l.business)
+                    ? l.business[0]?.claim_status ?? null
+                    : (l.business as { claim_status?: string } | null)?.claim_status ?? null,
                 }}
               />
             </li>

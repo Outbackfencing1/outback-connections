@@ -8,11 +8,12 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 type Props = {
-  searchParams: { case?: string | string[] };
+  searchParams: Promise<{ case?: string | string[] }>;
 };
 
-export default function HelpThanksPage({ searchParams }: Props) {
-  const raw = searchParams.case;
+export default async function HelpThanksPage({ searchParams }: Props) {
+  const resolvedSearchParams = await searchParams;
+  const raw = resolvedSearchParams.case;
   const caseId = Array.isArray(raw) ? raw[0] : raw;
   const looksValid = !!caseId && /^HR-[A-Z0-9]{8}$/.test(caseId);
   const isDev = caseId === "HR-DEVMODE";

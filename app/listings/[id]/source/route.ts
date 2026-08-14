@@ -11,7 +11,11 @@ export const dynamic = "force-dynamic";
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
   const admin = createAdminClient();
   let target = BASE_URL;
 
@@ -19,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     const { data: listing } = await admin
       .from("listings")
       .select("id, source_url, vertical, kind, slug")
-      .eq("id", params.id)
+      .eq("id", id)
       .maybeSingle();
 
     if (listing?.source_url) {

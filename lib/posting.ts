@@ -169,8 +169,8 @@ export async function checkPostingRateLimit(
 
 const FLASH_COOKIE = "oc_flash";
 
-export function setFlash(message: string) {
-  cookies().set(FLASH_COOKIE, message, {
+export async function setFlash(message: string): Promise<void> {
+  (await cookies()).set(FLASH_COOKIE, message, {
     maxAge: 60,
     httpOnly: true,
     sameSite: "lax",
@@ -178,8 +178,8 @@ export function setFlash(message: string) {
   });
 }
 
-export function readAndClearFlash(): string | null {
-  const c = cookies();
+export async function readAndClearFlash(): Promise<string | null> {
+  const c = await cookies();
   const v = c.get(FLASH_COOKIE)?.value ?? null;
   // Only writeable in actions/route handlers; in server components this throws
   try {
@@ -194,8 +194,8 @@ export function readAndClearFlash(): string | null {
 // Helpers for FormData parsing
 // ============================================================
 
-export function clientIp(): string | null {
-  const h = headers();
+export async function clientIp(): Promise<string | null> {
+  const h = await headers();
   const xff = h.get("x-forwarded-for");
   if (xff) {
     const first = xff.split(",")[0]?.trim();

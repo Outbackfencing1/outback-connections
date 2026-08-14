@@ -9,8 +9,9 @@ const BASE_URL =
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const { searchParams } = new URL(request.url);
   const token = searchParams.get("t");
   if (!token) {
@@ -23,7 +24,7 @@ export async function GET(
       `${BASE_URL}/dashboard/listings?renew=${encodeURIComponent(v.reason)}`
     );
   }
-  if (v.payload.p !== "renew" || v.payload.l !== params.id) {
+  if (v.payload.p !== "renew" || v.payload.l !== id) {
     return NextResponse.redirect(`${BASE_URL}/dashboard/listings?renew=mismatch`);
   }
 
@@ -36,7 +37,7 @@ export async function GET(
   const { data: listing } = await admin
     .from("listings")
     .select("id, user_id, status, title")
-    .eq("id", params.id)
+    .eq("id", id)
     .maybeSingle();
 
   if (!listing || listing.user_id !== v.payload.u) {
@@ -53,7 +54,7 @@ export async function GET(
   await admin
     .from("listings")
     .update({ expires_at: newExpiry, status: newStatus })
-    .eq("id", params.id);
+    .eq("id", id);
 
   return NextResponse.redirect(`${BASE_URL}/dashboard/listings?renew=ok`);
 }
