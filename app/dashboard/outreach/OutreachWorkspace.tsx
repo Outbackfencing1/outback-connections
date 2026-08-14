@@ -6,12 +6,13 @@ import { useMemo, useRef, useState } from "react";
 import {
   getOutreachHistory,
   recordOutreachOutcome,
+  type OutreachHistoryCursor,
   type OutreachHistoryRow,
   type OutreachOutcome,
   type RecordOutcomeInput,
 } from "./actions";
 
-export type OutreachScope = "mine" | "unassigned";
+export type OutreachScope = "mine" | "unassigned" | "team";
 
 export type OutreachProspect = {
   business_id: string;
@@ -49,16 +50,26 @@ export type OutreachProspect = {
   queue_priority: number;
   queue_sort_at: string | null;
   updated_at: string | null;
+  latest_activity_action: string | null;
+  latest_activity_outcome: string | null;
+  latest_activity_at: string | null;
+  latest_activity_actor_name: string | null;
+  last_contact_event_method: string | null;
+  last_contact_event_at: string | null;
+  last_contact_actor_name: string | null;
 };
 
 type Props = {
   rows: OutreachProspect[];
   scope: OutreachScope;
   operator: { userId: string; displayName: string };
-  counts: { mine: number | null; unassigned: number | null };
+  counts: { mine: number | null; unassigned: number | null; team: number | null };
   baseUrl: string;
   query: string;
   nowMs: number;
+  teamPage: number;
+  teamPageSize: number;
+  teamTotal: number | null;
 };
 
 type EmailTemplateId = "first_touch" | "follow_up" | "close_out";
@@ -77,6 +88,9 @@ export default function OutreachWorkspace({
   baseUrl,
   query,
   nowMs,
+  teamPage,
+  teamPageSize,
+  teamTotal,
 }: Props) {
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
   const [lastResult, setLastResult] = useState<string | null>(null);
@@ -100,7 +114,7 @@ export default function OutreachWorkspace({
   return (
     <>
       <div className="mt-6 flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-2" aria-label="Outreach queue">
+        <div className="flex flex-wrap gap-2" aria-label="Outreach views">
           <ScopeLink
             href={withQuery("/dashboard/outreach?scope=mine", query)}
             active={scope === "mine"}
@@ -113,11 +127,17 @@ export default function OutreachWorkspace({
             label="Unassigned"
             count={counts.unassigned}
           />
+          <ScopeLink
+            href={withQuery("/dashboard/outreach?scope=team", query)}
+            active={scope === "team"}
+            label="Team tracker"
+            count={counts.team}
+          />
         </div>
         <form action="/dashboard/outreach" method="get" className="flex gap-2">
           <input type="hidden" name="scope" value={scope} />
           <label className="sr-only" htmlFor="outreach-search">
-            Search the current queue
+            Search contractor outreach
           </label>
           <input
             id="outreach-search"
@@ -135,75 +155,352 @@ export default function OutreachWorkspace({
         </form>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm text-neutral-600">
-        <p>
-          {visibleRows.length} remaining in this view
-          {rows.length >= 15 ? " (today's first 15)" : ""}
-        </p>
-        {current && (
-          <button
-            type="button"
-            onClick={advance}
-            className="font-semibold text-green-800 underline underline-offset-2"
-          >
-            Skip for now and show next
-          </button>
-        )}
-      </div>
-
-      {lastResult && (
-        <p
-          role="status"
-          className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-900"
-        >
-          {lastResult} The next record is ready.
-        </p>
-      )}
-
-      {current ? (
-        current.assigned_user_id ? (
-          <ProspectPanel
-            key={current.business_id}
-            row={current}
-            operator={operator}
-            baseUrl={baseUrl}
-            nowMs={nowMs}
-            onComplete={completeCurrent}
-          />
-        ) : (
-          <UnassignedGate
-            key={current.business_id}
-            row={current}
-            operator={operator}
-            nowMs={nowMs}
-          />
-        )
+      {scope === "team" ? (
+        <TeamTracker
+          rows={rows}
+          query={query}
+          page={teamPage}
+          pageSize={teamPageSize}
+          total={teamTotal}
+        />
       ) : (
-        <EmptyQueue scope={scope} query={query} otherCount={
-          scope === "mine" ? counts.unassigned : counts.mine
-        } />
-      )}
+        <>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm text-neutral-600">
+            <p>
+              {visibleRows.length} remaining in this view
+              {rows.length >= 15 ? " (today's first 15)" : ""}
+            </p>
+            {current && (
+              <button
+                type="button"
+                onClick={advance}
+                className="font-semibold text-green-800 underline underline-offset-2"
+              >
+                Skip for now and show next
+              </button>
+            )}
+          </div>
 
-      {visibleRows.length > 1 && (
-        <div className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-            Up next
-          </p>
-          <ol className="mt-2 divide-y divide-neutral-200">
-            {visibleRows.slice(1, 4).map((row) => (
-              <li key={row.business_id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                <span className="min-w-0 truncate font-medium text-neutral-900">
-                  {row.business_name}
-                </span>
-                <span className="shrink-0 text-xs text-neutral-600">
-                  {priorityLabel(row, nowMs)}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
+          {lastResult && (
+            <p
+              role="status"
+              className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-900"
+            >
+              {lastResult} The next record is ready.
+            </p>
+          )}
+
+          {current ? (
+            current.assigned_user_id ? (
+              <ProspectPanel
+                key={current.business_id}
+                row={current}
+                operator={operator}
+                baseUrl={baseUrl}
+                nowMs={nowMs}
+                onComplete={completeCurrent}
+              />
+            ) : (
+              <UnassignedGate
+                key={current.business_id}
+                row={current}
+                operator={operator}
+                nowMs={nowMs}
+              />
+            )
+          ) : (
+            <EmptyQueue
+              scope={scope}
+              query={query}
+              otherCount={scope === "mine" ? counts.unassigned : counts.mine}
+            />
+          )}
+
+          {visibleRows.length > 1 && (
+            <div className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                Up next
+              </p>
+              <ol className="mt-2 divide-y divide-neutral-200">
+                {visibleRows.slice(1, 4).map((row) => (
+                  <li key={row.business_id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                    <span className="min-w-0 truncate font-medium text-neutral-900">
+                      {row.business_name}
+                    </span>
+                    <span className="shrink-0 text-xs text-neutral-600">
+                      {priorityLabel(row, nowMs)}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </>
       )}
     </>
+  );
+}
+
+function TeamTracker({
+  rows,
+  query,
+  page,
+  pageSize,
+  total,
+}: {
+  rows: OutreachProspect[];
+  query: string;
+  page: number;
+  pageSize: number;
+  total: number | null;
+}) {
+  const start = rows.length === 0 ? 0 : (page - 1) * pageSize + 1;
+  const end = rows.length === 0 ? 0 : start + rows.length - 1;
+  const hasPrevious = page > 1;
+  const hasNext = total !== null && end < total;
+
+  return (
+    <section className="mt-4 space-y-4" aria-labelledby="team-tracker-heading">
+      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+        <h2 id="team-tracker-heading" className="font-bold">
+          Shared team tracker
+        </h2>
+        <p className="mt-1 leading-relaxed">
+          Read-only overview of every active and closed contractor record. It shows who owns
+          the work, what happened, notes, and the next follow-up. Use Mine or Unassigned to
+          record a new outcome.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-neutral-600">
+        <p>
+          {total === null
+            ? `${rows.length} records shown`
+            : total === 0
+              ? "No matching contractor records"
+              : `Showing ${start}–${end} of ${total}`}
+        </p>
+        <p>Includes completed and do-not-contact records.</p>
+      </div>
+
+      {rows.length > 0 ? (
+        <ol className="space-y-3">
+          {rows.map((row) => (
+            <TeamTrackerCard key={row.business_id} row={row} />
+          ))}
+        </ol>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center">
+          <h3 className="text-lg font-bold text-neutral-900">
+            {query ? "No matching team records" : "No contractor records yet"}
+          </h3>
+          {query && (
+            <Link
+              href="/dashboard/outreach?scope=team"
+              className="mt-3 inline-block font-semibold text-green-800 underline"
+            >
+              Clear search
+            </Link>
+          )}
+        </div>
+      )}
+
+      {(hasPrevious || hasNext) && (
+        <nav className="flex items-center justify-between gap-3" aria-label="Team tracker pages">
+          {hasPrevious ? (
+            <Link
+              href={withQuery(`/dashboard/outreach?scope=team&page=${page - 1}`, query)}
+              className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-semibold text-neutral-800 hover:bg-neutral-50"
+            >
+              Previous
+            </Link>
+          ) : (
+            <span />
+          )}
+          {hasNext && (
+            <Link
+              href={withQuery(`/dashboard/outreach?scope=team&page=${page + 1}`, query)}
+              className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-semibold text-neutral-800 hover:bg-neutral-50"
+            >
+              Next
+            </Link>
+          )}
+        </nav>
+      )}
+    </section>
+  );
+}
+
+function TeamTrackerCard({
+  row,
+}: {
+  row: OutreachProspect;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [history, setHistory] = useState<OutreachHistoryRow[] | null>(null);
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const [historyNextCursor, setHistoryNextCursor] =
+    useState<OutreachHistoryCursor | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  async function loadHistoryPage(cursor: OutreachHistoryCursor | null) {
+    if (historyBusy) return;
+    setHistoryBusy(true);
+    setHistoryError(null);
+    const result = await getOutreachHistory(row.business_id, cursor);
+    setHistoryBusy(false);
+    if (result.ok) {
+      setHistory((currentRows) =>
+        cursor === null ? result.rows : [...(currentRows ?? []), ...result.rows]
+      );
+      setHistoryNextCursor(result.nextCursor);
+    } else {
+      setHistoryError(result.message);
+    }
+  }
+
+  async function toggleHistory() {
+    const nextExpanded = !expanded;
+    setExpanded(nextExpanded);
+    if (!nextExpanded || history || historyBusy) return;
+    await loadHistoryPage(null);
+  }
+
+  return (
+    <li className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
+      <div className="p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={row.outreach_status} />
+              {row.is_suppressed && (
+                <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800">
+                  Contact blocked
+                </span>
+              )}
+            </div>
+            <h3 className="mt-2 text-lg font-bold text-neutral-950">{row.business_name}</h3>
+            <p className="mt-1 text-sm text-neutral-600">
+              {[row.suburb, row.state_code, row.postcode].filter(Boolean).join(" ") ||
+                "Location not recorded"}
+            </p>
+          </div>
+          <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-700 sm:max-w-xs">
+            <p className="font-semibold text-neutral-900">Latest update</p>
+            {row.latest_activity_at &&
+            row.latest_activity_actor_name &&
+            (row.latest_activity_outcome || row.latest_activity_action) ? (
+              <>
+                <p className="mt-1">
+                  {humanise(row.latest_activity_outcome || row.latest_activity_action!)} by{" "}
+                  {row.latest_activity_actor_name}
+                </p>
+                <p className="mt-0.5 text-neutral-500">
+                  {formatDate(row.latest_activity_at)}
+                </p>
+              </>
+            ) : (
+              <p className="mt-1">No activity recorded yet.</p>
+            )}
+          </div>
+        </div>
+
+        <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <TrackerValue label="Assigned to" value={row.assigned_name || "Unassigned"} />
+          <TrackerValue
+            label="Last contacted"
+            value={
+              row.last_contact_event_at || row.last_contacted_at
+                ? `${formatDate(row.last_contact_event_at || row.last_contacted_at!)}${
+                    row.last_contact_event_method
+                      ? ` · ${humanise(row.last_contact_event_method)}`
+                      : ""
+                  }${row.last_contact_actor_name ? ` · by ${row.last_contact_actor_name}` : ""}`
+                : "Never"
+            }
+          />
+          <TrackerValue
+            label="Next follow-up"
+            value={row.next_follow_up_at ? formatDate(row.next_follow_up_at) : "Not scheduled"}
+          />
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              Latest note
+            </dt>
+            <dd className="mt-1 whitespace-pre-wrap break-words text-neutral-800">
+              {row.latest_note || "No note recorded"}
+            </dd>
+          </div>
+        </dl>
+
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => void toggleHistory()}
+          className="mt-4 font-semibold text-green-800 underline underline-offset-2"
+        >
+          {expanded ? "Hide activity history" : "View activity history"}
+        </button>
+      </div>
+
+      {expanded && (
+        <div className="border-t border-neutral-200 bg-neutral-50 p-4 sm:p-5">
+          {historyBusy ? (
+            <p className="text-sm text-neutral-600">Loading activity history...</p>
+          ) : historyError ? (
+            <p className="text-sm font-medium text-red-800">{historyError}</p>
+          ) : history && history.length > 0 ? (
+            <>
+              <p className="mb-3 text-xs text-neutral-500">Saved updates, newest first.</p>
+              <ol className="space-y-3 border-l border-neutral-300 pl-4">
+                {history.map((event) => (
+                  <li key={event.id} className="text-sm text-neutral-700">
+                    <p className="font-semibold text-neutral-950">
+                      {humanise(event.outcome || event.action)} · {event.actor_name}
+                    </p>
+                    <p className="text-xs text-neutral-500">
+                      {formatDate(event.created_at)}
+                      {event.contact_method ? ` · ${humanise(event.contact_method)}` : ""}
+                    </p>
+                    {event.note && <p className="mt-1 whitespace-pre-wrap">{event.note}</p>}
+                    {event.next_follow_up_at && (
+                      <p className="mt-1">Follow-up: {formatDate(event.next_follow_up_at)}</p>
+                    )}
+                    {event.outcome === "assigned" && event.assigned_name && (
+                      <p className="mt-1">Assigned to: {event.assigned_name}</p>
+                    )}
+                    {event.outcome === "unassigned" && (
+                      <p className="mt-1">Assigned to: Unassigned</p>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </>
+          ) : (
+            <p className="text-sm text-neutral-600">No activity history yet.</p>
+          )}
+          {historyNextCursor !== null && (
+            <button
+              type="button"
+              disabled={historyBusy}
+              onClick={() => void loadHistoryPage(historyNextCursor)}
+              className="mt-3 font-semibold text-green-800 underline underline-offset-2 disabled:opacity-50"
+            >
+              {historyBusy ? "Loading..." : "Load older activity"}
+            </button>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
+function TrackerValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{label}</dt>
+      <dd className="mt-1 text-neutral-800">{value}</dd>
+    </div>
   );
 }
 
@@ -401,6 +698,8 @@ function ProspectPanel({
   const [messageOk, setMessageOk] = useState(false);
   const [history, setHistory] = useState<OutreachHistoryRow[] | null>(null);
   const [historyBusy, setHistoryBusy] = useState(false);
+  const [historyNextCursor, setHistoryNextCursor] =
+    useState<OutreachHistoryCursor | null>(null);
   const pendingAction = useRef<{ key: string; id: string } | null>(null);
 
   const emailSource = row.contact_source_url || row.source_url;
@@ -496,13 +795,17 @@ function ProspectPanel({
     }
   }
 
-  async function loadHistory() {
-    if (history || historyBusy) return;
+  async function loadHistory(cursor: OutreachHistoryCursor | null = null) {
+    if (historyBusy || (cursor === null && history)) return;
     setHistoryBusy(true);
-    const result = await getOutreachHistory(row.business_id);
+    const result = await getOutreachHistory(row.business_id, cursor);
     setHistoryBusy(false);
-    if (result.ok) setHistory(result.rows);
-    else {
+    if (result.ok) {
+      setHistory((currentRows) =>
+        cursor === null ? result.rows : [...(currentRows ?? []), ...result.rows]
+      );
+      setHistoryNextCursor(result.nextCursor);
+    } else {
       setMessageOk(false);
       setMessage(result.message);
     }
@@ -888,12 +1191,28 @@ function ProspectPanel({
                     {event.next_follow_up_at && (
                       <p className="mt-1">Follow-up: {formatDate(event.next_follow_up_at)}</p>
                     )}
+                    {event.outcome === "assigned" && event.assigned_name && (
+                      <p className="mt-1">Assigned to: {event.assigned_name}</p>
+                    )}
+                    {event.outcome === "unassigned" && (
+                      <p className="mt-1">Assigned to: Unassigned</p>
+                    )}
                   </li>
                 ))}
               </ol>
             ) : history ? (
               <p className="mt-3 text-xs text-neutral-600">No history yet.</p>
             ) : null}
+            {historyNextCursor !== null && (
+              <button
+                type="button"
+                disabled={historyBusy}
+                onClick={() => void loadHistory(historyNextCursor)}
+                className="mt-3 font-semibold text-green-800 underline underline-offset-2 disabled:opacity-50"
+              >
+                {historyBusy ? "Loading..." : "Load older activity"}
+              </button>
+            )}
           </details>
 
           {message && (

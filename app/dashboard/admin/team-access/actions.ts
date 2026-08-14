@@ -11,6 +11,12 @@ const EmailSchema = z
   .max(254, "That email address is too long.")
   .transform((email) => email.toLowerCase());
 
+const DisplayNameSchema = z
+  .string()
+  .trim()
+  .min(2, "Enter the team member's name.")
+  .max(80, "Keep the name under 80 characters.");
+
 export type TeamAccessResult =
   | { ok: true; message: string }
   | { ok: false; message: string };
@@ -36,13 +42,21 @@ async function getAdminClient() {
 }
 
 export async function grantOutreachAccess(
-  emailInput: string
+  emailInput: string,
+  displayNameInput: string
 ): Promise<TeamAccessResult> {
   const parsed = EmailSchema.safeParse(emailInput);
   if (!parsed.success) {
     return {
       ok: false,
       message: parsed.error.issues[0]?.message || "Check the email address.",
+    };
+  }
+  const parsedName = DisplayNameSchema.safeParse(displayNameInput);
+  if (!parsedName.success) {
+    return {
+      ok: false,
+      message: parsedName.error.issues[0]?.message || "Check the team member's name.",
     };
   }
 
@@ -55,6 +69,7 @@ export async function grantOutreachAccess(
   const { error } = await auth.supabase.rpc("admin_set_outreach_staff", {
     p_email: parsed.data,
     p_active: true,
+    p_display_name: parsedName.data,
   });
 
   if (error) {
@@ -91,6 +106,7 @@ export async function revokeOutreachAccess(
   const { error } = await auth.supabase.rpc("admin_set_outreach_staff", {
     p_email: parsed.data,
     p_active: false,
+    p_display_name: null,
   });
 
   if (error) {

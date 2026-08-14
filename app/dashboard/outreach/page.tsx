@@ -6,9 +6,10 @@ import OutreachWorkspace, {
   type OutreachProspect,
   type OutreachScope,
 } from "./OutreachWorkspace";
+import AdminIdentitySetup from "./AdminIdentitySetup";
 
 export const metadata = {
-  title: "My outreach work — Outback Connections",
+  title: "Contractor outreach — Outback Connections",
   robots: { index: false, follow: false },
 };
 
@@ -16,6 +17,7 @@ export const dynamic = "force-dynamic";
 
 const VIEW = "admin_contractor_outreach";
 const DAILY_LIMIT = 15;
+const TEAM_PAGE_SIZE = 25;
 const ACTIVE_STATUSES = [
   "not_contacted",
   "attempted",
@@ -42,6 +44,8 @@ export default async function OutreachPage({
   const nowMs = await requestTimestamp();
   const scope = readScope(params.scope);
   const queryText = readText(params.q, 100);
+  const teamPage = scope === "team" ? readPage(params.page) : 1;
+  const teamOffset = (teamPage - 1) * TEAM_PAGE_SIZE;
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) {
@@ -71,18 +75,24 @@ export default async function OutreachPage({
        category_label, outreach_status, assigned_user_id, assigned_name,
        last_contact_method, last_contacted_at, next_follow_up_at, latest_note,
        suppressed_channels, is_suppressed, email_suppressed, phone_suppressed,
-       sms_suppressed, whatsapp_suppressed, queue_priority, queue_sort_at, updated_at`
-    )
-    .in(
+       sms_suppressed, whatsapp_suppressed, queue_priority, queue_sort_at, updated_at,
+       latest_activity_action, latest_activity_outcome, latest_activity_at,
+       latest_activity_actor_name, last_contact_event_method, last_contact_event_at,
+       last_contact_actor_name`,
+      { count: "exact" }
+    );
+
+  if (scope !== "team") {
+    rowQuery = rowQuery.in(
       "outreach_status",
       queryText ? [...ACTIVE_STATUSES, "sequence_complete"] : [...ACTIVE_STATUSES]
     );
-
-  rowQuery =
-    scope === "mine"
-      ? rowQuery.eq("assigned_user_id", userData.user.id)
-      : rowQuery.is("assigned_user_id", null);
-  if (!queryText) rowQuery = rowQuery.lt("queue_priority", 90);
+    rowQuery =
+      scope === "mine"
+        ? rowQuery.eq("assigned_user_id", userData.user.id)
+        : rowQuery.is("assigned_user_id", null);
+    if (!queryText) rowQuery = rowQuery.lt("queue_priority", 90);
+  }
 
   const searchPattern = safeLikePattern(queryText);
   if (searchPattern) {
@@ -90,11 +100,18 @@ export default async function OutreachPage({
       `business_name.ilike.%${searchPattern}%,suburb.ilike.%${searchPattern}%,postcode.ilike.%${searchPattern}%`
     );
   }
-  rowQuery = rowQuery
-    .order("queue_priority", { ascending: true })
-    .order("queue_sort_at", { ascending: true, nullsFirst: false })
-    .order("business_id", { ascending: true })
-    .limit(DAILY_LIMIT);
+  rowQuery =
+    scope === "team"
+      ? rowQuery
+          .order("updated_at", { ascending: false, nullsFirst: false })
+          .order("business_name", { ascending: true })
+          .order("business_id", { ascending: true })
+          .range(teamOffset, teamOffset + TEAM_PAGE_SIZE - 1)
+      : rowQuery
+          .order("queue_priority", { ascending: true })
+          .order("queue_sort_at", { ascending: true, nullsFirst: false })
+          .order("business_id", { ascending: true })
+          .limit(DAILY_LIMIT);
 
   const mineCountQuery = supabase
     .from(VIEW)
@@ -108,6 +125,9 @@ export default async function OutreachPage({
     .in("outreach_status", [...ACTIVE_STATUSES])
     .lt("queue_priority", 90)
     .is("assigned_user_id", null);
+  const teamCountQuery = supabase
+    .from(VIEW)
+    .select("business_id", { count: "exact", head: true });
   let dueCountQuery = supabase
     .from(VIEW)
     .select("business_id", { count: "exact", head: true })
@@ -127,7 +147,7 @@ export default async function OutreachPage({
       "assigned_user_id",
       userData.user.id
     );
-  } else {
+  } else if (scope === "unassigned") {
     dueCountQuery = dueCountQuery.is("assigned_user_id", null);
     firstTouchCountQuery = firstTouchCountQuery.is("assigned_user_id", null);
   }
@@ -139,6 +159,8 @@ export default async function OutreachPage({
     dueCountResult,
     firstTouchCountResult,
     staffResult,
+    teamCountResult,
+    adminResult,
   ] =
     await Promise.all([
       rowQuery,
@@ -147,6 +169,8 @@ export default async function OutreachPage({
       dueCountQuery,
       firstTouchCountQuery,
       supabase.rpc("outreach_list_assignable_staff"),
+      teamCountQuery,
+      supabase.rpc("current_user_is_admin"),
     ]);
 
   if (rowResult.error) {
@@ -157,14 +181,32 @@ export default async function OutreachPage({
       </PageShell>
     );
   }
-
+  if (staffResult.error || adminResult.error) {
+    console.error(
+      "[outreach] staff identity load failed:",
+      staffResult.error?.message || adminResult.error?.message
+    );
+    return (
+      <PageShell>
+        <ErrorBox message="The outreach team identity list could not be loaded. Please try again." />
+      </PageShell>
+    );
+  }
   const rows = (rowResult.data ?? []) as OutreachProspect[];
   const staff = (staffResult.data ?? []) as StaffRow[];
   const currentStaff = staff.find((member) => member.is_current_user);
-  const displayName =
-    currentStaff?.display_name?.trim() ||
-    userData.user.email?.split("@")[0] ||
-    "Outreach team member";
+  const displayName = currentStaff?.display_name?.trim() || null;
+  if (!displayName) {
+    return (
+      <PageShell>
+        {adminResult.data ? (
+          <AdminIdentitySetup />
+        ) : (
+          <ErrorBox message="Your private outreach name has not been configured. Ask an administrator to refresh your outreach access." />
+        )}
+      </PageShell>
+    );
+  }
   const dueNow = dueCountResult.error ? null : dueCountResult.count;
   const readyForFirstTouch = firstTouchCountResult.error
     ? null
@@ -182,9 +224,13 @@ export default async function OutreachPage({
 
       <div className="mt-6 grid grid-cols-3 gap-3">
         <SummaryCard
-          label="In this queue"
+          label={scope === "team" ? "Team records" : "In this queue"}
           value={
-            scope === "mine"
+            scope === "team"
+              ? teamCountResult.error
+                ? null
+                : teamCountResult.count
+              : scope === "mine"
               ? mineCountResult.error
                 ? null
                 : mineCountResult.count
@@ -206,10 +252,14 @@ export default async function OutreachPage({
           unassigned: unassignedCountResult.error
             ? null
             : unassignedCountResult.count,
+          team: teamCountResult.error ? null : teamCountResult.count,
         }}
         baseUrl={safeBaseUrl()}
         query={queryText}
         nowMs={nowMs}
+        teamPage={teamPage}
+        teamPageSize={TEAM_PAGE_SIZE}
+        teamTotal={scope === "team" ? rowResult.count : null}
       />
     </PageShell>
   );
@@ -224,7 +274,7 @@ function PageShell({ children }: { children: React.ReactNode }) {
             Outreach workspace
           </p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-neutral-950">
-            My work today
+            Contractor outreach
           </h1>
         </div>
         <Link href="/dashboard" className="text-sm font-medium text-green-800 underline">
@@ -292,7 +342,14 @@ function ErrorBox({ message }: { message: string }) {
 
 function readScope(value: string | string[] | undefined): OutreachScope {
   const first = Array.isArray(value) ? value[0] : value;
-  return first === "unassigned" ? "unassigned" : "mine";
+  if (first === "unassigned" || first === "team") return first;
+  return "mine";
+}
+
+function readPage(value: string | string[] | undefined): number {
+  const first = Array.isArray(value) ? value[0] : value;
+  const parsed = Number.parseInt(first || "1", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 1000) : 1;
 }
 
 function readText(value: string | string[] | undefined, maxLength: number): string {

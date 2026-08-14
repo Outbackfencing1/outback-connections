@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import TeamAccessManager, { type OutreachStaffRow } from "./TeamAccessManager";
+import AdminIdentitySetup from "../../outreach/AdminIdentitySetup";
 
 export const metadata = {
   title: "Team access — Outback Connections",
@@ -42,13 +43,26 @@ export default async function TeamAccessPage() {
 
   // The signed-in RPC independently enforces full-admin access before joining
   // the private account email to the narrow outreach role.
-  const { data, error } = await supabase.rpc("admin_list_outreach_staff");
+  const [staffResult, identityResult] = await Promise.all([
+    supabase.rpc("admin_list_outreach_staff"),
+    supabase.rpc("outreach_list_assignable_staff"),
+  ]);
+  const { data, error } = staffResult;
   const staff = ((data ?? []) as OutreachStaffRow[]).filter(
     (staffMember) => staffMember.is_active
   );
   if (error) {
     console.error("[team-access] list failed:", error.message);
   }
+  if (identityResult.error) {
+    console.error("[team-access] identity load failed:", identityResult.error.message);
+  }
+  const currentIdentity = (
+    (identityResult.data ?? []) as Array<{
+      display_name: string | null;
+      is_current_user: boolean;
+    }>
+  ).find((member) => member.is_current_user)?.display_name?.trim();
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -83,7 +97,13 @@ export default async function TeamAccessPage() {
         </p>
       </div>
 
-      {error ? (
+      {identityResult.error ? (
+        <p className="mt-6 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+          Couldn’t load your private outreach identity. Please try again.
+        </p>
+      ) : !currentIdentity ? (
+        <AdminIdentitySetup />
+      ) : error ? (
         <p className="mt-6 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
           Couldn’t load the outreach team. Please try again.
         </p>

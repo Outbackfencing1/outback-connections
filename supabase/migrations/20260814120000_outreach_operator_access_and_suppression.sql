@@ -37,6 +37,33 @@ grant execute on function public.current_user_is_admin() to authenticated, servi
 -- Narrow staff authority. A row here grants outreach work only; it never
 -- changes user_profiles.is_admin and therefore cannot expose moderation,
 -- imports, lockdown controls or other admin areas.
+create table if not exists private.outreach_actor_identities (
+  user_id       uuid primary key references auth.users(id) on delete cascade,
+  display_name  text not null check (
+    char_length(btrim(display_name)) between 2 and 80
+  ),
+  created_at    timestamptz not null default now(),
+  created_by    uuid references auth.users(id) on delete set null,
+  updated_at    timestamptz not null default now()
+);
+
+drop trigger if exists trg_outreach_actor_identities_updated_at
+  on private.outreach_actor_identities;
+create trigger trg_outreach_actor_identities_updated_at
+  before update on private.outreach_actor_identities
+  for each row execute function public.set_updated_at();
+
+alter table private.outreach_actor_identities enable row level security;
+revoke all on table private.outreach_actor_identities
+  from public, anon, authenticated;
+grant all on table private.outreach_actor_identities to service_role;
+
+drop policy if exists "Service role manages outreach identities"
+  on private.outreach_actor_identities;
+create policy "Service role manages outreach identities"
+  on private.outreach_actor_identities for all to service_role
+  using (true) with check (true);
+
 create table if not exists public.outreach_staff (
   user_id       uuid primary key references auth.users(id) on delete cascade,
   is_active     boolean not null default true,
@@ -88,6 +115,60 @@ $function$;
 revoke all on function public.current_user_can_outreach() from public, anon;
 grant execute on function public.current_user_can_outreach() to authenticated, service_role;
 
+-- Full admins already have outreach authority, but still need a private,
+-- stable human name before they can create audit events. This setup is
+-- deliberately self-only and insert-once; prior history never changes.
+create or replace function public.set_own_admin_outreach_identity(
+  p_display_name text
+)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_actor uuid := auth.uid();
+  v_display_name text := btrim(coalesce(p_display_name, ''));
+  v_saved_name text;
+begin
+  if v_actor is null or not public.current_user_is_admin() then
+    raise exception 'Not authorised' using errcode = '42501';
+  end if;
+  if char_length(v_display_name) not between 2 and 80 then
+    raise exception 'A display name between 2 and 80 characters is required'
+      using errcode = '22023';
+  end if;
+
+  insert into private.outreach_actor_identities (
+    user_id, display_name, created_by
+  ) values (
+    v_actor, v_display_name, v_actor
+  )
+  on conflict (user_id) do nothing
+  returning display_name into v_saved_name;
+
+  if v_saved_name is null then
+    select i.display_name into v_saved_name
+      from private.outreach_actor_identities i
+     where i.user_id = v_actor;
+  end if;
+
+  return v_saved_name;
+end;
+$function$;
+
+revoke all on function public.set_own_admin_outreach_identity(text)
+  from public, anon, service_role;
+grant execute on function public.set_own_admin_outreach_identity(text)
+  to authenticated;
+
+-- Trusted staff label captured with each event. It is deliberately separate
+-- from the public marketplace profile and remains stable if a profile changes.
+alter table public.business_outreach_events
+  add column if not exists actor_name text check (
+    actor_name is null or char_length(btrim(actor_name)) between 2 and 80
+  );
+
 -- Exact staff roster for the full-admin Team access page. Revoked rows remain
 -- visible for audit history; the UI filters is_active for its current roster.
 create or replace function public.admin_list_outreach_staff()
@@ -115,7 +196,7 @@ begin
   select
     s.user_id,
     u.email::text,
-    p.display_name,
+    i.display_name,
     s.is_active,
     s.granted_at,
     s.granted_by,
@@ -123,8 +204,8 @@ begin
     s.updated_at
   from public.outreach_staff s
   join auth.users u on u.id = s.user_id
-  left join public.user_profiles p on p.user_id = s.user_id
-  order by s.is_active desc, lower(coalesce(p.display_name, u.email, '')), s.user_id;
+  join private.outreach_actor_identities i on i.user_id = s.user_id
+  order by s.is_active desc, lower(coalesce(i.display_name, u.email, '')), s.user_id;
 end;
 $function$;
 
@@ -135,7 +216,8 @@ grant execute on function public.admin_list_outreach_staff() to authenticated, s
 -- admins cannot be deactivated or redundantly managed through this narrow role.
 create or replace function public.admin_set_outreach_staff(
   p_email text,
-  p_active boolean
+  p_active boolean,
+  p_display_name text default null
 )
 returns jsonb
 language plpgsql
@@ -146,22 +228,26 @@ declare
   v_actor uuid := auth.uid();
   v_email text := lower(btrim(coalesce(p_email, '')));
   v_user_id uuid;
-  v_display_name text;
+  v_display_name text := btrim(coalesce(p_display_name, ''));
+  v_actor_name text;
   v_row public.outreach_staff%rowtype;
   v_released integer := 0;
 begin
-  if not public.current_user_is_admin() then
+  if v_actor is null or not public.current_user_is_admin() then
     raise exception 'Not authorised' using errcode = '42501';
   end if;
   if v_email = '' or char_length(v_email) > 320 or p_active is null then
     raise exception 'A valid email and active flag are required'
       using errcode = '22023';
   end if;
+  if p_active and char_length(v_display_name) not between 2 and 80 then
+    raise exception 'A staff display name between 2 and 80 characters is required'
+      using errcode = '22023';
+  end if;
 
-  select u.id, p.display_name
-    into v_user_id, v_display_name
+  select u.id
+    into v_user_id
     from auth.users u
-    left join public.user_profiles p on p.user_id = u.id
    where lower(u.email) = v_email
    limit 1;
 
@@ -178,7 +264,24 @@ begin
       using errcode = '42501';
   end if;
 
+  select i.display_name
+    into v_actor_name
+    from private.outreach_actor_identities i
+   where i.user_id = v_actor;
+  if v_actor_name is null then
+    raise exception 'Set your private outreach name before managing access'
+      using errcode = '22023';
+  end if;
+
   if p_active then
+    insert into private.outreach_actor_identities as existing (
+      user_id, display_name, created_by
+    ) values (
+      v_user_id, v_display_name, v_actor
+    )
+    on conflict (user_id) do update set
+      display_name = excluded.display_name;
+
     insert into public.outreach_staff as existing (
       user_id, is_active, granted_at, granted_by, revoked_at
     ) values (
@@ -190,7 +293,19 @@ begin
       granted_by = case when existing.is_active then existing.granted_by else v_actor end,
       revoked_at = null
     returning * into v_row;
+
+    -- Assignment is current state, not an immutable event snapshot. Keep its
+    -- label aligned with an admin-approved identity correction.
+    update public.business_outreach
+       set assigned_to = v_display_name,
+           updated_by = v_actor
+     where assigned_user_id = v_user_id
+       and assigned_to is distinct from v_display_name;
   else
+    select i.display_name into v_display_name
+      from private.outreach_actor_identities i
+     where i.user_id = v_user_id;
+
     update public.outreach_staff
        set is_active = false,
            revoked_at = coalesce(revoked_at, now())
@@ -223,12 +338,13 @@ begin
       returning business_id, outreach_status, next_follow_up_at
     ), audited as (
       insert into public.business_outreach_events (
-        business_id, actor_user_id, action, outcome, outreach_status,
+        business_id, actor_user_id, actor_name, action, outcome, outreach_status,
         note, next_follow_up_at, assigned_to, assigned_user_id
       )
       select
         r.business_id,
         v_actor,
+        v_actor_name,
         'assigned',
         'unassigned',
         r.outreach_status,
@@ -256,9 +372,10 @@ begin
 end;
 $function$;
 
-revoke all on function public.admin_set_outreach_staff(text, boolean) from public, anon;
-grant execute on function public.admin_set_outreach_staff(text, boolean)
-  to authenticated, service_role;
+revoke all on function public.admin_set_outreach_staff(text, boolean, text)
+  from public, anon, service_role;
+grant execute on function public.admin_set_outreach_staff(text, boolean, text)
+  to authenticated;
 
 -- RLS helper: deliberately returns only a boolean, checks caller authority
 -- internally, and runs outside the exposed schema. It permits contractor-only
@@ -318,12 +435,16 @@ begin
   return query
   select
     p.user_id,
-    coalesce(nullif(btrim(p.display_name), ''), 'Outreach team member') as display_name,
+    i.display_name,
     p.user_id = auth.uid() as is_current_user
   from public.user_profiles p
   left join public.outreach_staff s on s.user_id = p.user_id
+  left join private.outreach_actor_identities i on i.user_id = p.user_id
   where p.is_admin = true or s.is_active = true
-  order by (p.user_id = auth.uid()) desc, lower(coalesce(p.display_name, '')), p.user_id;
+  order by
+    (p.user_id = auth.uid()) desc,
+    lower(coalesce(i.display_name, '')),
+    p.user_id;
 end;
 $function$;
 
@@ -335,6 +456,30 @@ grant execute on function public.outreach_list_assignable_staff()
 alter table public.business_outreach
   add column if not exists assigned_user_id uuid
   references auth.users(id) on delete set null;
+
+-- A deleted account cannot remain the apparent current owner. Immutable
+-- event rows retain their assignment-name snapshots; only live state clears.
+create or replace function private.clear_outreach_assignment_label()
+returns trigger
+language plpgsql
+set search_path = ''
+as $function$
+begin
+  if new.assigned_user_id is null then
+    new.assigned_to := null;
+  end if;
+  return new;
+end;
+$function$;
+
+revoke all on function private.clear_outreach_assignment_label()
+  from public, anon, authenticated;
+
+drop trigger if exists trg_business_outreach_clear_assignment_label
+  on public.business_outreach;
+create trigger trg_business_outreach_clear_assignment_label
+  before update of assigned_user_id on public.business_outreach
+  for each row execute function private.clear_outreach_assignment_label();
 
 create index if not exists idx_business_outreach_assigned_user
   on public.business_outreach (assigned_user_id, outreach_status);
@@ -391,6 +536,8 @@ create unique index if not exists uq_business_outreach_events_client_action
 
 create index if not exists idx_business_outreach_events_assigned_user
   on public.business_outreach_events (assigned_user_id, created_at desc);
+create index if not exists idx_business_outreach_events_business_created_id
+  on public.business_outreach_events (business_id, created_at desc, id desc);
 
 -- Active rows are hard blocks, not UI hints. No authenticated caller receives
 -- INSERT/UPDATE/DELETE; only the atomic outcome RPC may create suppressions.
@@ -546,6 +693,7 @@ set search_path = ''
 as $function$
 declare
   v_actor uuid := auth.uid();
+  v_actor_name text;
   v_is_admin boolean;
   v_outcome text := lower(btrim(coalesce(p_outcome, '')));
   v_method text := nullif(lower(btrim(coalesce(p_contact_method, ''))), '');
@@ -564,23 +712,37 @@ declare
   v_assigned_user_id uuid;
   v_assigned_label text;
   v_assigned_name text;
+  v_requested_assigned_name text;
   v_suppression_channels text[] := array[]::text[];
   v_suppressed_channels text[] := array[]::text[];
   v_result jsonb;
 begin
+  if v_actor is null then
+    raise exception 'Not authorised' using errcode = '42501';
+  end if;
   v_is_admin := public.current_user_is_admin();
   if not v_is_admin then
     -- Serialize operator writes with admin revocation. Whichever transaction
     -- locks this row first completes first; a waiting write rechecks is_active
     -- after a revoke and cannot recreate a stranded assignment.
-    perform 1
+    select i.display_name into v_actor_name
       from public.outreach_staff s
+      join private.outreach_actor_identities i on i.user_id = s.user_id
      where s.user_id = v_actor
        and s.is_active = true
-     for update;
+     for update of s;
     if not found then
       raise exception 'Not authorised' using errcode = '42501';
     end if;
+  else
+    select i.display_name
+      into v_actor_name
+      from private.outreach_actor_identities i
+     where i.user_id = v_actor;
+  end if;
+  if v_actor_name is null then
+    raise exception 'Set your private outreach name before recording work'
+      using errcode = '22023';
   end if;
 
   if p_business_id is null or p_client_action_id is null then
@@ -747,15 +909,18 @@ begin
       using errcode = '42501';
   end if;
 
-  if p_assigned_user_id is not null and not exists (
-    select 1
+  if p_assigned_user_id is not null then
+    select i.display_name
+      into v_requested_assigned_name
       from public.user_profiles p
       left join public.outreach_staff s on s.user_id = p.user_id
+      join private.outreach_actor_identities i on i.user_id = p.user_id
      where p.user_id = p_assigned_user_id
-       and (p.is_admin = true or s.is_active = true)
-  ) then
-    raise exception 'Assignee does not have active outreach access'
-      using errcode = '22023';
+       and (p.is_admin = true or s.is_active = true);
+    if not found then
+      raise exception 'Assignee does not have active outreach access'
+        using errcode = '22023';
+    end if;
   end if;
 
   -- Claims are the only source of joined. No manual joined outcome exists.
@@ -828,13 +993,13 @@ begin
     v_assigned_label := null;
   elsif p_assigned_user_id is not null then
     v_assigned_user_id := p_assigned_user_id;
-    v_assigned_label := null;
+    v_assigned_label := v_requested_assigned_name;
   elsif not v_is_admin and v_assigned_user_id is null then
     -- A direct caller cannot leave an acted-on record unowned and let another
     -- operator repeat the contact. The state change and claim are one lock/
     -- transaction even when a client omits assigned_user_id.
     v_assigned_user_id := v_actor;
-    v_assigned_label := null;
+    v_assigned_label := v_actor_name;
   end if;
 
   insert into public.business_outreach as existing (
@@ -872,11 +1037,11 @@ begin
   end;
 
   insert into public.business_outreach_events (
-    business_id, actor_user_id, action, outcome, client_action_id,
+    business_id, actor_user_id, actor_name, action, outcome, client_action_id,
     request_fingerprint, contact_method, outreach_status, note,
     next_follow_up_at, assigned_to, assigned_user_id
   ) values (
-    p_business_id, v_actor, v_action, v_outcome, p_client_action_id,
+    p_business_id, v_actor, v_actor_name, v_action, v_outcome, p_client_action_id,
     v_fingerprint, v_method, v_state.outreach_status, v_note,
     v_state.next_follow_up_at, v_state.assigned_to, v_state.assigned_user_id
   )
@@ -914,16 +1079,13 @@ begin
   where s.business_id = p_business_id;
 
   if v_state.assigned_user_id is not null then
-    select nullif(btrim(p.display_name), '')
-      into v_assigned_name
-      from public.user_profiles p
-     where p.user_id = v_state.assigned_user_id;
+    select i.display_name into v_assigned_name
+      from private.outreach_actor_identities i
+     where i.user_id = v_state.assigned_user_id;
   end if;
-  v_assigned_name := coalesce(
-    v_assigned_name,
-    v_state.assigned_to,
-    case when v_state.assigned_user_id is not null then 'Outreach team member' end
-  );
+  v_assigned_name := case when v_state.assigned_user_id is not null then
+    coalesce(v_state.assigned_to, v_assigned_name, 'Outreach team member')
+  end;
 
   v_result := jsonb_build_object(
     'business_id', v_state.business_id,
@@ -951,10 +1113,10 @@ $function$;
 
 revoke all on function public.record_contractor_outreach_outcome(
   uuid, uuid, text, text, text, timestamptz, uuid, boolean
-) from public, anon;
+) from public, anon, service_role;
 grant execute on function public.record_contractor_outreach_outcome(
   uuid, uuid, text, text, text, timestamptz, uuid, boolean
-) to authenticated, service_role;
+) to authenticated;
 
 -- The queue now obtains its narrow raw-source projection through the private
 -- helper, so no signed-in user (including outreach staff) needs direct access
@@ -966,7 +1128,7 @@ grant all privileges on table public.listing_sources to service_role;
 -- History UI receives only the audited business-facing event fields.
 revoke select on table public.business_outreach_events from authenticated;
 grant select (
-  id, business_id, actor_user_id, action, outcome, contact_method,
+  id, business_id, actor_user_id, actor_name, action, outcome, contact_method,
   outreach_status, note, next_follow_up_at, assigned_to, assigned_user_id,
   created_at
 ) on table public.business_outreach_events to authenticated;
@@ -1010,11 +1172,9 @@ with queue_rows as (
       else coalesce(o.outreach_status, 'not_contacted')
     end as outreach_status,
     o.assigned_to,
-    coalesce(
-      nullif(ap.display_name, ''),
-      o.assigned_to,
-      case when o.assigned_user_id is not null then 'Outreach team member' end
-    ) as assigned_name,
+    case when o.assigned_user_id is not null then
+      coalesce(o.assigned_to, 'Outreach team member')
+    end as assigned_name,
     o.last_contacted_at,
     case when b.claim_status <> 'unclaimed' then null else o.next_follow_up_at end
       as next_follow_up_at,
@@ -1031,7 +1191,28 @@ with queue_rows as (
     l.contact_source_url,
     l.verification_source_url,
     l.contact_verified_at,
-    l.listing_created_at
+    l.listing_created_at,
+    latest_event.action as latest_activity_action,
+    latest_event.outcome as latest_activity_outcome,
+    latest_event.created_at as latest_activity_at,
+    case
+      when latest_event.created_at is null then null
+      else coalesce(
+        nullif(latest_event.actor_name, ''),
+        case when latest_event.actor_user_id is null
+          then 'System' else 'Outreach team member' end
+      )
+    end as latest_activity_actor_name,
+    contact_event.contact_method as last_contact_event_method,
+    contact_event.created_at as last_contact_event_at,
+    case
+      when contact_event.created_at is null then null
+      else coalesce(
+        nullif(contact_event.actor_name, ''),
+        case when contact_event.actor_user_id is null
+          then 'System' else 'Outreach team member' end
+      )
+    end as last_contact_actor_name
   from public.businesses b
   join lateral (
     select
@@ -1076,7 +1257,30 @@ with queue_rows as (
     limit 1
   ) l on true
   left join public.business_outreach o on o.business_id = b.id
-  left join public.user_profiles_public ap on ap.user_id = o.assigned_user_id
+  left join lateral (
+    select e.action, e.outcome, e.created_at, e.actor_user_id, e.actor_name
+      from public.business_outreach_events e
+     where e.business_id = b.id
+     order by e.created_at desc, e.id desc
+     limit 1
+  ) latest_event on true
+  left join lateral (
+    select e.contact_method, e.created_at, e.actor_user_id, e.actor_name
+      from public.business_outreach_events e
+     where e.business_id = b.id
+       and (
+         e.outcome in (
+           'called', 'emailed', 'sms_sent', 'whatsapp_sent', 'invite_sent',
+           'contacted', 'sequence_complete'
+         )
+         or (
+           e.outcome is null
+           and e.action in ('called', 'emailed', 'sms', 'whatsapp')
+         )
+       )
+     order by e.created_at desc, e.id desc
+     limit 1
+  ) contact_event on true
   left join lateral (
     select
       array_agg(s.channel order by case s.channel
@@ -1162,7 +1366,14 @@ select
     when 40 then p.listing_created_at
     when 50 then p.next_follow_up_at
     else coalesce(p.updated_at, p.last_contacted_at, p.listing_created_at)
-  end as queue_sort_at
+  end as queue_sort_at,
+  p.latest_activity_action,
+  p.latest_activity_outcome,
+  p.latest_activity_at,
+  p.latest_activity_actor_name,
+  p.last_contact_event_method,
+  p.last_contact_event_at,
+  p.last_contact_actor_name
 from prioritized p;
 
 revoke all on table public.admin_contractor_outreach from public, anon, authenticated;

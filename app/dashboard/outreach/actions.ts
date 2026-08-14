@@ -28,6 +28,12 @@ const ContactMethodSchema = z.enum([
   "other",
 ]);
 
+const PrivateDisplayNameSchema = z
+  .string()
+  .trim()
+  .min(2, "Enter your name.")
+  .max(80, "Keep your name under 80 characters.");
+
 const InputSchema = z
   .object({
     businessId: z.string().uuid(),
@@ -108,8 +114,50 @@ export type OutreachHistoryRow = {
   next_follow_up_at: string | null;
   assigned_user_id: string | null;
   assigned_to: string | null;
+  assigned_name: string | null;
   created_at: string;
 };
+
+export type OutreachHistoryCursor = {
+  createdAt: string;
+  id: string;
+};
+
+const HISTORY_PAGE_SIZE = 50;
+const HistoryCursorSchema = z
+  .object({
+    createdAt: z.string().datetime({ offset: true }),
+    id: z.string().uuid(),
+  })
+  .nullable();
+
+export async function setOwnAdminOutreachIdentity(
+  displayNameInput: string
+): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
+  const parsed = PrivateDisplayNameSchema.safeParse(displayNameInput);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: parsed.error.issues[0]?.message || "Check your name.",
+    };
+  }
+
+  const supabase = createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { ok: false, message: "Sign in again." };
+
+  const { error } = await supabase.rpc("set_own_admin_outreach_identity", {
+    p_display_name: parsed.data,
+  });
+  if (error) {
+    console.error("[outreach] private admin identity setup failed:", error.message);
+    return { ok: false, message: "Couldn’t save your outreach name. Please try again." };
+  }
+
+  revalidatePath("/dashboard/outreach");
+  revalidatePath("/dashboard/admin/team-access");
+  return { ok: true, message: "Your private outreach name is ready." };
+}
 
 export async function recordOutreachOutcome(
   input: RecordOutcomeInput
@@ -162,13 +210,16 @@ export async function recordOutreachOutcome(
 }
 
 export async function getOutreachHistory(
-  businessId: string
+  businessId: string,
+  cursor: OutreachHistoryCursor | null = null
 ): Promise<
-  | { ok: true; rows: OutreachHistoryRow[] }
+  | { ok: true; rows: OutreachHistoryRow[]; nextCursor: OutreachHistoryCursor | null }
   | { ok: false; message: string }
 > {
   const parsed = z.string().uuid().safeParse(businessId);
   if (!parsed.success) return { ok: false, message: "Bad business id." };
+  const parsedCursor = HistoryCursorSchema.safeParse(cursor);
+  if (!parsedCursor.success) return { ok: false, message: "Bad history page." };
 
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -181,51 +232,55 @@ export async function getOutreachHistory(
     return { ok: false, message: "You do not have outreach access." };
   }
 
-  const { data, error } = await supabase
+  let historyQuery = supabase
     .from("business_outreach_events")
     .select(
-      "id, actor_user_id, action, outcome, contact_method, outreach_status, note, next_follow_up_at, assigned_user_id, assigned_to, created_at"
+      "id, actor_user_id, actor_name, action, outcome, contact_method, outreach_status, note, next_follow_up_at, assigned_user_id, assigned_to, created_at"
     )
     .eq("business_id", parsed.data)
     .order("created_at", { ascending: false })
-    .limit(50);
+    .order("id", { ascending: false })
+    .limit(HISTORY_PAGE_SIZE + 1);
+  if (parsedCursor.data) {
+    const { createdAt, id } = parsedCursor.data;
+    historyQuery = historyQuery.or(
+      `created_at.lt.${createdAt},and(created_at.eq.${createdAt},id.lt.${id})`
+    );
+  }
+  const { data, error } = await historyQuery;
   if (error) {
     console.error("Couldn't load outreach history", error);
     return { ok: false, message: "Couldn't load outreach history. Please try again." };
   }
 
-  const rows = (data ?? []) as Omit<OutreachHistoryRow, "actor_name">[];
-  const actorIds = Array.from(
-    new Set(
-      rows
-        .map((row) => row.actor_user_id)
-        .filter((value): value is string => Boolean(value))
-    )
-  );
-  const actorNames = new Map<string, string>();
-  if (actorIds.length > 0) {
-    const { data: profiles } = await supabase
-      .from("user_profiles_public")
-      .select("user_id, display_name")
-      .in("user_id", actorIds);
-    for (const profile of profiles ?? []) {
-      if (profile.user_id && profile.display_name?.trim()) {
-        actorNames.set(profile.user_id, profile.display_name.trim());
-      }
+  const fetchedRows = (data ?? []) as Array<
+    Omit<OutreachHistoryRow, "actor_name" | "assigned_name"> & {
+      actor_name: string | null;
     }
-  }
+  >;
+  const hasMore = fetchedRows.length > HISTORY_PAGE_SIZE;
+  const rows = fetchedRows.slice(0, HISTORY_PAGE_SIZE);
 
   return {
     ok: true,
     rows: rows.map((row) => ({
       ...row,
       actor_name:
-        row.actor_user_id === userData.user.id
+        row.actor_user_id === userData.user.id && row.actor_name
           ? "You"
-          : row.actor_user_id
-            ? actorNames.get(row.actor_user_id) || "Team member"
-            : "System",
+          : row.actor_name?.trim() || (row.actor_user_id ? "Team member" : "System"),
+      assigned_name:
+        row.assigned_user_id === userData.user.id
+          ? "You"
+          : row.assigned_to || (row.assigned_user_id ? "Team member" : null),
     })),
+    nextCursor:
+      hasMore && rows.length > 0
+        ? {
+            createdAt: rows[rows.length - 1].created_at,
+            id: rows[rows.length - 1].id,
+          }
+        : null,
   };
 }
 

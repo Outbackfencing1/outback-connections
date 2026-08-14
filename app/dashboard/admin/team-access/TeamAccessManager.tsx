@@ -27,6 +27,7 @@ export default function TeamAccessManager({
 }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [pending, startTransition] = useTransition();
   const [workingUserId, setWorkingUserId] = useState<string | null>(null);
   const [message, setMessage] = useState<Message>(null);
@@ -35,10 +36,11 @@ export default function TeamAccessManager({
     event.preventDefault();
     setMessage(null);
     startTransition(async () => {
-      const result = await grantOutreachAccess(email);
+      const result = await grantOutreachAccess(email, displayName);
       setMessage({ ok: result.ok, text: result.message });
       if (result.ok) {
         setEmail("");
+        setDisplayName("");
         router.refresh();
       }
     });
@@ -67,13 +69,33 @@ export default function TeamAccessManager({
         <p className="mt-1 max-w-2xl text-sm text-neutral-700">
           Enter the email used for an existing Outback Connections account.
           This grants access to the outreach workspace only—it does not make
-          the person an administrator.
+          the person an administrator. Their team name is private to outreach
+          staff and is captured with each saved update.
         </p>
 
         <form onSubmit={submitGrant} className="mt-5 max-w-xl" noValidate>
           <label
-            htmlFor="team-email"
+            htmlFor="team-display-name"
             className="block text-sm font-medium text-neutral-800"
+          >
+            Team member name
+          </label>
+          <input
+            id="team-display-name"
+            name="displayName"
+            type="text"
+            autoComplete="name"
+            required
+            minLength={2}
+            maxLength={80}
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+            placeholder="e.g. Team member name"
+            className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+          />
+          <label
+            htmlFor="team-email"
+            className="mt-4 block text-sm font-medium text-neutral-800"
           >
             Account email
           </label>
@@ -88,12 +110,12 @@ export default function TeamAccessManager({
               maxLength={254}
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="ali@example.com"
+              placeholder="name@outbackfencingsupplies.com.au"
               className="min-w-0 flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
             />
             <button
               type="submit"
-              disabled={pending || !email.trim()}
+              disabled={pending || !email.trim() || displayName.trim().length < 2}
               className="rounded-xl bg-green-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-800 disabled:opacity-60"
             >
               {pending && !workingUserId ? "Granting…" : "Grant access"}

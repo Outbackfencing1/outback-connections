@@ -21,7 +21,7 @@ insert into auth.users (
 
 insert into public.user_profiles (user_id, display_name, email_verified_at, is_admin)
 values
-  ('91000000-0000-0000-0000-000000000001', 'Test admin', now(), true),
+  ('91000000-0000-0000-0000-000000000001', null, now(), true),
   ('91000000-0000-0000-0000-000000000002', 'Test operator', now(), false),
   ('91000000-0000-0000-0000-000000000003', 'Second operator', now(), false)
 on conflict (user_id) do update set
@@ -181,6 +181,12 @@ begin
   exception when sqlstate '42501' then
     null;
   end;
+  begin
+    perform public.set_own_admin_outreach_identity('Fake admin');
+    raise exception 'non-admin unexpectedly set a private admin identity';
+  exception when sqlstate '42501' then
+    null;
+  end;
 end
 $test$;
 
@@ -197,16 +203,73 @@ select set_config(
 );
 set local role authenticated;
 
-select public.admin_set_outreach_staff('OUTREACH-TEST-OPERATOR@example.invalid', true);
-select public.admin_set_outreach_staff('outreach-test-second@example.invalid', true);
+do $test$
+declare
+  v_saved_name text;
+begin
+  begin
+    perform public.record_contractor_outreach_outcome(
+      '92000000-0000-0000-0000-000000000001',
+      '95000000-0000-0000-0000-000000000002',
+      'note', null, 'must fail without identity', null, null, false
+    );
+    raise exception 'admin without a private identity recorded outreach work';
+  exception when sqlstate '22023' then
+    null;
+  end;
+  begin
+    perform public.admin_set_outreach_staff(
+      'outreach-test-operator@example.invalid', true, 'Test operator'
+    );
+    raise exception 'admin without a private identity managed outreach access';
+  exception when sqlstate '22023' then
+    null;
+  end;
+
+  v_saved_name := public.set_own_admin_outreach_identity('Test admin');
+  if v_saved_name <> 'Test admin' then
+    raise exception 'admin private identity setup returned the wrong name';
+  end if;
+  v_saved_name := public.set_own_admin_outreach_identity('Changed admin');
+  if v_saved_name <> 'Test admin' then
+    raise exception 'admin private identity was silently renamed';
+  end if;
+end
+$test$;
+
+select public.admin_set_outreach_staff(
+  'OUTREACH-TEST-OPERATOR@example.invalid', true, 'Test operator'
+);
+select public.admin_set_outreach_staff(
+  'outreach-test-second@example.invalid', true, 'Second operator'
+);
 
 do $test$
 begin
   if (select count(*) from public.admin_list_outreach_staff() where is_active) <> 2 then
     raise exception 'admin staff roster does not show both grants';
   end if;
+  if not exists (
+    select 1
+      from public.admin_list_outreach_staff()
+     where email = 'outreach-test-operator@example.invalid'
+       and display_name = 'Test operator'
+       and is_active
+  ) then
+    raise exception 'admin staff roster does not preserve the trusted display name';
+  end if;
   begin
-    perform public.admin_set_outreach_staff('outreach-test-admin@example.invalid', false);
+    perform public.admin_set_outreach_staff(
+      'outreach-test-operator@example.invalid', true, '  '
+    );
+    raise exception 'blank outreach display name unexpectedly accepted';
+  exception when sqlstate '22023' then
+    null;
+  end;
+  begin
+    perform public.admin_set_outreach_staff(
+      'outreach-test-admin@example.invalid', false, null
+    );
     raise exception 'full admin was managed through narrow outreach role';
   exception when sqlstate '42501' then
     null;
@@ -270,6 +333,18 @@ begin
      or (r ->> 'last_contacted_at') is null then
     raise exception 'atomic invite/auto-assignment state is wrong: %', r;
   end if;
+  if not exists (
+    select 1 from public.admin_contractor_outreach
+     where business_id = '92000000-0000-0000-0000-000000000001'
+       and latest_activity_outcome = 'invite_sent'
+       and latest_activity_actor_name = 'Test operator'
+       and latest_activity_at is not null
+       and last_contact_event_method = 'email'
+       and last_contact_actor_name = 'Test operator'
+       and last_contact_event_at is not null
+  ) then
+    raise exception 'team tracker event attribution is missing or inconsistent';
+  end if;
 
   r := public.record_contractor_outreach_outcome(
     '92000000-0000-0000-0000-000000000001',
@@ -323,8 +398,10 @@ begin
   end if;
   if not has_column_privilege(
     'authenticated', 'public.business_outreach_events', 'outcome', 'select'
+  ) or not has_column_privilege(
+    'authenticated', 'public.business_outreach_events', 'actor_name', 'select'
   ) then
-    raise exception 'authenticated event history projection is missing outcome';
+    raise exception 'authenticated event history projection is missing a safe field';
   end if;
   if has_function_privilege(
     'authenticated',
@@ -333,8 +410,22 @@ begin
   ) then
     raise exception 'authenticated can still execute legacy outreach writer';
   end if;
+  if has_function_privilege(
+    'service_role',
+    'public.record_contractor_outreach_outcome(uuid,uuid,text,text,text,timestamptz,uuid,boolean)',
+    'execute'
+  ) then
+    raise exception 'service_role can impersonate a human outreach event';
+  end if;
   if has_table_privilege('authenticated', 'public.outreach_staff', 'select') then
     raise exception 'authenticated can read the private outreach_staff table';
+  end if;
+  if has_table_privilege(
+    'authenticated', 'private.outreach_actor_identities', 'select'
+  ) or has_table_privilege(
+    'anon', 'private.outreach_actor_identities', 'select'
+  ) then
+    raise exception 'a client role can read the private outreach identity table';
   end if;
   if not has_table_privilege(
     'authenticated', 'public.admin_contractor_outreach', 'select'
@@ -353,6 +444,14 @@ begin
     'anon',
     'public.record_contractor_outreach_outcome(uuid,uuid,text,text,text,timestamptz,uuid,boolean)',
     'execute'
+  ) or has_function_privilege(
+    'anon',
+    'public.admin_set_outreach_staff(text,boolean,text)',
+    'execute'
+  ) or has_function_privilege(
+    'anon',
+    'public.set_own_admin_outreach_identity(text)',
+    'execute'
   ) then
     raise exception 'anon can execute an outreach permission/write function';
   end if;
@@ -363,7 +462,8 @@ begin
      where n.nspname in ('public', 'private')
        and p.proname in (
          'current_user_is_admin', 'current_user_can_outreach',
-         'admin_list_outreach_staff', 'admin_set_outreach_staff',
+         'set_own_admin_outreach_identity', 'admin_list_outreach_staff',
+         'admin_set_outreach_staff',
          'is_contractor_outreach_business', 'outreach_list_assignable_staff',
          'outreach_listing_source', 'record_contractor_outreach_outcome',
          'admin_contractor_outreach_counts'
@@ -562,6 +662,44 @@ $test$;
 
 reset role;
 
+update public.business_outreach_events
+   set created_at = case client_action_id
+     when '95000000-0000-0000-0000-000000000021' then clock_timestamp() - interval '2 minutes'
+     when '95000000-0000-0000-0000-000000000022' then clock_timestamp() - interval '1 minute'
+     when '95000000-0000-0000-0000-000000000024' then clock_timestamp()
+     else created_at
+   end
+ where client_action_id in (
+   '95000000-0000-0000-0000-000000000021',
+   '95000000-0000-0000-0000-000000000022',
+   '95000000-0000-0000-0000-000000000024'
+ );
+
+select set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', '91000000-0000-0000-0000-000000000002',
+    'role', 'authenticated'
+  )::text,
+  true
+);
+set local role authenticated;
+
+do $test$
+begin
+  if not exists (
+    select 1 from public.admin_contractor_outreach
+     where business_id = '92000000-0000-0000-0000-000000000002'
+       and latest_activity_outcome = 'replied'
+       and last_contact_event_method = 'email'
+  ) then
+    raise exception 'inbound reply replaced the last outbound contact projection';
+  end if;
+end
+$test$;
+
+reset role;
+
 -- ---------- Ownership isolation and revocation release ----------
 select set_config(
   'request.jwt.claims',
@@ -619,7 +757,9 @@ select set_config(
 );
 set local role authenticated;
 
-select public.admin_set_outreach_staff('outreach-test-second@example.invalid', false);
+select public.admin_set_outreach_staff(
+  'outreach-test-second@example.invalid', false, null
+);
 
 reset role;
 
@@ -636,9 +776,17 @@ begin
     select 1 from public.business_outreach_events
      where business_id = '92000000-0000-0000-0000-000000000003'
        and outcome = 'unassigned'
+       and actor_name = 'Test admin'
        and note = 'Automatically unassigned because outreach access was revoked.'
   ) then
     raise exception 'revocation release lacks an audit event';
+  end if;
+  if not exists (
+    select 1 from private.outreach_actor_identities
+     where user_id = '91000000-0000-0000-0000-000000000003'
+       and display_name = 'Second operator'
+  ) then
+    raise exception 'revocation erased the operator audit identity';
   end if;
 end
 $test$;
@@ -662,6 +810,14 @@ begin
       'note', null, 'revoked operator must fail', null, null, false
     );
     raise exception 'revoked operator retained outreach write access';
+  exception when sqlstate '42501' then
+    null;
+  end;
+  begin
+    perform public.admin_set_outreach_staff(
+      'outreach-test-operator@example.invalid', true, 'Impostor name'
+    );
+    raise exception 'operator unexpectedly managed the outreach roster';
   exception when sqlstate '42501' then
     null;
   end;
@@ -726,6 +882,89 @@ begin
   end if;
 end
 $test$;
+
+-- ---------- Private names remain stable after rename and account deletion ----------
+select set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', '91000000-0000-0000-0000-000000000001',
+    'role', 'authenticated'
+  )::text,
+  true
+);
+set local role authenticated;
+
+select public.admin_set_outreach_staff(
+  'outreach-test-operator@example.invalid', true, 'Renamed operator'
+);
+
+reset role;
+
+do $test$
+begin
+  if not exists (
+    select 1 from public.business_outreach_events
+     where business_id = '92000000-0000-0000-0000-000000000001'
+       and outcome = 'invite_sent'
+       and actor_name = 'Test operator'
+  ) then
+    raise exception 'identity rename rewrote an earlier event snapshot';
+  end if;
+  if not exists (
+    select 1 from private.outreach_actor_identities
+     where user_id = '91000000-0000-0000-0000-000000000002'
+       and display_name = 'Renamed operator'
+  ) then
+    raise exception 'admin-approved operator identity rename was not saved';
+  end if;
+  if not exists (
+    select 1 from public.business_outreach
+     where business_id = '92000000-0000-0000-0000-000000000001'
+       and assigned_user_id = '91000000-0000-0000-0000-000000000002'
+       and assigned_to = 'Renamed operator'
+  ) then
+    raise exception 'identity rename left the current assignment label stale';
+  end if;
+end
+$test$;
+
+delete from auth.users
+ where id = '91000000-0000-0000-0000-000000000002';
+
+select set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', '91000000-0000-0000-0000-000000000001',
+    'role', 'authenticated'
+  )::text,
+  true
+);
+set local role authenticated;
+
+do $test$
+begin
+  if not exists (
+    select 1 from public.business_outreach_events
+     where business_id = '92000000-0000-0000-0000-000000000001'
+       and outcome = 'invite_sent'
+       and actor_user_id is null
+       and actor_name = 'Test operator'
+  ) then
+    raise exception 'account deletion erased the saved event actor name';
+  end if;
+  if not exists (
+    select 1 from public.admin_contractor_outreach
+     where business_id = '92000000-0000-0000-0000-000000000001'
+       and latest_activity_actor_name = 'Test operator'
+       and assigned_user_id is null
+       and assigned_name is null
+  ) then
+    raise exception 'team tracker lost attribution or retained a deleted owner';
+  end if;
+end
+$test$;
+
+reset role;
 
 rollback;
 
