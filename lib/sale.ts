@@ -34,17 +34,18 @@ export function dollarsToCents(input: string | null | undefined): number | null 
   if (s === "") return null;
   if (!/^\d+(\.\d{1,2})?$/.test(s)) return "invalid";
   const n = Math.round(parseFloat(s) * 100);
-  if (!Number.isFinite(n) || n > 99_999_999_00) return "invalid";
+  // sale_details.price_cents is int4: cap at $20,000,000.
+  if (!Number.isFinite(n) || n > 2_000_000_000) return "invalid";
   return n;
 }
 
-export function formatAud(cents: number): string {
+export function formatAud(cents: number, opts: { whole?: boolean } = {}): string {
   const dollars = cents / 100;
   return dollars.toLocaleString("en-AU", {
     style: "currency",
     currency: "AUD",
-    minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: opts.whole || cents % 100 === 0 ? 0 : 2,
+    maximumFractionDigits: opts.whole ? 0 : 2,
   });
 }
 

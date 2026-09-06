@@ -12,7 +12,8 @@
 
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { NOTIFICATION_TO, buildHtmlFooter, buildTextFooter, sendEmail } from "@/lib/email";
+import { NOTIFICATION_TO, buildHtmlFooter, buildTextFooter, escapeHtml, sendEmail } from "@/lib/email";
+import { listingHref } from "@/lib/format";
 import { logEvent } from "@/lib/analytics";
 import { regionsForPostcodes } from "@/lib/regions";
 import { validateEnquiry } from "@/lib/enquiries";
@@ -29,15 +30,6 @@ export type EnquiryResult =
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === "string" ? v : "";
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 async function requestMeta(): Promise<{ ip: string | null; ua: string | null }> {
@@ -141,14 +133,7 @@ export async function submitEnquiry(formData: FormData): Promise<EnquiryResult> 
     properties: { category: cat?.slug ?? null, claimed, postcode: v.value.postcode, region_state: regionState },
   });
 
-  const listingPath =
-    listing.kind === "job"
-      ? `/jobs/${listing.slug}`
-      : listing.kind === "freight"
-        ? `/freight/${listing.slug}`
-        : listing.kind === "for_sale"
-          ? `/sale/${listing.slug}`
-          : `/services/listing/${listing.slug}`;
+  const listingPath = listingHref(listing.kind, listing.slug);
   const contactLines = [
     v.value.phone ? `Phone: ${v.value.phone}` : null,
     v.value.email ? `Email: ${v.value.email}` : null,

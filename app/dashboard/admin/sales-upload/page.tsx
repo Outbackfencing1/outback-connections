@@ -6,6 +6,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getStaffAccess } from "@/lib/staff-access";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { salesCoverage } from "@/lib/sales-store";
 import SalesUploadForm from "./SalesUploadForm";
 
 export const metadata = {
@@ -30,25 +31,7 @@ export default async function SalesUploadPage() {
   }
 
   const admin = createAdminClient();
-  let coverage: { months: number; first: string | null; last: string | null; rows: number; updated: string | null } = {
-    months: 0, first: null, last: null, rows: 0, updated: null,
-  };
-  if (admin) {
-    const { data } = await admin
-      .from("sales_by_postcode_monthly")
-      .select("month, updated_at")
-      .order("month", { ascending: true })
-      .limit(20000);
-    const rows = data ?? [];
-    const months = Array.from(new Set(rows.map((r) => String(r.month).slice(0, 7)))).sort();
-    coverage = {
-      months: months.length,
-      first: months[0] ?? null,
-      last: months[months.length - 1] ?? null,
-      rows: rows.length,
-      updated: rows.reduce<string | null>((m, r) => (r.updated_at > (m ?? "") ? String(r.updated_at) : m), null),
-    };
-  }
+  const coverage = admin ? await salesCoverage(admin) : { rows: 0, first: null, last: null, updated: null };
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -69,12 +52,13 @@ export default async function SalesUploadPage() {
           <p className="mt-1 text-neutral-600">Nothing yet. The demand report shows sales columns once this has data.</p>
         ) : (
           <p className="mt-1 text-neutral-700">
-            {coverage.rows.toLocaleString("en-AU")} rows across {coverage.months} month{coverage.months === 1 ? "" : "s"} ({coverage.first} to {coverage.last}).
-            {coverage.updated ? ` Last upload ${new Date(coverage.updated).toLocaleDateString("en-AU")}.` : ""}
+            {coverage.rows.toLocaleString("en-AU")} month-by-postcode rows, {coverage.first} to {coverage.last}.
+            {coverage.updated ? ` Last update ${new Date(coverage.updated).toLocaleDateString("en-AU")}.` : ""}
           </p>
         )}
         <p className="mt-2 text-xs text-neutral-500">
           Re-uploading the same months overwrites them, so a fresh full export each month keeps it right.
+          If the Shopify sync cron is configured it does this for you every Sunday night.
         </p>
       </div>
 

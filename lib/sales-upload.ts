@@ -43,7 +43,7 @@ function cents(v: string): number | null {
 }
 
 function normalisePostcode(v: string | undefined): string | null {
-  const s = (v ?? "").trim().replace(/\s+/g, "");
+  const s = (v ?? "").trim().replace(/^['’"]+/, "").replace(/\s+/g, "");
   return AU_POSTCODE.test(s) ? s : null;
 }
 

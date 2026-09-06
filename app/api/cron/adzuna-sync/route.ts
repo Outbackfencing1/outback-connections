@@ -9,22 +9,14 @@
 //   ?limit=10   cap ads written this run (default 50) — staged-rollout knob
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { authoriseCron } from "@/lib/cron-auth";
 import { isAdzunaConfigured, syncAdzunaJobs } from "@/lib/adzuna";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-function authorise(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return true; // dev mode without secret
-  const header = req.headers.get("authorization");
-  if (header === `Bearer ${secret}`) return true;
-  const k = req.nextUrl.searchParams.get("k");
-  return k === secret;
-}
-
 export async function GET(req: NextRequest) {
-  if (!authorise(req)) {
+  if (!authoriseCron(req)) {
     return NextResponse.json({ error: "unauthorised" }, { status: 401 });
   }
 

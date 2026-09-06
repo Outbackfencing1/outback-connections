@@ -6,20 +6,14 @@
 // without writing. Needs the token to have the read_reports scope.
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { authoriseCron } from "@/lib/cron-auth";
+import { upsertSalesRows } from "@/lib/sales-store";
 import { parseShopifyqlSales, SALES_BY_POSTCODE_QUERY, type ShopifyqlTable } from "@/lib/shopifyql";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const API_VERSION = process.env.SHOPIFY_API_VERSION || "2025-07";
-
-function authorise(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
-  const header = req.headers.get("authorization");
-  if (header === `Bearer ${secret}`) return true;
-  return req.nextUrl.searchParams.get("k") === secret;
-}
 
 type GqlResponse = {
   data?: {
@@ -33,7 +27,7 @@ type GqlResponse = {
 };
 
 export async function GET(req: NextRequest) {
-  if (!authorise(req)) return NextResponse.json({ error: "unauthorised" }, { status: 401 });
+  if (!authoriseCron(req)) return NextResponse.json({ error: "unauthorised" }, { status: 401 });
 
   const domain = process.env.SHOPIFY_STORE_DOMAIN;
   const token = process.env.SHOPIFY_ADMIN_TOKEN;
@@ -92,17 +86,12 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient();
   if (!admin) return NextResponse.json({ ok: false, error: "admin_unavailable" }, { status: 500 });
 
-  const now = new Date().toISOString();
-  let upserted = 0;
-  for (let i = 0; i < parsed.rows.length; i += 500) {
-    const chunk = parsed.rows.slice(i, i + 500).map((r) => ({ source: "shopify", ...r, updated_at: now }));
-    const { error } = await admin.from("sales_by_postcode_monthly").upsert(chunk, { onConflict: "source,month,postcode" });
-    if (error) {
-      console.error("[shopify-sales-sync] upsert failed:", error.message);
-      return NextResponse.json({ ok: false, error: error.message, upserted }, { status: 500 });
-    }
-    upserted += chunk.length;
+  const res = await upsertSalesRows(admin, parsed.rows, "shopify");
+  if (!res.ok) {
+    console.error("[shopify-sales-sync] upsert failed:", res.message);
+    return NextResponse.json({ ok: false, error: res.message }, { status: 500 });
   }
+  const upserted = res.upserted;
   console.info("[shopify-sales-sync] upserted", upserted, "rows; skipped", parsed.skipped);
   return NextResponse.json({ ok: true, upserted, skipped: parsed.skipped });
 }

@@ -2,18 +2,9 @@
 // The one-off "claim your free listing" email sent from the outreach
 // workspace. Plain, disclosed, with a working opt-out. Sent at most once per
 // 14 days per business (enforced in the server action).
-import { buildHtmlFooter, buildTextFooter } from "@/lib/email";
+import { buildHtmlFooter, buildTextFooter, escapeHtml } from "@/lib/email";
 
 const SUPPORT_EMAIL = "help@outbackconnections.com.au";
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 export function buildClaimInviteEmail(args: {
   businessName: string;

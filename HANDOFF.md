@@ -96,6 +96,7 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
 | `20260906100000_enquiry_outcomes` | `listing_enquiries.followup_sent_at/outcome/outcome_at`; `business_response_stats(listing)`. |
 | `20260906110000_for_sale_vertical` | kind `for_sale`, vertical `sale`, pillar `sale` + 8 categories, `sale_details` with RLS. |
 | `20260906120000_sales_by_postcode` | `sales_by_postcode_monthly` (aggregate, staff read) + demand report v3 with sales columns and coverage. |
+| `20260906130000_review_fixes` | `sale` allowed on events/search_queries; `business_response_stats` only for live offerings; demand report v4 (Sydney months, grouped joins). |
 
 ### Code (local commits, unpushed)
 - **Staff quick-add** `/dashboard/directory/add` (admins + contributors): one
@@ -195,6 +196,20 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
   + `SHOPIFY_ADMIN_TOKEN` (Admin API token with `read_reports`); returns
   `not_configured` until set; `?dry=1&k=CRON_SECRET` fetches and parses
   without writing. Untested against a real token: run the dry mode first.
+- **Code review pass (evening):** ten-angle review of the day's diff found
+  and fixed: `events`/`search_queries` vertical checks rejected `sale` (all
+  for-sale analytics were silently dropped); follow-up email timed from
+  submission instead of forwarding, now its own cron
+  (`/api/cron/enquiry-followups`, daily) with a consent cut-off; one-click
+  outcome links now land on a confirm page so mail scanners can't answer;
+  cron routes fail closed in production without `CRON_SECRET`
+  (`lib/cron-auth.ts`); PostgREST 1000-row caps replaced with counts;
+  legal-concern links know `/sale`; sale price capped at $20M (int4);
+  Shopify CSV zips with a leading apostrophe; demand months bucketed in
+  Australia/Sydney with grouped joins; digest gap labels sanitised; shared
+  `escapeHtml`, `listingHref`, `formatAud`, `upsertSalesRows`. Skipped on
+  purpose: consolidating the nine inline staff gates onto
+  `getStaffAccess()` (safe as-is; do it when PR #17's access model lands).
 - **Smoke tests on every deploy** (`tests/e2e/smoke.spec.ts`, Playwright):
   read-only checks of the farmer path on a real URL: home finder, category
   page, region chip, listing detail with the quote door, unclaimed honesty

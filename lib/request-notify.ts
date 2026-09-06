@@ -6,21 +6,12 @@
 // a notification failure never blocks the post.
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildHtmlFooter, buildTextFooter, sendEmail } from "@/lib/email";
+import { buildHtmlFooter, buildTextFooter, escapeHtml, sendEmail } from "@/lib/email";
 import { regionsForPostcodes } from "@/lib/regions";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
 const MAX_NOTIFY = 20;
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 export async function notifyProvidersOfRequest(args: {
   categoryId: string;

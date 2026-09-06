@@ -30,7 +30,8 @@ export default async function SaleBrowsePage({ searchParams }: { searchParams: P
   const supabase = createClient();
 
   const postcode = getStr(sp, "postcode").trim();
-  const category = getStr(sp, "category").trim();
+  const rawCategory = getStr(sp, "category").trim();
+  const category = /^[0-9a-f-]{36}$/i.test(rawCategory) ? rawCategory : "";
   const page = Math.max(1, parseInt(getStr(sp, "page") || "1", 10) || 1);
 
   const [{ data: cats }, counts] = await Promise.all([

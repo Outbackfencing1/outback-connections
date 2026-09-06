@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { parseSalesCsv, type SalesParse } from "@/lib/sales-upload";
+import { formatAud } from "@/lib/sale";
 import { uploadSalesRows } from "./actions";
 
 export default function SalesUploadForm() {
@@ -56,7 +57,7 @@ export default function SalesUploadForm() {
           {parsed.format !== "unknown" && (
             <ul className="mt-2 space-y-0.5 text-xs">
               <li>Orders: {parsed.orders.toLocaleString("en-AU")}</li>
-              <li>Revenue: {(parsed.revenue_cents / 100).toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 })}</li>
+              <li>Revenue: {formatAud(parsed.revenue_cents, { whole: true })}</li>
               <li>Months: {months.length > 0 ? `${months[0]} to ${months[months.length - 1]} (${months.length})` : "none"}</li>
             </ul>
           )}

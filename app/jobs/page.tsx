@@ -33,7 +33,8 @@ export default async function JobsBrowsePage({
   const supabase = createClient();
 
   const postcode = getStr(resolvedSearchParams, "postcode").trim();
-  const category = getStr(resolvedSearchParams, "category").trim();
+  const rawCategory = getStr(resolvedSearchParams, "category").trim();
+  const category = /^[0-9a-f-]{36}$/i.test(rawCategory) ? rawCategory : "";
   const payType = getStr(resolvedSearchParams, "pay_type").trim();
   const page = Math.max(1, parseInt(getStr(resolvedSearchParams, "page") || "1", 10) || 1);
 

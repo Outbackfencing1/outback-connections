@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { setFlash } from "@/lib/posting";
 import { NOTIFICATION_TO, sendEmail } from "@/lib/email";
+import { listingHref } from "@/lib/format";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
@@ -197,13 +198,7 @@ export async function submitLegalConcern(formData: FormData): Promise<LegalRepor
     .eq("id", parsed.data.listing_id)
     .maybeSingle();
 
-  const path = listing
-    ? listing.kind === "job"
-      ? `/jobs/${listing.slug}`
-      : listing.kind === "freight"
-        ? `/freight/${listing.slug}`
-        : `/services/listing/${listing.slug}`
-    : null;
+  const path = listing ? listingHref(listing.kind, listing.slug) : null;
   const listingUrl = path ? `${BASE_URL}${path}` : null;
 
   // Insert into defamation_complaints. RLS policy permits anonymous

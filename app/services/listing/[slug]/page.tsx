@@ -90,13 +90,18 @@ export default async function ServiceDetailPage({
     notFound();
   }
 
-  const { data: contact } = viewer
-    ? await supabase
-        .from("listings")
-        .select("contact_email, contact_phone, contact_best_time")
-        .eq("id", listing.id)
-        .maybeSingle()
-    : { data: null };
+  const [{ data: contact }, { data: responseStats }] = await Promise.all([
+    viewer
+      ? supabase
+          .from("listings")
+          .select("contact_email, contact_phone, contact_best_time")
+          .eq("id", listing.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    listing.kind === "service_offering"
+      ? supabase.rpc("business_response_stats", { p_listing_id: listing.id })
+      : Promise.resolve({ data: null }),
+  ]);
 
   const isOwner = viewer?.id === listing.user_id;
   if (!isOwner && (listing.status !== "active" || new Date(listing.expires_at) <= new Date())) {
@@ -127,10 +132,6 @@ export default async function ServiceDetailPage({
       : business?.claim_status === "claimed"
         ? "Claimed by the owner"
         : null;
-  const { data: responseStats } =
-    listing.kind === "service_offering"
-      ? await supabase.rpc("business_response_stats", { p_listing_id: listing.id })
-      : { data: null };
   const responded = responseLine(responseStats as { answered?: number; responded?: number } | null);
 
   await logEvent({

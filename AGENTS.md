@@ -26,10 +26,12 @@ Architecture source of truth: `SPINE-BUILD.md`. Current state: `HANDOFF.md`.
    `listing_sources.raw_payload`. Never in `listings`/`businesses` contact
    columns (those are readable by signed-in users).
 3. **Farmer data.** Quote requests (`listing_enquiries`) are a farmer's
-   personal details given under consent for ONE business. Admin-only, never
-   public, never bulk-exported, purged after 12 months. The business's
-   private contact (from `listing_sources.raw_payload`) is never sent to
-   the farmer; a person forwards unclaimed enquiries.
+   personal details given under consent for ONE business. Staff/admin-only,
+   never public, never bulk-exported, purged after 12 months. The only
+   public read is `business_response_stats()`: three counts for a live
+   service offering, by design. The business's private contact (from
+   `listing_sources.raw_payload`) is never sent to the farmer; a person
+   forwards unclaimed enquiries.
 4. **Structured data.** `JobPosting` JSON-LD only on first-party job ads.
    Nothing on scraped or syndicated rows. `LocalBusiness` is fine on
    directory rows.

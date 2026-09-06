@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 15
     env:
       SMOKE_BASE_URL: ${{ github.event.inputs.url || github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+      SMOKE_LEGACY_SLUG: ${{ github.event.deployment_status.environment == 'Production' && 'boundary-builders-farm-fencing-2820-LST-QVBYD9EJ' || '' }}
       CI: "1"
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +30,12 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci --no-audit --no-fund
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Smoke

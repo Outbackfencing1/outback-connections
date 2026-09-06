@@ -112,9 +112,11 @@ export function formatWeeklyDigest(d: DigestData): { subject: string; text: stri
 
   if (d.gaps.length > 0) {
     lines.push(`ASKED FOR, NOBODY LISTED (last month)`);
+    const clean = (v: string | null | undefined, max: number) =>
+      (v ?? "").replace(/[^ -~]/g, "").slice(0, max);
     for (const g of d.gaps.slice(0, 10)) {
-      const where = g.region_name ? `${g.region_name}${g.state ? `, ${g.state}` : ""}` : "unknown region";
-      lines.push(`   ${g.category ?? "any category"} near ${where}: ${g.demand}`);
+      const where = g.region_name ? `${clean(g.region_name, 40)}${g.state ? `, ${clean(g.state, 4)}` : ""}` : "unknown region";
+      lines.push(`   ${clean(g.category, 40) || "any category"} near ${where}: ${g.demand}`);
     }
     lines.push(`   ${d.baseUrl}/dashboard/admin/demand`);
     lines.push(``);

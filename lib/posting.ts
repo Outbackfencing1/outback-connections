@@ -6,6 +6,7 @@ import { z } from "zod";
 import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { listingHref } from "./format";
 import { dollarsToCents, PRICE_TYPES } from "@/lib/sale";
 import { DEFAULT_FROM, sendEmail } from "@/lib/email";
 
@@ -501,7 +502,7 @@ export async function sendFirstListingEmail(args: {
 
   if (count !== 1) return; // not the first
 
-  const path = pathForKind(args.listingKind, args.slug);
+  const path = listingHref(args.listingKind, args.slug);
   const link = `${BASE_URL}${path}`;
   const expiresStr = (typeof args.expiresAt === "string" ? new Date(args.expiresAt) : args.expiresAt)
     .toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
@@ -558,16 +559,6 @@ export async function sendFirstListingEmail(args: {
   } catch (e) {
     console.error("[posting] first-listing email failed:", e);
   }
-}
-
-function pathForKind(
-  kind: "job" | "freight" | "service_offering" | "service_request" | "for_sale",
-  slug: string
-): string {
-  if (kind === "job") return `/jobs/${slug}`;
-  if (kind === "freight") return `/freight/${slug}`;
-  if (kind === "for_sale") return `/sale/${slug}`;
-  return `/services/listing/${slug}`;
 }
 
 function escapeHtml(s: string): string {

@@ -61,6 +61,7 @@ function tryResolveListingSlug(input: string): { kind: string; slug: string } | 
     const parts = u.pathname.split("/").filter(Boolean);
     if (parts[0] === "jobs" && parts[1]) return { kind: "job", slug: parts[1] };
     if (parts[0] === "freight" && parts[1]) return { kind: "freight", slug: parts[1] };
+    if (parts[0] === "sale" && parts[1]) return { kind: "for_sale", slug: parts[1] };
     if (parts[0] === "services" && parts[1] === "listing" && parts[2])
       return { kind: "service", slug: parts[2] };
   } catch {

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { formatAud } from "@/lib/sale";
 
 export const metadata = {
   title: "Demand by region — Outback Connections",
@@ -51,8 +52,7 @@ type Report = {
   sales_coverage?: { months: number; first_month: string | null; last_month: string | null; updated_at: string | null };
 };
 
-const aud = (cents: number) =>
-  (cents / 100).toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 });
+const aud = (cents: number) => formatAud(cents, { whole: true });
 
 const WINDOWS = [3, 6, 12] as const;
 
