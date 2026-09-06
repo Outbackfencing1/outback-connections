@@ -6,9 +6,19 @@
 import Link from "next/link";
 import ClaimButton from "./ClaimButton";
 
-function prettyPlatform(p: string | null): string | null {
+const PLATFORM_LABELS: Record<string, string> = {
+  google_maps: "Google Maps",
+  facebook: "Facebook",
+  yellow_pages: "Yellow Pages",
+  truelocal: "TrueLocal",
+  official_website: "its official website",
+  web: "the web",
+  adzuna: "Adzuna",
+};
+
+export function prettyPlatform(p: string | null): string | null {
   if (!p) return null;
-  if (p === "google_maps") return "Google Maps";
+  if (PLATFORM_LABELS[p]) return PLATFORM_LABELS[p];
   return p.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
@@ -20,6 +30,7 @@ export default function ScrapedNotice({
   signedIn = false,
   signInRedirect = "/",
   listingId = null,
+  sourceUrlKind = null,
 }: {
   title: string;
   sourcePlatform: string | null;
@@ -28,8 +39,15 @@ export default function ScrapedNotice({
   signedIn?: boolean;
   signInRedirect?: string;
   listingId?: string | null;
+  /** "site" = the URL is the business's own page; "search" = a search on the
+   *  named platform (we know where we saw it, not the exact page). */
+  sourceUrlKind?: "site" | "search" | null;
 }) {
   const platform = prettyPlatform(sourcePlatform);
+  const isSearchLink = sourceUrlKind === "search";
+  const linkLabel = isSearchLink
+    ? `Find the original listing${platform ? ` on ${platform}` : ""} →`
+    : "View the original listing →";
   const claimHref =
     `mailto:help@outbackconnections.com.au` +
     `?subject=${encodeURIComponent(`Claim listing: ${title}`)}` +
@@ -54,7 +72,7 @@ export default function ScrapedNotice({
             rel="nofollow noopener noreferrer"
             className="font-medium text-amber-900 underline"
           >
-            View the original listing →
+            {linkLabel}
           </a>
         </p>
       )}

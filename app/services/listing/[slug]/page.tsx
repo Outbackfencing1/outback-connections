@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { listingHref } from "@/lib/format";
 import ContactBlock from "@/components/detail/ContactBlock";
 import ScrapedNotice from "@/components/detail/ScrapedNotice";
 import FlagForm from "@/components/detail/FlagForm";
@@ -70,7 +72,7 @@ export default async function ServiceDetailPage({
       `
       id, anonymised_id, slug, kind, title, description, postcode, state,
       created_at, expires_at, user_id, status,
-      data_source, source_platform, source_url, business_id,
+      data_source, source_platform, source_url, business_id, metadata,
       category:categories(slug, label),
       business:businesses(claim_status, geo_lat, geo_lng),
       service_details(direction, rate_type, rate_amount, travel_willingness)
@@ -80,7 +82,10 @@ export default async function ServiceDetailPage({
     .in("kind", ["service_offering", "service_request"])
     .maybeSingle();
 
-  if (!listing) notFound();
+  if (!listing) {
+    await redirectToCanonical(slug);
+    notFound();
+  }
 
   const { data: contact } = viewer
     ? await supabase
@@ -92,8 +97,16 @@ export default async function ServiceDetailPage({
 
   const isOwner = viewer?.id === listing.user_id;
   if (!isOwner && (listing.status !== "active" || new Date(listing.expires_at) <= new Date())) {
+    await redirectToCanonical(slug);
     notFound();
   }
+  const sourceUrlKind =
+    listing.metadata && typeof listing.metadata === "object"
+      ? ((listing.metadata as Record<string, unknown>).source_url_kind as
+          | "site"
+          | "search"
+          | undefined) ?? null
+      : null;
 
   const detail = Array.isArray(listing.service_details)
     ? listing.service_details[0]
@@ -218,6 +231,7 @@ export default async function ServiceDetailPage({
             signedIn={!!viewer}
             signInRedirect={`/services/listing/${listing.slug}`}
             listingId={listing.id}
+            sourceUrlKind={sourceUrlKind}
           />
         ) : (
           <ContactBlock
@@ -242,6 +256,29 @@ export default async function ServiceDetailPage({
       )}
     </div>
   );
+}
+
+/**
+ * A listing that was superseded (e.g. a staff-entered row migrated into a
+ * proper directory row) carries canonical_listing_id. Old URLs 301 to the
+ * replacement instead of 404ing, so indexed links and shares keep working.
+ */
+async function redirectToCanonical(slug: string): Promise<void> {
+  const admin = createAdminClient();
+  if (!admin) return;
+  const { data: old } = await admin
+    .from("listings")
+    .select("canonical_listing_id")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!old?.canonical_listing_id) return;
+  const { data: canon } = await admin
+    .from("listings")
+    .select("slug, kind, status, expires_at")
+    .eq("id", old.canonical_listing_id)
+    .maybeSingle();
+  if (!canon || canon.status !== "active" || new Date(canon.expires_at) <= new Date()) return;
+  permanentRedirect(listingHref(canon.kind, canon.slug));
 }
 
 function ServiceDetails({
