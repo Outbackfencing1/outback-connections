@@ -73,6 +73,14 @@ team gets one email per entry 7 days before it expires. To keep an entry:
 re-add it (same name + postcode) via the add form, or re-run the import for
 its source. Better: get it claimed, then it never expires this way.
 
+## Monday email
+
+Every Monday morning the team inbox gets the week's numbers: the traction
+gate, what moved since last week, how many quote requests are waiting (and
+which have waited more than 48 hours), claims waiting for approval, rows
+about to expire, and the regions where farmers asked and nobody was listed.
+If the "waiting more than 48 hours" line is not zero, that's the first job.
+
 ## Numbers that matter
 
 `/dashboard/admin/analytics` → **Traction gate**: human searches per week

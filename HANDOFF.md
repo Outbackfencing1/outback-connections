@@ -166,6 +166,11 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
   farmers told us about" via `business_response_stats()` (aggregate only,
   anon-callable by design). No free-text reviews. Needs `URL_SIGNING_SECRET`
   in Vercel (the renewal cron already uses it).
+- **Monday digest** (`/api/cron/weekly-digest`, Sunday 21:00 UTC = Monday 7am
+  AEST, to `NOTIFICATION_TO`): gate numbers, last-7-days deltas, the enquiry
+  queue with anything waiting over 48 hours, directory health, and the demand
+  gaps. `?dry=1&k=CRON_SECRET` previews it. Formatter in `lib/weekly-digest.ts`
+  (tested).
 - **Demand by region** (`/dashboard/admin/demand`, `admin_demand_by_region()`):
   quote requests + job requests + located human searches per region and
   category against live supply, monthly totals, and the gaps (demand, no
