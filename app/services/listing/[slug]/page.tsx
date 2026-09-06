@@ -20,6 +20,7 @@ import {
   breadcrumbJsonLd,
 } from "@/lib/seo";
 import { logEvent } from "@/lib/analytics";
+import { responseLine } from "@/lib/enquiry-outcome";
 
 export const dynamic = "force-dynamic";
 
@@ -126,6 +127,11 @@ export default async function ServiceDetailPage({
       : business?.claim_status === "claimed"
         ? "Claimed by the owner"
         : null;
+  const { data: responseStats } =
+    listing.kind === "service_offering"
+      ? await supabase.rpc("business_response_stats", { p_listing_id: listing.id })
+      : { data: null };
+  const responded = responseLine(responseStats as { answered?: number; responded?: number } | null);
 
   await logEvent({
     eventType: "listing_view",
@@ -220,6 +226,11 @@ export default async function ServiceDetailPage({
         · Posted {relativeTime(listing.created_at)} ·{" "}
         Expires {new Date(listing.expires_at).toLocaleDateString("en-AU")}
       </p>
+      {responded && (
+        <p className="mt-2 inline-block rounded-lg border border-green-200 bg-green-50 px-3 py-1 text-sm text-green-900">
+          {responded}
+        </p>
+      )}
 
       {isOwner && (
         <div className="mt-4">

@@ -93,6 +93,7 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
 | `20260906070000_enquiries_and_claim_polish` | `listing_enquiries` + `purge_old_enquiries()`; `approve_claim` v3 (claimed provenance + boilerplate strip); `admin_gate_metrics` v2 (enquiries); fencing label. |
 | `20260906080000_admin_demand_by_region` | `admin_demand_by_region(p_months)` planning report (aggregate only). |
 | `20260906090000_staff_role` | `user_profiles.is_staff`, `current_user_is_staff()`, staff read policies, outreach view + RPCs re-pointed. |
+| `20260906100000_enquiry_outcomes` | `listing_enquiries.followup_sent_at/outcome/outcome_at`; `business_response_stats(listing)`. |
 
 ### Code (local commits, unpushed)
 - **Staff quick-add** `/dashboard/directory/add` (admins + contributors): one
@@ -159,6 +160,12 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
 - **Facebook kit** (`docs/FACEBOOK-KIT.md`): post templates + UTM links for
   advertising the contractors by region, the "post a fencing job" door, and a
   contractor-facing claim post.
+- **Reputation loop** (migration 20260906100000): a week after a forwarded
+  enquiry the farmer gets one email with three signed one-click answers
+  (`/enquiries/outcome`); listings show "Responded to N of M quote requests
+  farmers told us about" via `business_response_stats()` (aggregate only,
+  anon-callable by design). No free-text reviews. Needs `URL_SIGNING_SECRET`
+  in Vercel (the renewal cron already uses it).
 - **Demand by region** (`/dashboard/admin/demand`, `admin_demand_by_region()`):
   quote requests + job requests + located human searches per region and
   category against live supply, monthly totals, and the gaps (demand, no

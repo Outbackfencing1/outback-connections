@@ -8,7 +8,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { signToken } from "@/lib/signed-tokens";
-import { DEFAULT_FROM, NOTIFICATION_TO, sendEmail } from "@/lib/email";
+import { DEFAULT_FROM, NOTIFICATION_TO, buildHtmlFooter, buildTextFooter, sendEmail } from "@/lib/email";
+import { ENQUIRY_OUTCOMES, OUTCOME_LABELS } from "@/lib/enquiry-outcome";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest) {
   // Directory digest: scraped rows have no owner to email, so tell the team
   // once, 7 days out (each row falls in this 24h window exactly once).
   const digest = await sendDirectoryExpiryDigest(admin);
+  const followups = await sendEnquiryFollowUps(admin);
 
   // Listings expiring in 2.5 to 3.5 days from now AND active
   const lower = new Date(Date.now() + 2.5 * 24 * 60 * 60 * 1000).toISOString();
@@ -53,7 +55,7 @@ export async function GET(request: NextRequest) {
     .lt("expires_at", upper);
 
   if (!listings || listings.length === 0) {
-    return NextResponse.json({ ok: true, sent: 0, reason: "none_due", digest });
+    return NextResponse.json({ ok: true, sent: 0, reason: "none_due", digest, followups });
   }
 
   // Pull user emails in one query
@@ -116,7 +118,86 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, sent, total: listings.length, digest });
+  return NextResponse.json({ ok: true, sent, total: listings.length, digest, followups });
+}
+
+// "Did they get back to you?" One email per forwarded enquiry, 7 to 30 days
+// after it was sent, only when the farmer gave an email. Three signed
+// one-click answers; the answer feeds "Responded to N of M" on the listing.
+async function sendEnquiryFollowUps(admin: AdminClient): Promise<{ due: number; sent: number }> {
+  const oldest = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const newest = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: rows } = await admin
+    .from("listing_enquiries")
+    .select("id, anonymised_id, name, email, listing:listings(title)")
+    .eq("status", "forwarded")
+    .is("followup_sent_at", null)
+    .is("outcome", null)
+    .not("email", "is", null)
+    .gte("created_at", oldest)
+    .lte("created_at", newest)
+    .limit(100);
+  const due = rows?.length ?? 0;
+  if (!rows || due === 0) return { due: 0, sent: 0 };
+
+  let sent = 0;
+  for (const r of rows) {
+    const listing = Array.isArray(r.listing) ? r.listing[0] : r.listing;
+    const business = (listing as { title?: string } | null)?.title ?? "the business";
+    let links: Record<string, string>;
+    try {
+      links = Object.fromEntries(
+        ENQUIRY_OUTCOMES.map((o) => [
+          o,
+          `${BASE_URL}/enquiries/outcome?t=${encodeURIComponent(
+            signToken({ p: "enq_outcome", u: r.id, l: o, ttlMs: 30 * 24 * 60 * 60 * 1000 })
+          )}`,
+        ])
+      );
+    } catch (e) {
+      console.error("[cron followup] token signing failed (URL_SIGNING_SECRET?)", e);
+      return { due, sent };
+    }
+    const why = `You asked ${business} for a quote through Outback Connections about a week ago (ref ${r.anonymised_id}). This is the one follow-up we send.`;
+    const footer = { reference: r.anonymised_id, whyAreYouGettingThis: why };
+    const text = [
+      `G'day ${r.name},`,
+      ``,
+      `About a week ago we passed your quote request on to ${business}. Did they get back to you?`,
+      ``,
+      ...ENQUIRY_OUTCOMES.map((o) => `${OUTCOME_LABELS[o]}: ${links[o]}`),
+      ``,
+      `One click is all it takes. Your answer helps the next farmer pick someone who answers, and it's the only follow-up we send.`,
+    ].join("\n") + buildTextFooter(footer);
+    const button = (o: (typeof ENQUIRY_OUTCOMES)[number], colour: string) =>
+      `<a href="${escapeHtml(links[o])}" style="display:inline-block;margin:4px 6px 4px 0;background:${colour};color:#fff;padding:10px 14px;border-radius:8px;text-decoration:none;font-weight:600;">${escapeHtml(OUTCOME_LABELS[o])}</a>`;
+    const html = `<div style="font-family:-apple-system,system-ui,sans-serif;max-width:600px;margin:0 auto;padding:16px;color:#111;line-height:1.5;">
+<p>G'day ${escapeHtml(r.name)},</p>
+<p>About a week ago we passed your quote request on to <strong>${escapeHtml(business)}</strong>. Did they get back to you?</p>
+<p>${button("responded", "#15803d")}${button("no_response", "#b45309")}${button("done_elsewhere", "#525252")}</p>
+<p style="font-size:0.9em;color:#555;">One click is all it takes. Your answer helps the next farmer pick someone who answers, and it's the only follow-up we send.</p>
+${buildHtmlFooter(footer)}
+</div>`;
+    try {
+      const res = await sendEmail({
+        to: r.email as string,
+        from: DEFAULT_FROM,
+        subject: `Did ${business} get back to you?`,
+        text,
+        html,
+      });
+      if (res.ok) {
+        await admin
+          .from("listing_enquiries")
+          .update({ followup_sent_at: new Date().toISOString() })
+          .eq("id", r.id);
+        sent++;
+      }
+    } catch (e) {
+      console.error("[cron followup] send failed for enquiry", r.id, e);
+    }
+  }
+  return { due, sent };
 }
 
 type AdminClient = NonNullable<ReturnType<typeof createAdminClient>>;

@@ -43,6 +43,11 @@ Farmers can ask any service listing for a quote without an account
   as *forwarded*. Nothing to do unless they don't reply.
 - The farmer's details go to that one business only, and are deleted after
   12 months.
+- **A week later** the farmer gets one email: did they get back to you? The
+  answers add up to "Responded to N of M quote requests" on the listing.
+  That's the reputation signal, and it only exists for businesses we
+  forwarded real requests to. Mark rows **forwarded** honestly: the
+  follow-up only goes out for forwarded rows.
 
 ## Never do this
 

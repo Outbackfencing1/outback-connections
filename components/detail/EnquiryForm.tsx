@@ -124,7 +124,8 @@ export default function EnquiryForm({ listingId, businessName, claimed }: Props)
         <input type="checkbox" name="consent" className="mt-0.5" />
         <span>
           I&apos;m happy for Outback Connections to pass these details to {businessName} so they can
-          quote. We don&apos;t share them with anyone else and delete them after 12 months.
+          quote. We don&apos;t share them with anyone else, we may email you once about a week later
+          to ask whether they got back to you, and we delete them after 12 months.
         </span>
       </label>
       {errors.consent && <p className="mt-1 text-xs text-red-700">{errors.consent}</p>}

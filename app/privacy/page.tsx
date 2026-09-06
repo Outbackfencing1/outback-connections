@@ -93,7 +93,11 @@ export default function PrivacyPage() {
           browser used to record your consent. We pass these details to that
           one business only, so they can quote you. If the listing is
           unclaimed, our team forwards them by phone or email. No account is
-          needed and we don&apos;t add you to any list.
+          needed and we don&apos;t add you to any list. About a week later we
+          may email you once to ask whether the business got back to you; your
+          answer is stored against that request and shown on the business&apos;s
+          listing only as a count (for example &ldquo;responded to 3 of 4
+          quote requests&rdquo;), never with your name.
         </p>
         <p className="text-neutral-800">
           <strong>Server logs:</strong> IP address, browser user agent,
