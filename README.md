@@ -1,32 +1,39 @@
 # Outback Connections
 
-Rural Australia's marketplace for jobs, freight, and equipment. Built by Outback Fencing & Steel Supplies Pty Ltd.
+Rural Australia's free business directory and marketplace, run by Outback
+Fencing & Steel Supplies Pty Ltd. Live at https://www.outbackconnections.com.au.
 
-## Tech Stack
+Today the live vertical is **Services** (mostly fencing contractors, NSW),
+with a staff outreach workspace behind it. Jobs and Freight exist but stay
+hidden from navigation while empty.
 
-- **Framework**: Next.js 14 (App Router)
-- **Auth**: NextAuth v5 (Google OAuth)
-- **Database**: PostgreSQL via Supabase
-- **ORM**: Prisma
-- **Styling**: Tailwind CSS
-- **Validation**: Zod
-- **Hosting**: Vercel
+- Rules for anyone working here (people or agents): `AGENTS.md`
+- Architecture source of truth: `SPINE-BUILD.md`
+- Current state, decisions and next steps: `HANDOFF.md`
 
-## Getting Started
+## Stack
+
+- Next.js 16 (App Router), React 18, TypeScript, Tailwind
+- Supabase: Postgres + Auth + RLS. Schema is raw SQL in `supabase/migrations/`
+- Resend for transactional email
+- Vercel: pushing `main` deploys production. Crons in `vercel.json`
+
+## Local development
 
 ```bash
 cp .env.example .env.local
-# Fill in your environment variables
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to view the app.
+Open http://localhost:3000. Without Supabase keys the app runs in a read-only
+demo mode. Server-side writes (imports, directory add, claims, analytics)
+need `SUPABASE_SERVICE_ROLE_KEY`, which is only set on Vercel.
 
-## Environment Variables
+## Gate before pushing
 
-See `.env.example` for all required variables. The app runs in demo mode without database credentials — job posting and live listings are disabled until Supabase is connected.
+```bash
+npx tsc --noEmit && npm run lint && npm run build
+```
 
-## Deploy on Vercel
-
-Push to `main` to trigger auto-deploy via Vercel. Make sure all environment variables are set in the Vercel dashboard.
+CI (`.github/workflows/ci.yml`) runs the same on every push and pull request.

@@ -1,0 +1,53 @@
+name: CI
+
+# Every push and PR gets the same gate the Vercel build enforces, before it
+# reaches main. Several agents (Claude, Codex, GLM) and people commit to this
+# repo; this is the shared floor.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Placeholders so client constructors don't throw at build time. No page
+      # fetches data during `next build` (everything is force-dynamic) and the
+      # sitemap falls back to static routes when the DB is unreachable.
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+      NEXT_PUBLIC_BASE_URL: https://www.outbackconnections.com.au
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Migration files are timestamped and applied in order
+        run: |
+          set -e
+          bad=$(ls supabase/migrations | grep -Ev '^([0-9]{14}_.+\.sql|_drafts|v3_.+\.sql)$' || true)
+          if [ -n "$bad" ]; then
+            echo "Unexpected files in supabase/migrations:"; echo "$bad"; exit 1
+          fi
