@@ -190,7 +190,11 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
   next to demand by region and by month, with green rows where farmers ask
   but nothing has sold. Shopify's own analytics can produce the same numbers
   (ShopifyQL: `FROM sales SHOW orders, net_sales GROUP BY shipping_postal_code
-  TIMESERIES month`); a token-gated sync cron is a candidate for later.
+  TIMESERIES month`). **Sync cron built** (`/api/cron/shopify-sales-sync`,
+  Sunday 20:00 UTC, before the digest): env-gated on `SHOPIFY_STORE_DOMAIN`
+  + `SHOPIFY_ADMIN_TOKEN` (Admin API token with `read_reports`); returns
+  `not_configured` until set; `?dry=1&k=CRON_SECRET` fetches and parses
+  without writing. Untested against a real token: run the dry mode first.
 - **Smoke tests on every deploy** (`tests/e2e/smoke.spec.ts`, Playwright):
   read-only checks of the farmer path on a real URL: home finder, category
   page, region chip, listing detail with the quote door, unclaimed honesty
@@ -225,6 +229,11 @@ the next push (`/sale`, `/dashboard/admin/sales-upload`), which is expected.
    (Resend DNS was verified 4 Jul). Redeploy.
 5. **Vercel Web Analytics:** enable it on the project (it's off, so UTM
    attribution for Jess's Facebook push has nowhere to land).
+5b. **Shopify token (optional, replaces the monthly CSV upload):** in Shopify
+   admin create a custom app with the `read_reports` scope, then set
+   `SHOPIFY_STORE_DOMAIN` (the myshopify.com domain) and
+   `SHOPIFY_ADMIN_TOKEN` in Vercel and hit
+   `/api/cron/shopify-sales-sync?dry=1&k=CRON_SECRET` to check it parses.
 6. **Decide PR #17** (who does outreach: Ali only via admin, or Jess + Daryl
    with scoped access). If yes, its release gate is a disposable Supabase
    branch run of the SQL suite, then apply, merge, deploy, grant.
