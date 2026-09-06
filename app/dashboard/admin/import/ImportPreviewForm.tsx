@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
+import { csvToObjects } from "@/lib/csv";
+import { buildDirectoryRecord, csvRowToInput } from "@/lib/directory-records";
 import {
   previewImport,
   commitImport,
@@ -17,6 +19,31 @@ export default function ImportPreviewForm() {
   const [committed, setCommitted] = useState<string | null>(null);
   const [previewing, startPreview] = useTransition();
   const [committing, setCommitting] = useState(false);
+  const [csvNotes, setCsvNotes] = useState<string[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function loadCsv(file: File) {
+    const text = await file.text();
+    const rows = csvToObjects(text);
+    const records: unknown[] = [];
+    const notes: string[] = [];
+    rows.forEach((row, i) => {
+      const built = buildDirectoryRecord(csvRowToInput(row), {
+        enteredBy: "csv",
+        enteredVia: `bulk csv import (${file.name})`,
+      });
+      if (built.ok) records.push(built.record);
+      else notes.push(`Row ${i + 2}: ${Object.values(built.errors).join(" ")}`);
+    });
+    setJson(JSON.stringify(records, null, 2));
+    setCsvNotes([
+      `${records.length} of ${rows.length} row(s) converted from ${file.name}. Now click Preview.`,
+      ...notes,
+    ]);
+    setPreview(null);
+    setCommitted(null);
+    setError(null);
+  }
 
   function doPreview() {
     setError(null);
@@ -48,7 +75,40 @@ export default function ImportPreviewForm() {
 
   return (
     <div className="mt-6">
-      <label className="block text-sm font-medium text-neutral-800">
+      <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+        <label className="block text-sm font-medium text-neutral-800">
+          Or load a spreadsheet (CSV)
+        </label>
+        <p className="mt-1 text-xs text-neutral-600">
+          Columns (any order, common variants accepted): <code>name</code>,{" "}
+          <code>postcode</code>, <code>town</code>, <code>state</code>,{" "}
+          <code>found_on</code> (Facebook / Yellow Pages / TrueLocal / Google Maps / website / online),{" "}
+          <code>url</code>, <code>website</code>, <code>phone</code>, <code>email</code>,{" "}
+          <code>category</code> (slug, default fencing-contractor is NOT assumed), <code>notes</code>.
+          Phone and email stay private. Rows with problems are listed and skipped.
+        </p>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv,text/csv"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void loadCsv(f);
+          }}
+          className="mt-2 block text-sm"
+        />
+        {csvNotes.length > 0 && (
+          <ul className="mt-2 space-y-0.5 text-xs">
+            {csvNotes.map((n, i) => (
+              <li key={i} className={i === 0 ? "font-medium text-neutral-800" : "text-amber-800"}>
+                {n}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <label className="mt-4 block text-sm font-medium text-neutral-800">
         Paste the import batch (JSON array of records from the scrape script)
       </label>
       <textarea

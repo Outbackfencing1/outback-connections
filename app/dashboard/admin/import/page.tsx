@@ -64,10 +64,10 @@ export default async function ImportPage() {
             spec in <code>docs/INGEST-IMPORT-FORMAT.md</code>.
           </p>
           <ul className="list-disc space-y-1 pl-5 text-xs">
-            <li><code>vertical</code> — <code>&quot;job&quot;</code> or <code>&quot;freight&quot;</code> (required)</li>
+            <li><code>vertical</code> — <code>&quot;service&quot;</code>, <code>&quot;job&quot;</code> or <code>&quot;freight&quot;</code> (required)</li>
             <li><code>source_platform</code>, <code>source_external_id</code> (place_id), <code>source_url</code> — required (dedupe + attribution)</li>
             <li><code>name</code>, <code>postcode</code> (4-digit) — required</li>
-            <li><code>category_slug</code> — optional; falls back to <code>jobs-other</code> / <code>freight-other</code></li>
+            <li><code>category_slug</code> — optional; falls back to <code>services-other</code> / <code>jobs-other</code> / <code>freight-other</code></li>
             <li><code>suburb</code>, <code>state</code>, <code>website</code>, <code>geo_lat</code>, <code>geo_lng</code>, <code>raw_payload</code> — optional</li>
           </ul>
           <p className="text-xs text-neutral-500">

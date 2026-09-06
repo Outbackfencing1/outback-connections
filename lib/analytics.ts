@@ -6,18 +6,10 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isBotUserAgent } from "@/lib/bot-detect";
 
 type Json = Record<string, unknown>;
 
-// Mirrors the backfill regex in migration 20260906050000. Crawlers are kept
-// (they're useful for SEO debugging) but flagged so the gate numbers are humans.
-const BOT_UA =
-  /(bot|crawl|spider|slurp|gptbot|claudebot|anthropic|perplexity|bingpreview|facebookexternalhit|headless|python-requests|curl[/]|go-http-client|vercel-screenshot|lighthouse|pagespeed|dataforseo|semrush|ahrefs|mj12|petalbot|yandex|baiduspider|duckduckbot|applebot|amazonbot|bytespider|ccbot|scrapy|httpx|axios|node-fetch|okhttp|java[/]|wget)/i;
-
-export function isBotUserAgent(ua: string | null): boolean {
-  if (!ua) return true; // no UA at all is never a browser
-  return BOT_UA.test(ua);
-}
 
 /**
  * Pseudonymous daily session key: sha256(ip | user agent | UTC date). No

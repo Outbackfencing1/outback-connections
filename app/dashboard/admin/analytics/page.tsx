@@ -270,6 +270,8 @@ function GateBlock({ gate }: { gate: GateMetrics }) {
       <h2 className="text-lg font-semibold text-neutral-900">Traction gate</h2>
       <p className="mt-1 text-xs text-neutral-600">
         Humans only. Crawlers were {g.bot_share_30d_pct}% of browse loads in the last 30 days.
+        A search is a browse load with a category, region, postcode, filter or query chosen;
+        bare loads of /services, /jobs or /freight are not counted.
       </p>
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
         {chip("Human searches, last 7 days", g.human_searches_7d, g.target_searches_per_week)}

@@ -151,8 +151,17 @@ export async function commitImport(jsonText: string): Promise<CommitResult> {
       failed++;
       continue;
     }
-    if ((data as { listing_action?: string })?.listing_action === "created") created++;
+    const out = (data ?? {}) as { listing_action?: string; listing_id?: string };
+    if (out.listing_action === "created") created++;
     else updated++;
+    // Staff-sourced rows carry source_url_kind (site vs search) so the detail
+    // page can word the source link honestly. Scraper rows don't set it.
+    const kind = (r.raw_payload as { source_url_kind?: string } | undefined)?.source_url_kind;
+    if (out.listing_id && (kind === "site" || kind === "search")) {
+      const { data: row } = await admin.from("listings").select("metadata").eq("id", out.listing_id).maybeSingle();
+      const meta = row?.metadata && typeof row.metadata === "object" ? (row.metadata as Record<string, unknown>) : {};
+      await admin.from("listings").update({ metadata: { ...meta, source_url_kind: kind } }).eq("id", out.listing_id);
+    }
   }
 
   revalidatePath("/jobs");
