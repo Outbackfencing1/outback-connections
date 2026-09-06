@@ -32,10 +32,11 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("is_admin")
+    .select("is_admin, directory_contributor")
     .eq("user_id", user.id)
     .maybeSingle();
   const isAdmin = !!profile?.is_admin;
+  const canAddDirectory = isAdmin || !!profile?.directory_contributor;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -95,6 +96,23 @@ export default async function DashboardPage() {
             .{!canPost && " You can post once your account is 24 hours old."}
           </p>
         </Link>
+
+        {canAddDirectory && (
+          <Link
+            href="/dashboard/directory/add"
+            className="rounded-2xl border border-green-200 bg-green-50 p-5 shadow-sm transition hover:border-green-600 hover:shadow-md sm:col-span-2"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide text-green-800">
+              Directory
+            </p>
+            <h2 className="mt-1 text-lg font-bold text-neutral-900">Add a directory entry</h2>
+            <p className="mt-2 text-sm text-neutral-700">
+              Found a business online that isn&apos;t yours? Add it here, not through
+              &quot;Post a listing&quot;. It goes in as unclaimed, says where you found it,
+              and the owner can claim it.
+            </p>
+          </Link>
+        )}
 
         {isAdmin && (
           <Link

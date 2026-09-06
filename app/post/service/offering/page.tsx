@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { checkPostingGuard } from "@/lib/posting";
+import { requireDirectoryContributor } from "@/lib/directory-access";
 import PostServiceForm from "@/components/posting/PostServiceForm";
 import { postServiceOffering } from "./actions";
 
@@ -35,6 +36,9 @@ export default async function PostServiceOfferingPage() {
     );
   }
 
+  const directoryAccess = await requireDirectoryContributor();
+  const canAddDirectory = directoryAccess.ok;
+
   const supa = createClient();
   const { data: cats } = await supa
     .from("categories")
@@ -50,6 +54,20 @@ export default async function PostServiceOfferingPage() {
         Bore pumps, drone spraying, contract cropping, mobile diesel, shearing
         teams. Tell people what you do. Free to list.
       </p>
+
+      {canAddDirectory && (
+        <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <p className="font-semibold">Listing a business that isn&apos;t yours?</p>
+          <p className="mt-1">
+            Use{" "}
+            <Link href="/dashboard/directory/add" className="font-medium underline">
+              Add a directory entry
+            </Link>{" "}
+            instead. This form is for your own business: it shows your contact details
+            publicly and marks the listing as posted by you.
+          </p>
+        </div>
+      )}
 
       <div className="mt-8">
         <PostServiceForm

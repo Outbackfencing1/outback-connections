@@ -5,22 +5,7 @@
 // mailto for now — the real claim flow is a separate build gate.
 import Link from "next/link";
 import ClaimButton from "./ClaimButton";
-
-const PLATFORM_LABELS: Record<string, string> = {
-  google_maps: "Google Maps",
-  facebook: "Facebook",
-  yellow_pages: "Yellow Pages",
-  truelocal: "TrueLocal",
-  official_website: "its official website",
-  web: "the web",
-  adzuna: "Adzuna",
-};
-
-export function prettyPlatform(p: string | null): string | null {
-  if (!p) return null;
-  if (PLATFORM_LABELS[p]) return PLATFORM_LABELS[p];
-  return p.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
+import { prettyPlatform } from "@/lib/source-platforms";
 
 export default function ScrapedNotice({
   title,
