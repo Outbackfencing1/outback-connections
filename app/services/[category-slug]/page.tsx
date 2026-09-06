@@ -6,6 +6,7 @@ import Pagination from "@/components/browse/Pagination";
 import FilterBar from "@/components/browse/FilterBar";
 import { logSearch } from "@/lib/analytics";
 import { breadcrumbJsonLd, jsonLdScript } from "@/lib/seo";
+import { regionCounts } from "@/lib/regions";
 
 export const dynamic = "force-dynamic";
 
@@ -86,8 +87,19 @@ export default async function ServiceCategoryPage({
   const to = from + PAGE_SIZE - 1;
   query = query.range(from, to);
 
-  const { data: listings, count } = await query;
+  const [{ data: listings, count }, { data: allPostcodes }] = await Promise.all([
+    query,
+    supabase
+      .from("listings")
+      .select("postcode")
+      .in("kind", ["service_offering", "service_request"])
+      .eq("category_id", cat.id)
+      .eq("status", "active")
+      .gt("expires_at", new Date().toISOString())
+      .limit(2000),
+  ]);
   const total = count ?? 0;
+  const regions = await regionCounts((allPostcodes ?? []).map((r) => r.postcode));
   if (page === 1) {
     await logSearch({
       vertical: "service",
@@ -130,6 +142,21 @@ export default async function ServiceCategoryPage({
           Post in this category
         </Link>
       </div>
+
+      {regions.length > 1 && (
+        <nav aria-label="Browse by region" className="mt-4 flex flex-wrap gap-2 text-xs">
+          <span className="self-center font-medium text-neutral-600">By region:</span>
+          {regions.slice(0, 24).map((r) => (
+            <Link
+              key={r.slug}
+              href={`/services/${cat.slug}/${r.slug}`}
+              className="rounded-full border border-neutral-300 bg-white px-3 py-1 text-neutral-800 hover:border-green-700 hover:text-green-800"
+            >
+              {r.region_name} <span className="text-neutral-500">({r.count})</span>
+            </Link>
+          ))}
+        </nav>
+      )}
 
       <div className="mt-6">
         <FilterBar

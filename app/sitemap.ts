@@ -5,6 +5,7 @@
 // if the DB is unreachable so the build never breaks.
 import type { MetadataRoute } from "next";
 import { createAnonClient } from "@/lib/supabase/anon";
+import { regionsForPostcodes, regionSlug } from "@/lib/regions";
 
 export const revalidate = 3600; // regenerate hourly
 
@@ -99,7 +100,30 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         priority: 0.6,
       }));
 
-    return [...visibleStatic, ...categoryEntries, ...listingEntries];
+    // Regional landing pages: one per (services category, region) with live rows.
+    const { data: svc } = await sb
+      .from("listings")
+      .select("postcode, category:categories!inner(slug, pillar)")
+      .eq("status", "active")
+      .gt("expires_at", nowIso)
+      .in("kind", ["service_offering", "service_request"])
+      .limit(5000);
+    const svcRows = (svc ?? []) as unknown as { postcode: string; category: { slug: string; pillar: string } | null }[];
+    const regionMap = await regionsForPostcodes(svcRows.map((r) => r.postcode));
+    const regionPages = new Set<string>();
+    for (const r of svcRows) {
+      const reg = regionMap.get(r.postcode);
+      if (!reg || !r.category?.slug || r.category.pillar !== "services") continue;
+      regionPages.add(`${r.category.slug}/${regionSlug(reg.region_name, reg.state)}`);
+    }
+    const regionEntries: Row[] = Array.from(regionPages).map((path) => ({
+      url: `${BASE}/services/${path}`,
+      lastModified: now,
+      changeFrequency: "weekly" as const,
+      priority: 0.6,
+    }));
+
+    return [...visibleStatic, ...categoryEntries, ...regionEntries, ...listingEntries];
   } catch {
     // DB unreachable at build/regen — ship the static map rather than fail.
     return staticEntries;
