@@ -118,6 +118,14 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
 - **CI** (`.github/workflows/ci.yml`: tsc, lint, build, migration-name check),
   `AGENTS.md` (rules for every agent/person), PR template, README rewrite.
 - Old-slug 301s on the services detail page via `canonical_listing_id`.
+- **CSV upload** on the bulk import page (spreadsheet headers like name / town /
+  postcode / found_on / phone / email accepted; rows with problems listed and
+  skipped). `lib/directory-records.ts` is the one definition of a staff entry,
+  shared by quick-add, CSV and the tests.
+- **Regional landing pages** `/services/[category]/[region]` (e.g.
+  `/services/fencing-contractor/orange-nsw`) from the `regions` table; "By
+  region" chips on category pages; sitemap emits them.
+- **Tests**: vitest, 13 unit tests over the pure libs; `npm test` in CI.
 
 Gate at end of session: `npx tsc --noEmit` clean, `npm run lint` 0 errors,
 `npm run build` passes (see the commit log for the exact run).
@@ -163,14 +171,13 @@ Gate at end of session: `npx tsc --noEmit` clean, `npm run lint` 0 errors,
 
 ## Next sprint candidates (not started)
 
-- CSV upload on the bulk import page (the JSON paste is fine for scripts, not
-  for a spreadsheet from Ali).
-- Regional landing pages: `/services/fencing-contractor/[region]`.
 - Scrape more fencing contractors across NSW with `scripts/scrape-rural-directory.mjs`
-  + `scripts/filter-scraped-types.mjs` (spends Outscraper credits; confirm budget).
-- Minimal test harness (vitest) for `lib/source-platforms.ts`, `lib/adzuna.ts`
-  ratio logic, `lib/signed-tokens.ts`.
+  + `scripts/filter-scraped-types.mjs` (spends Outscraper credits; confirm budget),
+  then CSV/JSON import. Regional pages fill themselves as rows arrive.
+- Tests for `lib/adzuna.ts` ratio logic and `lib/signed-tokens.ts` (need env
+  stubs); a Playwright smoke test of the claim flow once the first claim exists.
 - Branch protection on `main` requiring the CI check (GitHub settings).
+- Vercel Web Analytics events for `trade_cta` clicks once analytics is enabled.
 - The outback-ops frozen branch `cba4056` is still waiting for its
   independent review (other repo).
 
