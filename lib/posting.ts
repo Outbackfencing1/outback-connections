@@ -6,6 +6,7 @@ import { z } from "zod";
 import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { dollarsToCents, PRICE_TYPES } from "@/lib/sale";
 import { DEFAULT_FROM, sendEmail } from "@/lib/email";
 
 const BASE_URL =
@@ -331,6 +332,31 @@ export const serviceSchema = baseSchema.and(
   })
 );
 
+export const saleSchema = baseSchema
+  .and(
+    z.object({
+      price: z.string().trim().max(20).optional().default(""),
+      price_type: z.enum(PRICE_TYPES, { errorMap: () => ({ message: "Pick a price type" }) }),
+      quantity: z.preprocess(
+        (v) => (v === "" || v === undefined ? undefined : Number(v)),
+        z.number().min(0).max(1_000_000).optional()
+      ),
+      unit: z.string().trim().max(30).optional().default(""),
+      condition: optionalEnum(["new", "used", "na"]),
+      delivery: optionalEnum(["pickup", "can_deliver", "either"]),
+    })
+  )
+  .superRefine((d, ctx) => {
+    const cents = dollarsToCents(d.price);
+    if (cents === "invalid") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["price"], message: "Price: numbers only, like 1250 or 85.50" });
+    }
+    const needsPrice = d.price_type === "fixed" || d.price_type.startsWith("per_");
+    if (needsPrice && cents === null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["price"], message: "Give a price, or pick negotiable / price on application" });
+    }
+  });
+
 // ============================================================
 // Insert helper — sequential listings + detail with rollback on failure.
 //
@@ -346,7 +372,7 @@ export type InsertResult =
 
 type ListingsInsert = {
   user_id: string;
-  kind: "job" | "freight" | "service_offering" | "service_request";
+  kind: "job" | "freight" | "service_offering" | "service_request" | "for_sale";
   category_id: string;
   title: string;
   description: string;
@@ -362,7 +388,7 @@ type ListingsInsert = {
 
 export async function insertListing<DetailRow extends Record<string, unknown>>(
   listing: ListingsInsert,
-  detailTable: "job_details" | "freight_details" | "service_details",
+  detailTable: "job_details" | "freight_details" | "service_details" | "sale_details",
   detail: DetailRow
 ): Promise<InsertResult> {
   const supa = createAdminClient();
@@ -377,13 +403,17 @@ export async function insertListing<DetailRow extends Record<string, unknown>>(
   // market side of the resource transacted. For freight, side comes from the
   // detail row's direction (need_freight => demand, offering_truck => supply).
   const vertical =
-    listing.kind === "freight"
+    listing.kind === "for_sale"
+      ? "sale"
+      : listing.kind === "freight"
       ? "freight"
       : listing.kind === "job"
         ? "job"
         : "service";
   const side =
-    listing.kind === "job"
+    listing.kind === "for_sale"
+      ? "supply"
+      : listing.kind === "job"
       ? "demand"
       : listing.kind === "service_offering"
         ? "supply"
@@ -456,7 +486,7 @@ export async function sendFirstListingEmail(args: {
   userEmail: string;
   userId: string;
   listingTitle: string;
-  listingKind: "job" | "freight" | "service_offering" | "service_request";
+  listingKind: "job" | "freight" | "service_offering" | "service_request" | "for_sale";
   slug: string;
   expiresAt: string | Date;
 }): Promise<void> {
@@ -531,11 +561,12 @@ export async function sendFirstListingEmail(args: {
 }
 
 function pathForKind(
-  kind: "job" | "freight" | "service_offering" | "service_request",
+  kind: "job" | "freight" | "service_offering" | "service_request" | "for_sale",
   slug: string
 ): string {
   if (kind === "job") return `/jobs/${slug}`;
   if (kind === "freight") return `/freight/${slug}`;
+  if (kind === "for_sale") return `/sale/${slug}`;
   return `/services/listing/${slug}`;
 }
 

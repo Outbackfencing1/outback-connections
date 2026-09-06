@@ -94,6 +94,7 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
 | `20260906080000_admin_demand_by_region` | `admin_demand_by_region(p_months)` planning report (aggregate only). |
 | `20260906090000_staff_role` | `user_profiles.is_staff`, `current_user_is_staff()`, staff read policies, outreach view + RPCs re-pointed. |
 | `20260906100000_enquiry_outcomes` | `listing_enquiries.followup_sent_at/outcome/outcome_at`; `business_response_stats(listing)`. |
+| `20260906110000_for_sale_vertical` | kind `for_sale`, vertical `sale`, pillar `sale` + 8 categories, `sale_details` with RLS. |
 
 ### Code (local commits, unpushed)
 - **Staff quick-add** `/dashboard/directory/add` (admins + contributors): one
@@ -171,6 +172,15 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
   queue with anything waiting over 48 hours, directory health, and the demand
   gaps. `?dry=1&k=CRON_SECRET` previews it. Formatter in `lib/weekly-digest.ts`
   (tested).
+- **For sale vertical** (migration 20260906110000): listing kind `for_sale`,
+  vertical `sale`, categories pillar `sale` (livestock, hay & fodder, grain &
+  stock feed, machinery, vehicles & trailers, fencing & steel, water &
+  irrigation, other), `sale_details` (price in cents + price type, quantity +
+  unit, condition, pickup/delivery, sold_at). `/post/sale`, `/sale` browse
+  with category filter, `/sale/[slug]` detail, owner edit, header/footer/
+  sitemap wiring (hidden while empty), post hub card, home hero link. First
+  party only; no payment, no commission; contact details sign-in gated like
+  everything else. `lib/sale.ts` price helpers are tested.
 - **Demand by region** (`/dashboard/admin/demand`, `admin_demand_by_region()`):
   quote requests + job requests + located human searches per region and
   category against live supply, monthly totals, and the gaps (demand, no

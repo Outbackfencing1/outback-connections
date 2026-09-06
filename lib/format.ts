@@ -28,6 +28,7 @@ export function teaser(text: string, max = 120): string {
 export function listingHref(kind: string, slug: string): string {
   if (kind === "job") return `/jobs/${slug}`;
   if (kind === "freight") return `/freight/${slug}`;
+  if (kind === "for_sale") return `/sale/${slug}`;
   return `/services/listing/${slug}`;
 }
 
@@ -41,6 +42,8 @@ export function kindLabel(kind: string): string {
       return "Service offering";
     case "service_request":
       return "Service request";
+    case "for_sale":
+      return "For sale";
     default:
       return kind;
   }

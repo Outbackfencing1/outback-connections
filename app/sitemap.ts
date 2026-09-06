@@ -17,6 +17,7 @@ const STATIC: Array<{ path: string; priority: number }> = [
   { path: "/services", priority: 0.9 },
   { path: "/jobs", priority: 0.8 },
   { path: "/freight", priority: 0.8 },
+  { path: "/sale", priority: 0.8 },
   { path: "/post", priority: 0.5 },
   { path: "/about", priority: 0.4 },
   { path: "/faq", priority: 0.4 },
@@ -56,6 +57,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const prefixFor = (kind: string): string | null => {
       if (kind === "job") return "/jobs";
       if (kind === "freight") return "/freight";
+      if (kind === "for_sale") return "/sale";
       if (kind === "service_offering" || kind === "service_request") return "/services/listing";
       return null;
     };
@@ -63,10 +65,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Don't advertise an empty vertical's browse page to crawlers.
     const hasJobs = (listings ?? []).some((l) => l.kind === "job");
     const hasFreight = (listings ?? []).some((l) => l.kind === "freight");
+    const hasSale = (listings ?? []).some((l) => l.kind === "for_sale");
     const visibleStatic = staticEntries.filter(
       (e) =>
         (hasJobs || !e.url.endsWith("/jobs")) &&
-        (hasFreight || !e.url.endsWith("/freight"))
+        (hasFreight || !e.url.endsWith("/freight")) &&
+        (hasSale || !e.url.endsWith("/sale"))
     );
 
     const listingEntries: Row[] = (listings ?? [])

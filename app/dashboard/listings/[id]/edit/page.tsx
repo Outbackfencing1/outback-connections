@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import PostJobForm from "@/components/posting/PostJobForm";
 import PostFreightForm from "@/components/posting/PostFreightForm";
+import PostSaleForm from "@/components/posting/PostSaleForm";
 import PostServiceForm from "@/components/posting/PostServiceForm";
 import { editListing } from "./actions";
 
@@ -47,7 +48,9 @@ export default async function EditListingPage({
       ? "jobs"
       : listing.kind === "freight"
         ? "freight"
-        : "services";
+        : listing.kind === "for_sale"
+          ? "sale"
+          : "services";
 
   const { data: cats } = await supabase
     .from("categories")
@@ -112,6 +115,30 @@ export default async function EditListingPage({
     };
     body = (
       <PostFreightForm
+        categories={cats ?? []}
+        action={editListing}
+        listingId={listing.id}
+        defaults={defaults}
+        submitLabel="Save changes"
+      />
+    );
+  } else if (listing.kind === "for_sale") {
+    const { data: sale } = await supabase
+      .from("sale_details")
+      .select("*")
+      .eq("listing_id", listing.id)
+      .maybeSingle();
+    const defaults: Record<string, string> = {
+      ...baseDefaults,
+      price: sale?.price_cents !== null && sale?.price_cents !== undefined ? (sale.price_cents / 100).toString() : "",
+      price_type: sale?.price_type ?? "negotiable",
+      quantity: sale?.quantity?.toString() ?? "",
+      unit: sale?.unit ?? "",
+      condition: sale?.condition ?? "na",
+      delivery: sale?.delivery ?? "pickup",
+    };
+    body = (
+      <PostSaleForm
         categories={cats ?? []}
         action={editListing}
         listingId={listing.id}

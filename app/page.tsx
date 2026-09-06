@@ -120,7 +120,11 @@ export default async function HomePage() {
             <Link href="/post" className="font-medium text-green-800 underline">
               post a listing
             </Link>{" "}
-            — free, takes 3 minutes.
+            or{" "}
+            <Link href="/post/sale" className="font-medium text-green-800 underline">
+              sell hay, stock or gear
+            </Link>
+            . Free, takes 3 minutes.
           </p>
         </div>
         <p className="mt-4 text-xs text-neutral-500">

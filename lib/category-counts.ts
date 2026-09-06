@@ -1,7 +1,7 @@
 import { unstable_cache } from "next/cache";
 import { createAnonClient } from "./supabase/anon";
 
-export type Pillar = "services" | "jobs" | "freight";
+export type Pillar = "services" | "jobs" | "freight" | "sale";
 
 export type CategoryCounts = Record<string, number>;
 
@@ -28,6 +28,7 @@ async function fetchCountsByPillar(): Promise<CountsByPillar> {
     services: empty(),
     jobs: empty(),
     freight: empty(),
+    sale: empty(),
   };
 
   if (error) {

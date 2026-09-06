@@ -146,7 +146,9 @@ export async function submitEnquiry(formData: FormData): Promise<EnquiryResult> 
       ? `/jobs/${listing.slug}`
       : listing.kind === "freight"
         ? `/freight/${listing.slug}`
-        : `/services/listing/${listing.slug}`;
+        : listing.kind === "for_sale"
+          ? `/sale/${listing.slug}`
+          : `/services/listing/${listing.slug}`;
   const contactLines = [
     v.value.phone ? `Phone: ${v.value.phone}` : null,
     v.value.email ? `Email: ${v.value.email}` : null,

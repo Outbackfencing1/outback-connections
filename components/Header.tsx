@@ -12,6 +12,7 @@ const primaryLinks: { href: string; label: string; pillar: Pillar }[] = [
   { href: "/services", label: "Services", pillar: "services" },
   { href: "/jobs", label: "Jobs", pillar: "jobs" },
   { href: "/freight", label: "Freight", pillar: "freight" },
+  { href: "/sale", label: "For sale", pillar: "sale" },
 ];
 
 export default async function Header() {

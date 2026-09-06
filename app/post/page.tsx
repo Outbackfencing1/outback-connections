@@ -45,6 +45,13 @@ export default async function PostHubPage() {
           disabled={!guard.ok}
         />
         <PostCard
+          href="/post/sale"
+          title="Sell hay, stock or gear"
+          blurb="Livestock, hay, grain, machinery, a trailer, fencing steel. No commission; buyers contact you."
+          eyebrow="For sale"
+          disabled={!guard.ok}
+        />
+        <PostCard
           href="/post/service/request"
           title="Need a service done"
           blurb="Looking for a specialist for a one-off job? Post what you need."

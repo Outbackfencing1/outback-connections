@@ -9,7 +9,9 @@ OpenAI Codex, GLM) and people commit here. These rules are the shared floor.
 A rural business directory + outreach tool, run by Outback Fencing & Steel
 Supplies (disclosed on every page). The live vertical is **Services**, mostly
 fencing contractors in NSW, which feeds the wholesale outreach pipeline.
-Jobs and Freight exist but are empty and hidden from navigation while empty.
+Jobs, Freight and For sale (livestock, hay, grain, machinery, gear) exist and are
+hidden from navigation while empty. For sale is first-party only: nothing is
+scraped into it, and the site never handles payment or takes a commission.
 Architecture source of truth: `SPINE-BUILD.md`. Current state: `HANDOFF.md`.
 
 ## Non-negotiable product rules

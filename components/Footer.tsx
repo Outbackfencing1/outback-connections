@@ -29,6 +29,9 @@ export default async function Footer() {
               {counts.freight.total > 0 && (
                 <li><Link href="/freight" className="hover:text-neutral-900">Freight</Link></li>
               )}
+              {counts.sale.total > 0 && (
+                <li><Link href="/sale" className="hover:text-neutral-900">For sale</Link></li>
+              )}
               <li><Link href="/post" className="hover:text-neutral-900">Post a listing</Link></li>
               <li><Link href="/about" className="hover:text-neutral-900">About</Link></li>
               <li><Link href="/faq" className="hover:text-neutral-900">FAQ</Link></li>

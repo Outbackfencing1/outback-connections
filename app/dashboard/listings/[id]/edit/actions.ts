@@ -14,6 +14,8 @@ import {
   zodErrorsToMap,
   type ActionResult,
 } from "@/lib/posting";
+import { saleSchema } from "@/lib/posting";
+import { dollarsToCents } from "@/lib/sale";
 
 /**
  * Edit a listing in place. Polymorphic on listing.kind. Verifies ownership
@@ -144,6 +146,40 @@ export async function editListing(formData: FormData): Promise<ActionResult> {
       })
       .eq("listing_id", id);
     if (dErr) return { ok: false, errors: { _: "Couldn't save freight details." } };
+  } else if (existing.kind === "for_sale") {
+    const parsed = saleSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { ok: false, errors: zodErrorsToMap(parsed.error), values: valuesFrom(formData) };
+    }
+    const data = parsed.data;
+    const cents = dollarsToCents(data.price);
+
+    const { error: lErr } = await admin
+      .from("listings")
+      .update({
+        category_id: data.category_id,
+        title: data.title,
+        description: data.description,
+        postcode: data.postcode,
+        contact_email: data.contact_email || null,
+        contact_phone: data.contact_phone || null,
+        contact_best_time: data.contact_best_time || null,
+      })
+      .eq("id", id);
+    if (lErr) return { ok: false, errors: { _: "Couldn't save listing." } };
+
+    const { error: dErr } = await admin
+      .from("sale_details")
+      .update({
+        price_cents: typeof cents === "number" ? cents : null,
+        price_type: data.price_type,
+        quantity: data.quantity ?? null,
+        unit: data.unit || null,
+        condition: data.condition ?? "na",
+        delivery: data.delivery ?? "pickup",
+      })
+      .eq("listing_id", id);
+    if (dErr) return { ok: false, errors: { _: "Couldn't save sale details." } };
   } else {
     // service_offering or service_request
     const parsed = serviceSchema.safeParse(raw);
@@ -213,7 +249,9 @@ async function captureListingSnapshot(
         ? "job_details"
         : kind === "freight"
           ? "freight_details"
-          : "service_details";
+          : kind === "for_sale"
+            ? "sale_details"
+            : "service_details";
     const [listing, detail] = await Promise.all([
       admin
         .from("listings")
