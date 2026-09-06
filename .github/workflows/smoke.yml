@@ -21,6 +21,10 @@ jobs:
     env:
       SMOKE_BASE_URL: ${{ github.event.inputs.url || github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
       SMOKE_LEGACY_SLUG: ${{ github.event.deployment_status.environment == 'Production' && 'boundary-builders-farm-fencing-2820-LST-QVBYD9EJ' || '' }}
+      # Previews are behind Vercel Authentication; this header gets through.
+      # Create it under Vercel → Settings → Deployment Protection → Protection
+      # Bypass for Automation, then add it as a GitHub Actions secret.
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
       CI: "1"
     steps:
       - uses: actions/checkout@v4
