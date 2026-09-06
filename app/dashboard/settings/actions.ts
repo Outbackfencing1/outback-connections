@@ -31,6 +31,22 @@ export async function deleteAccount(): Promise<DeleteResult> {
     };
   }
 
+  // Deletion record first (the legal-hardening table that was never wired).
+  // Written with the service role so it survives the auth user's removal.
+  const nowIso = new Date().toISOString();
+  const { error: recordError } = await admin.from("account_deletions").insert({
+    user_id: userData.user.id,
+    user_email_snapshot: userData.user.email ?? null,
+    deletion_requested_at: nowIso,
+    deletion_completed_at: nowIso,
+    initiated_by: "user",
+    retention_reason: null,
+  });
+  if (recordError) {
+    // Don't block the user's right to delete on our own bookkeeping.
+    console.error("[deleteAccount] account_deletions insert failed:", recordError.message);
+  }
+
   const { error } = await admin.auth.admin.deleteUser(userData.user.id);
   if (error) {
     console.error("[deleteAccount] failed:", error.message);

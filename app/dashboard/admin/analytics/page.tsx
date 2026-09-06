@@ -36,6 +36,33 @@ type Summary = {
   };
 };
 
+type GateWeek = {
+  week_start: string;
+  human_searches: number;
+  human_browse_loads: number;
+  human_sessions: number;
+  claims: number;
+  first_party_posts: number;
+  signups: number;
+  listing_views: number;
+  contact_reveals: number;
+  source_clicks: number;
+  directory_adds: number;
+};
+
+type GateMetrics = {
+  weeks: GateWeek[];
+  gate: {
+    target_searches_per_week: number;
+    target_claims_30d: number;
+    target_first_party_posts_30d: number;
+    human_searches_7d: number;
+    claims_30d: number;
+    first_party_posts_30d: number;
+    bot_share_30d_pct: number;
+  };
+};
+
 export default async function AnalyticsPage() {
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -63,13 +90,18 @@ export default async function AnalyticsPage() {
 
   const admin = createAdminClient();
   let summary: Summary | null = null;
+  let gate: GateMetrics | null = null;
   let err: string | null = null;
   if (!admin) {
     err = "Analytics unavailable (service role not configured).";
   } else {
-    const { data, error } = await admin.rpc("admin_analytics_summary");
-    if (error) err = error.message;
-    else summary = data as Summary;
+    const [s, g] = await Promise.all([
+      admin.rpc("admin_analytics_summary"),
+      admin.rpc("admin_gate_metrics", { p_weeks: 8 }),
+    ]);
+    if (s.error) err = s.error.message;
+    else summary = s.data as Summary;
+    if (!g.error) gate = g.data as GateMetrics;
   }
 
   return (
@@ -78,6 +110,8 @@ export default async function AnalyticsPage() {
         <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
         <Link href="/dashboard/admin/flags" className="text-sm underline">← Admin</Link>
       </div>
+
+      {gate && <GateBlock gate={gate} />}
       <p className="mt-2 text-sm text-neutral-700">
         Supply, demand and the zero-result gap by vertical and region. Read-only;
         populates as listings are imported and people browse.
@@ -207,5 +241,82 @@ function Table({ cols, rows }: { cols: string[]; rows: string[][] }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+// ------------------------------------------------------------
+// Traction gate (Josh, 4 Jul 2026): 25 organic human searches/week,
+// 5 claim submissions and 10 first-party posts within 30 days of the
+// Facebook push. Humans only (crawlers flagged by user agent). A "search"
+// is a browse load with a query or a filter set; bare loads are shown too.
+// ------------------------------------------------------------
+function GateBlock({ gate }: { gate: GateMetrics }) {
+  const g = gate.gate;
+  const chip = (label: string, value: number, target: number) => (
+    <div
+      className={`rounded-xl border p-4 ${
+        value >= target ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"
+      }`}
+    >
+      <p className="text-xs font-semibold uppercase tracking-wide text-neutral-600">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-neutral-900">
+        {value}
+        <span className="text-sm font-normal text-neutral-500"> / {target}</span>
+      </p>
+    </div>
+  );
+  return (
+    <section className="mt-6">
+      <h2 className="text-lg font-semibold text-neutral-900">Traction gate</h2>
+      <p className="mt-1 text-xs text-neutral-600">
+        Humans only. Crawlers were {g.bot_share_30d_pct}% of browse loads in the last 30 days.
+      </p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        {chip("Human searches, last 7 days", g.human_searches_7d, g.target_searches_per_week)}
+        {chip("Claims, last 30 days", g.claims_30d, g.target_claims_30d)}
+        {chip("First-party posts, last 30 days", g.first_party_posts_30d, g.target_first_party_posts_30d)}
+      </div>
+      <div className="mt-4 overflow-x-auto rounded-xl border border-neutral-200">
+        <table className="min-w-full divide-y divide-neutral-200 text-sm">
+          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-600">
+            <tr>
+              <th className="px-3 py-2">Week of</th>
+              <th className="px-3 py-2">Searches</th>
+              <th className="px-3 py-2">Browse loads</th>
+              <th className="px-3 py-2">People</th>
+              <th className="px-3 py-2">Listing views</th>
+              <th className="px-3 py-2">Contact reveals</th>
+              <th className="px-3 py-2">Source clicks</th>
+              <th className="px-3 py-2">Signups</th>
+              <th className="px-3 py-2">Claims</th>
+              <th className="px-3 py-2">1st-party posts</th>
+              <th className="px-3 py-2">Directory adds</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-100">
+            {gate.weeks.map((w) => (
+              <tr key={w.week_start}>
+                <td className="px-3 py-2 font-medium text-neutral-900">{w.week_start}</td>
+                <td className="px-3 py-2">{w.human_searches}</td>
+                <td className="px-3 py-2 text-neutral-600">{w.human_browse_loads}</td>
+                <td className="px-3 py-2">{w.human_sessions}</td>
+                <td className="px-3 py-2">{w.listing_views}</td>
+                <td className="px-3 py-2">{w.contact_reveals}</td>
+                <td className="px-3 py-2">{w.source_clicks}</td>
+                <td className="px-3 py-2">{w.signups}</td>
+                <td className="px-3 py-2">{w.claims}</td>
+                <td className="px-3 py-2">{w.first_party_posts}</td>
+                <td className="px-3 py-2 text-neutral-600">{w.directory_adds}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-xs text-neutral-500">
+        &quot;People&quot; is distinct daily visitors (hash of address + browser + day; no cookie).
+        Source clicks are people leaving to the business&apos;s own page, the directory&apos;s
+        version of an enquiry.
+      </p>
+    </section>
   );
 }

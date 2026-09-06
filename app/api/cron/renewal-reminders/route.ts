@@ -8,7 +8,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { signToken } from "@/lib/signed-tokens";
-import { DEFAULT_FROM, sendEmail } from "@/lib/email";
+import { DEFAULT_FROM, NOTIFICATION_TO, sendEmail } from "@/lib/email";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
@@ -36,6 +36,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "no_admin_client" }, { status: 500 });
   }
 
+  // Directory digest: scraped rows have no owner to email, so tell the team
+  // once, 7 days out (each row falls in this 24h window exactly once).
+  const digest = await sendDirectoryExpiryDigest(admin);
+
   // Listings expiring in 2.5 to 3.5 days from now AND active
   const lower = new Date(Date.now() + 2.5 * 24 * 60 * 60 * 1000).toISOString();
   const upper = new Date(Date.now() + 3.5 * 24 * 60 * 60 * 1000).toISOString();
@@ -44,11 +48,12 @@ export async function GET(request: NextRequest) {
     .from("listings")
     .select("id, user_id, title, slug, kind, expires_at")
     .eq("status", "active")
+    .not("user_id", "is", null)
     .gte("expires_at", lower)
     .lt("expires_at", upper);
 
   if (!listings || listings.length === 0) {
-    return NextResponse.json({ ok: true, sent: 0, reason: "none_due" });
+    return NextResponse.json({ ok: true, sent: 0, reason: "none_due", digest });
   }
 
   // Pull user emails in one query
@@ -111,7 +116,59 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, sent, total: listings.length });
+  return NextResponse.json({ ok: true, sent, total: listings.length, digest });
+}
+
+type AdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
+
+async function sendDirectoryExpiryDigest(
+  admin: AdminClient
+): Promise<{ rows: number; sent: boolean }> {
+  const lower = new Date(Date.now() + 6.5 * 24 * 60 * 60 * 1000).toISOString();
+  const upper = new Date(Date.now() + 7.5 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: rows } = await admin
+    .from("listings")
+    .select("id, title, slug, kind, postcode, state, source_platform, expires_at")
+    .eq("status", "active")
+    .eq("data_source", "scraped")
+    .gte("expires_at", lower)
+    .lt("expires_at", upper)
+    .order("title")
+    .limit(500);
+  if (!rows || rows.length === 0) return { rows: 0, sent: false };
+
+  const when = new Date(rows[0].expires_at).toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  const lines = rows.map(
+    (r) =>
+      `- ${r.title} (${[r.postcode, r.state].filter(Boolean).join(" ")}, via ${r.source_platform ?? "?"}) ${BASE_URL}${pathForKind(r.kind, r.slug)}`
+  );
+  const text = [
+    `${rows.length} directory entr${rows.length === 1 ? "y" : "ies"} expire${rows.length === 1 ? "s" : ""} in 7 days (${when}).`,
+    ``,
+    `Unclaimed rows drop off unless they're re-sighted. To keep them: re-run the import for their source, or re-add them via ${BASE_URL}/dashboard/directory/add (same name + postcode refreshes the clock). Better still: get them claimed.`,
+    ``,
+    ...lines,
+    ``,
+    `Outreach workspace: ${BASE_URL}/dashboard/admin/contractor-outreach`,
+  ].join("\n");
+
+  try {
+    await sendEmail({
+      to: NOTIFICATION_TO,
+      from: DEFAULT_FROM,
+      subject: `Directory: ${rows.length} entr${rows.length === 1 ? "y" : "ies"} expiring in 7 days`,
+      text,
+      html: `<pre style="font-family:-apple-system,system-ui,sans-serif;white-space:pre-wrap;">${escapeHtml(text)}</pre>`,
+    });
+    return { rows: rows.length, sent: true };
+  } catch (e) {
+    console.error("[cron renewal] directory digest failed", e);
+    return { rows: rows.length, sent: false };
+  }
 }
 
 function pathForKind(kind: string, slug: string): string {
