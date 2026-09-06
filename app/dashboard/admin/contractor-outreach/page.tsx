@@ -86,11 +86,11 @@ export default async function ContractorOutreachPage({
 
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("is_admin")
+    .select("is_admin, is_staff")
     .eq("user_id", userData.user.id)
     .maybeSingle();
 
-  if (!profile?.is_admin) {
+  if (!(profile?.is_admin || profile?.is_staff)) {
     return <AdminOnly />;
   }
 

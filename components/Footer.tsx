@@ -1,7 +1,9 @@
 // components/Footer.tsx
 import Link from "next/link";
+import { getCountsByPillar } from "@/lib/category-counts";
 
-export default function Footer() {
+export default async function Footer() {
+  const counts = await getCountsByPillar();
   return (
     <footer className="mt-16 border-t bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40">
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
@@ -21,8 +23,12 @@ export default function Footer() {
             <ul className="mt-3 space-y-2 text-sm text-neutral-700">
               <li><Link href="/" className="hover:text-neutral-900">Home</Link></li>
               <li><Link href="/services" className="hover:text-neutral-900">Services</Link></li>
-              <li><Link href="/jobs" className="hover:text-neutral-900">Jobs</Link></li>
-              <li><Link href="/freight" className="hover:text-neutral-900">Freight</Link></li>
+              {counts.jobs.total > 0 && (
+                <li><Link href="/jobs" className="hover:text-neutral-900">Jobs</Link></li>
+              )}
+              {counts.freight.total > 0 && (
+                <li><Link href="/freight" className="hover:text-neutral-900">Freight</Link></li>
+              )}
               <li><Link href="/post" className="hover:text-neutral-900">Post a listing</Link></li>
               <li><Link href="/about" className="hover:text-neutral-900">About</Link></li>
               <li><Link href="/faq" className="hover:text-neutral-900">FAQ</Link></li>

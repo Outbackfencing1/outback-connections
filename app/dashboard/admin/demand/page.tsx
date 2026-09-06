@@ -42,15 +42,15 @@ export default async function DemandPage({
   if (!userData.user) redirect("/signin?next=/dashboard/admin/demand");
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("is_admin")
+    .select("is_admin, is_staff")
     .eq("user_id", userData.user.id)
     .maybeSingle();
-  if (!profile?.is_admin) {
+  if (!(profile?.is_admin || profile?.is_staff)) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-10">
         <h1 className="text-2xl font-bold tracking-tight">Demand by region</h1>
         <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
-          <p className="font-semibold">Admins only</p>
+          <p className="font-semibold">Staff and admins only</p>
         </div>
       </div>
     );

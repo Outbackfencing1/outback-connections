@@ -16,11 +16,11 @@ export async function requireDirectoryContributor(): Promise<DirectoryAccess> {
   }
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("is_admin, directory_contributor")
+    .select("is_admin, is_staff, directory_contributor")
     .eq("user_id", userData.user.id)
     .maybeSingle();
   const isAdmin = !!profile?.is_admin;
-  if (!isAdmin && !profile?.directory_contributor) {
+  if (!isAdmin && !profile?.is_staff && !profile?.directory_contributor) {
     return {
       ok: false,
       reason: "forbidden",

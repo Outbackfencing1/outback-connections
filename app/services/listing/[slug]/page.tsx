@@ -120,6 +120,12 @@ export default async function ServiceDetailPage({
   const isUnclaimedScraped =
     listing.data_source === "scraped" &&
     (!business || business.claim_status === "unclaimed");
+  const trustBadge =
+    business?.claim_status === "abn_verified" || business?.claim_status === "trusted"
+      ? "ABN verified"
+      : business?.claim_status === "claimed"
+        ? "Claimed by the owner"
+        : null;
 
   await logEvent({
     eventType: "listing_view",
@@ -196,8 +202,15 @@ export default async function ServiceDetailPage({
 
       <div className="mt-3 flex items-baseline justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{listing.title}</h1>
-        <span className="shrink-0 rounded bg-neutral-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-neutral-700">
-          {kindLabel(listing.kind)}
+        <span className="flex shrink-0 items-center gap-2">
+          {trustBadge && (
+            <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-green-800">
+              {trustBadge}
+            </span>
+          )}
+          <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-neutral-700">
+            {kindLabel(listing.kind)}
+          </span>
         </span>
       </div>
 

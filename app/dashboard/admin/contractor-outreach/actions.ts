@@ -89,10 +89,10 @@ export async function recordOutreach(
 
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("is_admin")
+    .select("is_admin, is_staff")
     .eq("user_id", userData.user.id)
     .maybeSingle();
-  if (!profile?.is_admin) return { ok: false, message: "Admins only." };
+  if (!(profile?.is_admin || profile?.is_staff)) return { ok: false, message: "Staff and admins only." };
 
   const value = parsed.data;
   // This must use the signed-in user's client: the RPC checks auth.uid() and
@@ -138,10 +138,10 @@ export async function getOutreachHistory(
   if (!userData.user) return { ok: false, message: "Sign in again." };
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("is_admin")
+    .select("is_admin, is_staff")
     .eq("user_id", userData.user.id)
     .maybeSingle();
-  if (!profile?.is_admin) return { ok: false, message: "Admins only." };
+  if (!(profile?.is_admin || profile?.is_staff)) return { ok: false, message: "Staff and admins only." };
 
   const { data, error } = await supabase
     .from("business_outreach_events")
@@ -171,10 +171,10 @@ export async function sendClaimInvite(businessId: string): Promise<RecordOutreac
   if (!userData.user) return { ok: false, message: "Sign in again." };
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("is_admin")
+    .select("is_admin, is_staff")
     .eq("user_id", userData.user.id)
     .maybeSingle();
-  if (!profile?.is_admin) return { ok: false, message: "Admins only." };
+  if (!(profile?.is_admin || profile?.is_staff)) return { ok: false, message: "Staff and admins only." };
 
   const { data: row, error: rowError } = await supabase
     .from("admin_contractor_outreach")

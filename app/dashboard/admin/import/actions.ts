@@ -20,10 +20,10 @@ async function requireAdmin(): Promise<
   if (!userData.user) return { ok: false, message: "Sign in." };
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("is_admin")
+    .select("is_admin, is_staff")
     .eq("user_id", userData.user.id)
     .maybeSingle();
-  if (!profile?.is_admin) return { ok: false, message: "Admins only." };
+  if (!(profile?.is_admin || profile?.is_staff)) return { ok: false, message: "Staff and admins only." };
   return { ok: true };
 }
 

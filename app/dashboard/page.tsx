@@ -32,11 +32,12 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("is_admin, directory_contributor")
+    .select("is_admin, is_staff, directory_contributor")
     .eq("user_id", user.id)
     .maybeSingle();
   const isAdmin = !!profile?.is_admin;
-  const canAddDirectory = isAdmin || !!profile?.directory_contributor;
+  const isStaff = isAdmin || !!profile?.is_staff;
+  const canAddDirectory = isStaff || !!profile?.directory_contributor;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -110,6 +111,21 @@ export default async function DashboardPage() {
               Found a business online that isn&apos;t yours? Add it here, not through
               &quot;Post a listing&quot;. It goes in as unclaimed, says where you found it,
               and the owner can claim it.
+            </p>
+          </Link>
+        )}
+
+        {isStaff && !isAdmin && (
+          <Link
+            href="/dashboard/admin/contractor-outreach"
+            className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm transition hover:border-amber-400 hover:shadow-md sm:col-span-2"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+              Staff
+            </p>
+            <h2 className="mt-1 text-lg font-bold text-neutral-900">Outreach and enquiries</h2>
+            <p className="mt-2 text-sm text-neutral-700">
+              Contractor outreach queue, quote requests to forward, bulk import, and the reports.
             </p>
           </Link>
         )}

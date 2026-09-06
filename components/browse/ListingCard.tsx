@@ -25,6 +25,12 @@ export default function ListingCard({ listing }: { listing: Listing }) {
     listing.data_source === "scraped" &&
     !isSyndicated &&
     (!listing.business_claim_status || listing.business_claim_status === "unclaimed");
+  const trustBadge =
+    listing.business_claim_status === "abn_verified" || listing.business_claim_status === "trusted"
+      ? "ABN verified"
+      : listing.business_claim_status === "claimed"
+        ? "Claimed"
+        : null;
   return (
     <Link
       href={listingHref(listing.kind, listing.slug)}
@@ -43,6 +49,11 @@ export default function ListingCard({ listing }: { listing: Listing }) {
           {isScraped && (
             <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-amber-800">
               Unclaimed
+            </span>
+          )}
+          {trustBadge && (
+            <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-green-800">
+              {trustBadge}
             </span>
           )}
           <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-neutral-700">
