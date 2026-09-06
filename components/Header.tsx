@@ -6,17 +6,22 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/dashboard/actions";
+import { getCountsByPillar, type Pillar } from "@/lib/category-counts";
 
-const primaryLinks = [
-  { href: "/services", label: "Services" },
-  { href: "/jobs", label: "Jobs" },
-  { href: "/freight", label: "Freight" },
+const primaryLinks: { href: string; label: string; pillar: Pillar }[] = [
+  { href: "/services", label: "Services", pillar: "services" },
+  { href: "/jobs", label: "Jobs", pillar: "jobs" },
+  { href: "/freight", label: "Freight", pillar: "freight" },
 ];
 
 export default async function Header() {
   const supabase = createClient();
-  const { data } = await supabase.auth.getUser();
+  const [{ data }, counts] = await Promise.all([supabase.auth.getUser(), getCountsByPillar()]);
   const signedIn = !!data.user;
+  // An empty vertical is not advertised in the nav. Services always shows.
+  const links = primaryLinks.filter(
+    (l) => l.pillar === "services" || counts[l.pillar].total > 0
+  );
 
   return (
     <header className="sticky top-0 z-40 border-b bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/70">
@@ -30,7 +35,7 @@ export default async function Header() {
           </Link>
 
           <nav className="hidden items-center gap-3 md:flex">
-            {primaryLinks.map((l) => (
+            {links.map((l) => (
               <Link
                 key={l.href}
                 href={l.href}
@@ -75,7 +80,7 @@ export default async function Header() {
 
         {/* Mobile nav: stacked, always visible. No JS. Bigger tap targets. */}
         <nav className="-mx-1 mt-2 flex flex-wrap items-center gap-x-1 gap-y-1 text-sm md:hidden">
-          {primaryLinks.map((l) => (
+          {links.map((l) => (
             <Link
               key={l.href}
               href={l.href}

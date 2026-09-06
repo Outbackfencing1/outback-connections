@@ -140,7 +140,7 @@ export default async function JobsBrowsePage({
 
       <div className="mt-6">
         {!listings || listings.length === 0 ? (
-          <EmptyState />
+          jobCounts.total === 0 ? <NothingYet /> : <EmptyState />
         ) : (
           <ul className="space-y-4">
             {listings.map((l) => (
@@ -199,6 +199,28 @@ function buildQs(params: Record<string, string>): string {
     if (v) usp.set(k, v);
   }
   return usp.toString();
+}
+
+function NothingYet() {
+  return (
+    <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center">
+      <p className="text-sm font-semibold text-neutral-800">No jobs listed yet.</p>
+      <p className="mt-2 text-sm text-neutral-700">
+        Be the first.{" "}
+        <Link href="/post/job" className="font-medium text-green-800 underline">
+          Post a job
+        </Link>{" "}
+        is free and takes a few minutes.
+      </p>
+      <p className="mt-3 text-xs text-neutral-500">
+        After a fencing contractor instead?{" "}
+        <Link href="/services/fencing-contractor" className="underline">
+          They&apos;re under Services
+        </Link>
+        .
+      </p>
+    </div>
+  );
 }
 
 function EmptyState() {

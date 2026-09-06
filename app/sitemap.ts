@@ -59,6 +59,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       return null;
     };
 
+    // Don't advertise an empty vertical's browse page to crawlers.
+    const hasJobs = (listings ?? []).some((l) => l.kind === "job");
+    const hasFreight = (listings ?? []).some((l) => l.kind === "freight");
+    const visibleStatic = staticEntries.filter(
+      (e) =>
+        (hasJobs || !e.url.endsWith("/jobs")) &&
+        (hasFreight || !e.url.endsWith("/freight"))
+    );
+
     const listingEntries: Row[] = (listings ?? [])
       .map((l): Row | null => {
         const prefix = prefixFor(l.kind);
@@ -90,7 +99,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         priority: 0.6,
       }));
 
-    return [...staticEntries, ...categoryEntries, ...listingEntries];
+    return [...visibleStatic, ...categoryEntries, ...listingEntries];
   } catch {
     // DB unreachable at build/regen — ship the static map rather than fail.
     return staticEntries;

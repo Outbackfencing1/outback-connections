@@ -4,6 +4,7 @@ import ListingCard from "@/components/browse/ListingCard";
 import Pagination from "@/components/browse/Pagination";
 import FilterBar from "@/components/browse/FilterBar";
 import { logSearch } from "@/lib/analytics";
+import { getCategoryCounts } from "@/lib/category-counts";
 
 export const metadata = {
   title: "Freight — Outback Connections",
@@ -60,7 +61,10 @@ export default async function FreightBrowsePage({
   const to = from + PAGE_SIZE - 1;
   query = query.range(from, to);
 
-  const { data: listings, count } = await query;
+  const [{ data: listings, count }, freightCounts] = await Promise.all([
+    query,
+    getCategoryCounts("freight"),
+  ]);
 
   const total = count ?? 0;
   if (page === 1) {
@@ -128,6 +132,18 @@ export default async function FreightBrowsePage({
 
       <div className="mt-6">
         {!listings || listings.length === 0 ? (
+          freightCounts.total === 0 ? (
+            <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center">
+              <p className="text-sm font-semibold text-neutral-800">No freight listed yet.</p>
+              <p className="mt-2 text-sm text-neutral-700">
+                Got a load to move, or a truck with space?{" "}
+                <Link href="/post/freight" className="font-medium text-green-800 underline">
+                  Post it
+                </Link>{" "}
+                free.
+              </p>
+            </div>
+          ) : (
           <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center">
             <p className="text-sm text-neutral-700">No freight listings match.</p>
             <p className="mt-2 text-xs text-neutral-500">
@@ -138,6 +154,7 @@ export default async function FreightBrowsePage({
               .
             </p>
           </div>
+          )
         ) : (
           <ul className="space-y-4">
             {listings.map((l) => (

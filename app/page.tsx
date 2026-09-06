@@ -179,7 +179,7 @@ export default async function HomePage() {
             cta="Post a job"
           />
           <PillarCard
-            href="/freight"
+            href={pillarCounts.freight.total > 0 ? "/freight" : "/post/freight"}
             icon={<TruckIcon />}
             heading="I need freight moved"
             blurb="Livestock, hay, grain, machinery. No brokers, no cut."
@@ -188,7 +188,7 @@ export default async function HomePage() {
                 ? formatCountLine("freight", pillarCounts.freight)
                 : null
             }
-            cta="Browse freight"
+            cta={pillarCounts.freight.total > 0 ? "Browse freight" : "Post freight"}
           />
         </div>
       </section>
