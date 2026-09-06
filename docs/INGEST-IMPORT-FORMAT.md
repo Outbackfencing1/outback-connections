@@ -23,7 +23,7 @@ scripts/scrape-rural-directory.mjs              (this file)        /dashboard/ad
 | `state` | string | optional | `state_code` on the business; `state` derived on the listing from postcode regardless. |
 | `website` | string | optional | public on the business record. |
 | `geo_lat` / `geo_lng` | number | optional | stored on the business for later radius matching. |
-| `raw_payload` | object | optional | the **full** source record. Archived **privately** in `listing_sources.raw_payload` (admin/service-role only). **This is where scraped phone/email live — they are never written to the public business/listing contact fields.** |
+| `raw_payload` | object | optional | the **full** source record. Archived **privately** in `listing_sources.raw_payload` (admin/service-role only). **This is where scraped phone/email live — they are never written to the public business/listing contact fields.** Staff-entered rows also carry `raw_payload.source_url_kind` (`site` = exact page, `search` = a search on the platform), which the commit copies to `listings.metadata` so the detail page words the source link honestly. |
 
 ## Normalisation rules (scrape → ImportRecord)
 
@@ -42,6 +42,14 @@ Every committed row is, by construction of `ingest_scraped_business()`:
 `data_source='scraped'`, `claim_status='unclaimed'`, `user_id=null`, `policy_version_id=null`,
 `scraped_at=now()`, `expires_at=now()+45d`, `freshness_status='fresh'`, source attribution set,
 and shown in the UI with the **Unclaimed** badge + `ScrapedNotice` (never as employer-posted).
+
+## Staff paths (same RPCs, no scraper)
+
+- **One business:** `/dashboard/directory/add` (admins + `user_profiles.directory_contributor`).
+- **A spreadsheet:** the CSV loader on `/dashboard/admin/import` (headers like
+  name / town / postcode / found_on / url / phone / email / category / notes;
+  see `lib/directory-records.ts` for the accepted aliases). Rows with
+  problems are listed and skipped; the rest become the JSON batch below.
 
 ## Flow
 

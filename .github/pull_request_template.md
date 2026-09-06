@@ -6,11 +6,12 @@
 
 <!-- The problem or decision this serves. Link HANDOFF.md decisions if relevant. -->
 
-## Honesty + privacy check (AGENTS.md rules 1–3)
+## Honesty + privacy check (AGENTS.md rules 1–4)
 
 - [ ] No third-party business is written as owner-posted (`data_source='manual'`)
 - [ ] No scraped phone/email lands in public contact columns
 - [ ] No `JobPosting` JSON-LD on scraped or syndicated rows
+- [ ] No farmer enquiry data or contractor private contact reaches a public surface
 
 ## Database
 

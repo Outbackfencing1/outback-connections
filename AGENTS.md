@@ -23,13 +23,18 @@ Architecture source of truth: `SPINE-BUILD.md`. Current state: `HANDOFF.md`.
 2. **Privacy.** Scraped phone/email live ONLY in private
    `listing_sources.raw_payload`. Never in `listings`/`businesses` contact
    columns (those are readable by signed-in users).
-3. **Structured data.** `JobPosting` JSON-LD only on first-party job ads.
+3. **Farmer data.** Quote requests (`listing_enquiries`) are a farmer's
+   personal details given under consent for ONE business. Admin-only, never
+   public, never bulk-exported, purged after 12 months. The business's
+   private contact (from `listing_sources.raw_payload`) is never sent to
+   the farmer; a person forwards unclaimed enquiries.
+4. **Structured data.** `JobPosting` JSON-LD only on first-party job ads.
    Nothing on scraped or syndicated rows. `LocalBusiness` is fine on
    directory rows.
-4. **Claims are the retention mechanism.** Don't build automated re-sighting
+5. **Claims are the retention mechanism.** Don't build automated re-sighting
    of scraped rows; the directory is refreshed on a calendar (first Monday
    monthly) via an idempotent re-import.
-5. **Quarantine.** `ericka_sales_quotes` is a foreign app's table: never
+6. **Quarantine.** `ericka_sales_quotes` is a foreign app's table: never
    touch it. The fencing calculator and Shopify nav are out of scope.
 
 ## Engineering conventions
