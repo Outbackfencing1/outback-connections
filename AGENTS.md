@@ -50,8 +50,11 @@ Architecture source of truth: `SPINE-BUILD.md`. Current state: `HANDOFF.md`.
   `current_user_is_admin()`), never client-only. `SECURITY DEFINER`
   functions check admin internally. Service-role writes happen in server
   actions only (`lib/supabase/admin.ts`), never in client components.
-- **Gate before push:** `npx tsc --noEmit`, `npm run lint`, `npm run build`
-  all green. CI (`.github/workflows/ci.yml`) runs the same on every PR.
+- **Gate before push:** `npm test`, `npx tsc --noEmit`, `npm run lint`,
+  `npm run build` all green, checked on their real exit codes (not a grep of
+  their output). CI (`.github/workflows/ci.yml`) runs the same on every PR;
+  `.github/workflows/smoke.yml` runs the read-only Playwright smoke against
+  every Vercel deployment. Add a smoke check when you add a public page.
 - **Never** commit `.env*`, scraped data under `data/`, or keys. Rotate
   anything that leaks.
 - Prisma is vestigial; do not add Prisma usage. Supabase client only.

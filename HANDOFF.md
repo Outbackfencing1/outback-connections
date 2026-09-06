@@ -191,14 +191,25 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
   but nothing has sold. Shopify's own analytics can produce the same numbers
   (ShopifyQL: `FROM sales SHOW orders, net_sales GROUP BY shipping_postal_code
   TIMESERIES month`); a token-gated sync cron is a candidate for later.
+- **Smoke tests on every deploy** (`tests/e2e/smoke.spec.ts`, Playwright):
+  read-only checks of the farmer path on a real URL: home finder, category
+  page, region chip, listing detail with the quote door, unclaimed honesty
+  (notice shown, no contact block, operator offer disclosed), empty verticals
+  not broken, staff/admin pages bounce to sign-in, robots + sitemap, old-slug
+  redirect. `.github/workflows/smoke.yml` runs it against each Vercel
+  deployment URL (`deployment_status` event) and on demand; locally
+  `npm run test:e2e` (optionally `SMOKE_BASE_URL=…`). Never submits a form.
+  Its user agent says HeadlessChrome so analytics counts it as a crawler.
 - **Demand by region** (`/dashboard/admin/demand`, `admin_demand_by_region()`):
   quote requests + job requests + located human searches per region and
   category against live supply, monthly totals, and the gaps (demand, no
   supply). This is the planning view Josh asked for; it fills as enquiries
   and requests arrive.
 
-Gate at end of session: `npx tsc --noEmit` clean, `npm run lint` 0 errors,
-`npm run build` passes (see the commit log for the exact run).
+Gate at end of session: `npm test` (28 unit tests), `npx tsc --noEmit`,
+`npm run lint` 0 errors, `npm run build` all pass. The smoke suite passed
+against production except for the two pages that don't exist there until
+the next push (`/sale`, `/dashboard/admin/sales-upload`), which is expected.
 
 ## Josh's actions, in order
 
