@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { regionsForPostcodes } from "@/lib/regions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listingHref } from "@/lib/format";
 import ContactBlock from "@/components/detail/ContactBlock";
@@ -13,6 +14,7 @@ import OwnerActions from "@/components/detail/OwnerActions";
 import { kindLabel, relativeTime } from "@/lib/format";
 import {
   buildDescription,
+  buildDirectoryDescription,
   buildTitle,
   jsonLdScript,
   serviceJsonLd,
@@ -36,7 +38,7 @@ export async function generateMetadata({
   const supabase = createClient();
   const { data } = await supabase
     .from("listings")
-    .select(`title, description, postcode, category:categories(label)`)
+    .select(`title, description, postcode, state, kind, data_source, category:categories(label)`)
     .eq("slug", slug)
     .in("kind", ["service_offering", "service_request"])
     .maybeSingle();
@@ -49,8 +51,21 @@ export async function generateMetadata({
     listingTitle: data.title,
     categoryLabel: cat?.label ?? "Services",
     postcode: data.postcode,
+    state: data.state,
   });
-  const description = buildDescription(data.description);
+  let description: string;
+  if (data.kind === "service_offering" && data.data_source !== "manual") {
+    const region = (await regionsForPostcodes([data.postcode])).get(data.postcode);
+    description = buildDirectoryDescription({
+      categoryLabel: cat?.label ?? "Rural service",
+      regionName: region?.region_name,
+      state: data.state,
+      postcode: data.postcode,
+      unclaimed: data.data_source === "scraped",
+    });
+  } else {
+    description = buildDescription(data.description);
+  }
   return {
     title,
     description,

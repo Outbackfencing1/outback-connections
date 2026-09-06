@@ -4,14 +4,39 @@ export function buildTitle(args: {
   listingTitle: string;
   categoryLabel: string;
   postcode: string;
+  state?: string | null;
 }): string {
   const parts = [
     args.listingTitle,
     args.categoryLabel,
-    `Postcode ${args.postcode}`,
+    args.state ? `${args.state} ${args.postcode}` : `Postcode ${args.postcode}`,
     "Outback Connections",
   ];
   return parts.filter(Boolean).join(" · ");
+}
+
+/**
+ * Meta description for a directory row. Scraped rows carry boilerplate in
+ * `description` ("… we found listed on …"), which reads badly in a search
+ * snippet; say what the business is and where, and be honest about the
+ * unclaimed state.
+ */
+export function buildDirectoryDescription(args: {
+  categoryLabel: string;
+  regionName?: string | null;
+  state?: string | null;
+  postcode: string;
+  unclaimed: boolean;
+}): string {
+  const cat = args.categoryLabel.replace(/\s*\(.*\)\s*$/, "").trim();
+  const where = args.regionName
+    ? `${args.regionName}, ${args.state ?? ""}`.replace(/, $/, "")
+    : args.state
+      ? `${args.state} ${args.postcode}`
+      : `postcode ${args.postcode}`;
+  return args.unclaimed
+    ? `${cat} in ${where}. Unclaimed directory entry on Outback Connections: ask for a quote and we pass it on.`
+    : `${cat} in ${where}. On Outback Connections, the free rural directory: no lead fees, contact them direct.`;
 }
 
 /** "Fencing contractor (construction)" -> "Fencing contractors" */
