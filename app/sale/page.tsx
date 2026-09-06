@@ -8,6 +8,7 @@ import { relativeTime, teaser } from "@/lib/format";
 import { priceLine, quantityLine } from "@/lib/sale";
 
 export const metadata = {
+  alternates: { canonical: "/sale" },
   title: "For sale — Outback Connections",
   description:
     "Livestock, hay, grain, machinery and gear for sale across rural Australia. Free to browse, no commission, contact the seller directly.",
@@ -116,7 +117,7 @@ export default async function SaleBrowsePage({ searchParams }: { searchParams: P
               <p className="mt-2 text-sm text-neutral-700">
                 Be the first.{" "}
                 <Link href="/post/sale" className="font-medium text-green-800 underline">
-                  Post something for sale
+                  Posting something for sale
                 </Link>{" "}
                 is free and takes a few minutes.
               </p>

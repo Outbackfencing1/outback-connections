@@ -7,6 +7,7 @@ import { logSearch } from "@/lib/analytics";
 import { getCategoryCounts } from "@/lib/category-counts";
 
 export const metadata = {
+  alternates: { canonical: "/freight" },
   title: "Freight — Outback Connections",
   description:
     "Rural freight: livestock, hay, grain, machinery. Farmers needing freight, truckies with available runs. Free to browse.",

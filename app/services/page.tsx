@@ -4,6 +4,7 @@ import { getCategoryCounts } from "@/lib/category-counts";
 import ListingCard from "@/components/browse/ListingCard";
 
 export const metadata = {
+  alternates: { canonical: "/services" },
   title: "Services — Outback Connections",
   description:
     "Rural specialists: bore pumps, helicopter mustering, drone spraying, mobile diesel mechanics, contract croppers, shearing teams, welders.",

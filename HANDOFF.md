@@ -210,6 +210,18 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
   `escapeHtml`, `listingHref`, `formatAud`, `upsertSalesRows`. Skipped on
   purpose: consolidating the nine inline staff gates onto
   `getStaffAccess()` (safe as-is; do it when PR #17's access model lands).
+- **Local defect review (evening):** ran the production build locally
+  (`.claude/launch.json` → `prod-build` on :3100; needs the public
+  Supabase URL + anon key in `.env.local`, no service role) and curled all
+  21 public/guarded pages: every one answered as designed. Fixed what the
+  pass found: category page `<title>` was the raw slug ("fencing
+  contractor"), now the pluralised label ("Fencing contractors") with a real
+  description; no page emitted `<link rel="canonical">`, so
+  `?postcode=` filters were duplicate URLs to crawlers, now every public
+  page has one; empty-state grammar on /sale and /jobs. Smoke suite 7/7 on
+  the local build. Note for anyone running it locally: the legacy-slug
+  redirect and the admin pages need `SUPABASE_SERVICE_ROLE_KEY`, which
+  stays off this machine.
 - **Smoke tests on every deploy** (`tests/e2e/smoke.spec.ts`, Playwright):
   read-only checks of the farmer path on a real URL: home finder, category
   page, region chip, listing detail with the quote door, unclaimed honesty

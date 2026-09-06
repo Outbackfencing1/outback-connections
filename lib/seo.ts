@@ -14,6 +14,12 @@ export function buildTitle(args: {
   return parts.filter(Boolean).join(" · ");
 }
 
+/** "Fencing contractor (construction)" -> "Fencing contractors" */
+export function humanCategory(label: string): string {
+  const base = label.replace(/\s*\(.*\)\s*$/, "").trim();
+  return /s$/i.test(base) ? base : `${base}s`;
+}
+
 export function buildDescription(rawDescription: string): string {
   const cleaned = rawDescription.replace(/\s+/g, " ").trim();
   const trimmed = cleaned.length <= 150 ? cleaned : cleaned.slice(0, 150).trimEnd() + "…";

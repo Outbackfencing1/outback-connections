@@ -9,6 +9,7 @@ const RECENT_LIMIT = 5;
 const PILLAR_COUNT_MIN = 10;
 
 export const metadata = {
+  alternates: { canonical: "/" },
   title: "Outback Connections — rural Australia's free marketplace",
   description:
     "Jobs, freight, and the bloke who's handy with a bore pump. A free rural marketplace — no lead fees, no rip-offs, direct contact between parties.",

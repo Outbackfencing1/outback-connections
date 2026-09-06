@@ -7,6 +7,7 @@ import FilterBar from "@/components/browse/FilterBar";
 import { logSearch } from "@/lib/analytics";
 
 export const metadata = {
+  alternates: { canonical: "/jobs" },
   title: "Jobs — Outback Connections",
   description:
     "Browse rural jobs across Australia: station hands, fencing, harvest, mustering, dairy. Free to browse.",
@@ -209,7 +210,7 @@ function NothingYet() {
       <p className="mt-2 text-sm text-neutral-700">
         Be the first.{" "}
         <Link href="/post/job" className="font-medium text-green-800 underline">
-          Post a job
+          Posting a job
         </Link>{" "}
         is free and takes a few minutes.
       </p>

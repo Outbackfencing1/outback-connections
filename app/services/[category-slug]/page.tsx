@@ -5,7 +5,7 @@ import ListingCard from "@/components/browse/ListingCard";
 import Pagination from "@/components/browse/Pagination";
 import FilterBar from "@/components/browse/FilterBar";
 import { logSearch } from "@/lib/analytics";
-import { breadcrumbJsonLd, jsonLdScript } from "@/lib/seo";
+import { breadcrumbJsonLd, humanCategory, jsonLdScript } from "@/lib/seo";
 import { regionCounts } from "@/lib/regions";
 
 export const dynamic = "force-dynamic";
@@ -30,9 +30,17 @@ export async function generateMetadata({
 }) {
   const resolvedParams = await params;
   const slug = resolvedParams["category-slug"];
+  const { data: cat } = await createClient()
+    .from("categories")
+    .select("label")
+    .eq("slug", slug)
+    .eq("pillar", "services")
+    .maybeSingle();
+  const human = cat ? humanCategory(cat.label) : slug.replace(/-/g, " ");
   return {
-    title: `${slug.replace(/-/g, " ")} — Outback Connections`,
-    description: `Rural ${slug.replace(/-/g, " ")} services and requests on Outback Connections.`,
+    title: `${human} — Outback Connections`,
+    description: `${human} across rural Australia. Free directory, no lead fees: browse by region or postcode and get a quote direct.`,
+    alternates: { canonical: `/services/${slug}` },
   };
 }
 

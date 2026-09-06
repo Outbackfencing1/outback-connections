@@ -6,7 +6,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ListingCard from "@/components/browse/ListingCard";
-import { breadcrumbJsonLd, jsonLdScript } from "@/lib/seo";
+import { breadcrumbJsonLd, humanCategory, jsonLdScript } from "@/lib/seo";
 import { getRegionBySlug, regionLabel } from "@/lib/regions";
 import { logSearch } from "@/lib/analytics";
 
@@ -17,12 +17,6 @@ const BASE_URL =
 const LIMIT = 100;
 
 type Params = Promise<{ "category-slug": string; region: string }>;
-
-function humanCategory(label: string): string {
-  // "Fencing contractor (construction)" -> "Fencing contractors"
-  const base = label.replace(/\s*\(.*\)\s*$/, "").trim();
-  return /s$/i.test(base) ? base : `${base}s`;
-}
 
 export async function generateMetadata({ params }: { params: Params }) {
   const p = await params;
@@ -39,6 +33,7 @@ export async function generateMetadata({ params }: { params: Params }) {
   return {
     title,
     description: `${humanCategory(cat.label)} around ${region.region_name}, ${region.state}. Free rural directory, no lead fees. Contact them directly.`,
+    alternates: { canonical: `/services/${p["category-slug"]}/${p.region}` },
   };
 }
 
