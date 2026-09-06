@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCountsByPillar, type PillarStats } from "@/lib/category-counts";
 import { kindLabel, listingHref, relativeTime } from "@/lib/format";
+import FencingFinder from "@/components/home/FencingFinder";
 
 const RECENT_MIN_TO_SHOW = 5;
 const RECENT_LIMIT = 5;
@@ -135,6 +136,9 @@ export default async function HomePage() {
           .
         </p>
       </section>
+
+      {/* The thing farmers ask for most. Renders nothing while the category is empty. */}
+      <FencingFinder />
 
       {/* Live stats (item 12). Hidden if active count < 10 — never show
           fake numbers. */}

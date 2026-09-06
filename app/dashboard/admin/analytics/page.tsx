@@ -47,6 +47,7 @@ type GateWeek = {
   listing_views: number;
   contact_reveals: number;
   source_clicks: number;
+  enquiries: number;
   directory_adds: number;
 };
 
@@ -59,6 +60,7 @@ type GateMetrics = {
     human_searches_7d: number;
     claims_30d: number;
     first_party_posts_30d: number;
+    enquiries_30d: number;
     bot_share_30d_pct: number;
   };
 };
@@ -277,6 +279,10 @@ function GateBlock({ gate }: { gate: GateMetrics }) {
         {chip("Human searches, last 7 days", g.human_searches_7d, g.target_searches_per_week)}
         {chip("Claims, last 30 days", g.claims_30d, g.target_claims_30d)}
         {chip("First-party posts, last 30 days", g.first_party_posts_30d, g.target_first_party_posts_30d)}
+        <div className="rounded-xl border border-neutral-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-neutral-600">Quote requests, last 30 days</p>
+          <p className="mt-1 text-2xl font-bold text-neutral-900">{g.enquiries_30d ?? 0}</p>
+        </div>
       </div>
       <div className="mt-4 overflow-x-auto rounded-xl border border-neutral-200">
         <table className="min-w-full divide-y divide-neutral-200 text-sm">
@@ -289,6 +295,7 @@ function GateBlock({ gate }: { gate: GateMetrics }) {
               <th className="px-3 py-2">Listing views</th>
               <th className="px-3 py-2">Contact reveals</th>
               <th className="px-3 py-2">Source clicks</th>
+              <th className="px-3 py-2">Quote requests</th>
               <th className="px-3 py-2">Signups</th>
               <th className="px-3 py-2">Claims</th>
               <th className="px-3 py-2">1st-party posts</th>
@@ -305,6 +312,7 @@ function GateBlock({ gate }: { gate: GateMetrics }) {
                 <td className="px-3 py-2">{w.listing_views}</td>
                 <td className="px-3 py-2">{w.contact_reveals}</td>
                 <td className="px-3 py-2">{w.source_clicks}</td>
+                <td className="px-3 py-2">{w.enquiries ?? 0}</td>
                 <td className="px-3 py-2">{w.signups}</td>
                 <td className="px-3 py-2">{w.claims}</td>
                 <td className="px-3 py-2">{w.first_party_posts}</td>

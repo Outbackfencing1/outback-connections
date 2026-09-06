@@ -31,5 +31,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   console.info("[cron] purged", data, "auth_events rows older than 90 days");
-  return NextResponse.json({ ok: true, deleted: data });
+
+  // Farmer enquiries carry PII under consent; keep 12 months, then purge.
+  const { data: enq, error: enqError } = await admin.rpc("purge_old_enquiries");
+  if (enqError) console.error("[cron] purge_old_enquiries failed:", enqError.message);
+  else console.info("[cron] purged", enq, "listing_enquiries rows older than 12 months");
+
+  return NextResponse.json({ ok: true, deleted: data, enquiries_deleted: enqError ? null : enq });
 }

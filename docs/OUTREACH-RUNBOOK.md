@@ -24,6 +24,21 @@ For Ali, Jess, Daryl and Josh. How the tools fit together and what not to do.
    Outback Fencing trade-pricing card (clipgun link with UTM). Contractors who
    claim are warm leads for the wholesale pipeline.
 
+## Quote requests (enquiries)
+
+Farmers can ask any service listing for a quote without an account
+(**Get a quote** on the listing). Requests land in **Admin → Enquiries**
+(`/dashboard/admin/enquiries`) and in the help@ inbox.
+
+- **Unclaimed listing**: a person forwards it. The contractor's private phone
+  and email are shown on the queue row. Call or text them, then **Mark
+  forwarded**. This is also the best claim pitch there is: "a farmer near you
+  wants a quote; claim your listing and these come straight to you."
+- **Claimed listing**: the business is emailed automatically; the row arrives
+  as *forwarded*. Nothing to do unless they don't reply.
+- The farmer's details go to that one business only, and are deleted after
+  12 months.
+
 ## Never do this
 
 - **Never** add someone else's business through **Post a listing**. That form

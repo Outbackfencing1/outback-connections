@@ -6,6 +6,7 @@ import { listingHref } from "@/lib/format";
 import ContactBlock from "@/components/detail/ContactBlock";
 import ScrapedNotice from "@/components/detail/ScrapedNotice";
 import TradeOfferCard from "@/components/detail/TradeOfferCard";
+import EnquiryForm from "@/components/detail/EnquiryForm";
 import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
@@ -244,6 +245,16 @@ export default async function ServiceDetailPage({
           />
         )}
       </section>
+
+      {!isOwner && listing.kind === "service_offering" && (
+        <section className="mt-6">
+          <EnquiryForm
+            listingId={listing.id}
+            businessName={listing.title}
+            claimed={!isUnclaimedScraped}
+          />
+        </section>
+      )}
 
       <TradeOfferCard categorySlug={cat?.slug ?? null} placement="listing" />
 
