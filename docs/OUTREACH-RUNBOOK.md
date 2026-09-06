@@ -2,6 +2,11 @@
 
 For Ali, Jess, Daryl and Josh. How the tools fit together and what not to do.
 
+**Access:** staff accounts (Ali) see a "Staff" strip at the top of every admin
+page with Contractor outreach, Enquiries, Add directory entry, Import,
+Analytics and Demand by region. Claims approval, moderation and lockdown are
+Josh's. Facebook copy lives in `docs/FACEBOOK-KIT.md`.
+
 ## The loop
 
 1. **Find** a fencing contractor (Facebook, Yellow Pages, TrueLocal, Google

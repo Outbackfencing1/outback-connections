@@ -92,6 +92,7 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
 | `20260906060000_function_execute_privileges` + `…061000_…_public` | Closed the default-privilege gap: service-role-only RPCs and trigger functions no longer callable by anon/authenticated via PostgREST; admin RPCs revoked from anon only; default privileges no longer grant anon EXECUTE on new functions. |
 | `20260906070000_enquiries_and_claim_polish` | `listing_enquiries` + `purge_old_enquiries()`; `approve_claim` v3 (claimed provenance + boilerplate strip); `admin_gate_metrics` v2 (enquiries); fencing label. |
 | `20260906080000_admin_demand_by_region` | `admin_demand_by_region(p_months)` planning report (aggregate only). |
+| `20260906090000_staff_role` | `user_profiles.is_staff`, `current_user_is_staff()`, staff read policies, outreach view + RPCs re-pointed. |
 
 ### Code (local commits, unpushed)
 - **Staff quick-add** `/dashboard/directory/add` (admins + contributors): one
@@ -147,6 +148,17 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
   with farmer copy. After posting, claimed businesses with a confirmed email
   in the same region (then state) are emailed, capped at 20. Unclaimed rows
   are never auto-emailed.
+- **Staff role for Ali** (`user_profiles.is_staff`, migration 20260906090000):
+  outreach workspace, enquiry queue, directory add, bulk import, analytics and
+  demand reports. Not moderation, lockdown, flags, duplicate accounts,
+  incidents or claim approval (those stay admin, checked directly in SQL and
+  the app). Ali's account is switched on. She signs in with her existing
+  account and sees "Staff" tools on the dashboard.
+- **Trust badges** ("Claimed", "ABN verified") on cards and the detail page;
+  footer no longer links to empty verticals.
+- **Facebook kit** (`docs/FACEBOOK-KIT.md`): post templates + UTM links for
+  advertising the contractors by region, the "post a fencing job" door, and a
+  contractor-facing claim post.
 - **Demand by region** (`/dashboard/admin/demand`, `admin_demand_by_region()`):
   quote requests + job requests + located human searches per region and
   category against live supply, monthly totals, and the gaps (demand, no
@@ -175,9 +187,11 @@ Gate at end of session: `npx tsc --noEmit` clean, `npm run lint` 0 errors,
    branch run of the SQL suite, then apply, merge, deploy, grant.
 7. Tell Ali: use **Add a directory entry** (dashboard card), never "Post a
    listing", for businesses that aren't ours. See `docs/OUTREACH-RUNBOOK.md`.
-8. **Watch the enquiry queue** (`/dashboard/admin/enquiries`, also mirrored to
-   the help@ inbox). Every enquiry on an unclaimed listing is both a farmer
-   to help and the best claim pitch there is. Decide who owns forwarding.
+8. **Ali owns the enquiry queue and outreach** (she has staff access now).
+   Walk her through `docs/OUTREACH-RUNBOOK.md` once; the queue is
+   `/dashboard/admin/enquiries`, mirrored to the help@ inbox.
+9. **Jess posts from `docs/FACEBOOK-KIT.md`**, one region at a time, only
+   regions with contractors listed, always with the UTM link.
 
 ## Decisions locked 4 Jul 2026 (Josh, binding, unchanged)
 
