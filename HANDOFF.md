@@ -90,6 +90,7 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
 | `20260906040000_services_supply_categories` | Promoted from `_drafts`: rural-supplies, produce-stock-feed, farm-machinery-dealer, fodder-hay. |
 | `20260906050000_analytics_bot_flag_and_gate_metrics` | `is_bot` on `events` + `search_queries` (backfilled from user agents); `admin_gate_metrics(p_weeks)`. |
 | `20260906060000_function_execute_privileges` + `…061000_…_public` | Closed the default-privilege gap: service-role-only RPCs and trigger functions no longer callable by anon/authenticated via PostgREST; admin RPCs revoked from anon only; default privileges no longer grant anon EXECUTE on new functions. |
+| `20260906070000_enquiries_and_claim_polish` | `listing_enquiries` + `purge_old_enquiries()`; `approve_claim` v3 (claimed provenance + boilerplate strip); `admin_gate_metrics` v2 (enquiries); fencing label. |
 
 ### Code (local commits, unpushed)
 - **Staff quick-add** `/dashboard/directory/add` (admins + contributors): one
@@ -125,7 +126,20 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
 - **Regional landing pages** `/services/[category]/[region]` (e.g.
   `/services/fencing-contractor/orange-nsw`) from the `regions` table; "By
   region" chips on category pages; sitemap emits them.
-- **Tests**: vitest, 13 unit tests over the pure libs; `npm test` in CI.
+- **Tests**: vitest, 17 unit tests over the pure libs; `npm test` in CI.
+- **Farmer enquiries ("Get a quote")** on every service listing, no account
+  needed: honeypot, 5/hour per IP, consent recorded, farmer PII admin-only and
+  purged after 12 months. Team emailed on every enquiry; a claimed business
+  with a confirmed email is emailed directly; unclaimed rows are forwarded by
+  a person from `/dashboard/admin/enquiries` (shows the contractor's private
+  contact, admin only). The contractor's contact never goes to the farmer.
+  Enquiries count in the gate metrics. Privacy notice updated.
+- **Claim polish**: on approval the claimant's rows become
+  `data_source='claimed'` (with the consent version they accepted at signup)
+  and the "UNCLAIMED directory listing" boilerplate is stripped.
+- **Home page FencingFinder**: postcode box straight to the fencing
+  directory plus the regions that actually have contractors. Category label
+  is now "Fencing contractor".
 
 Gate at end of session: `npx tsc --noEmit` clean, `npm run lint` 0 errors,
 `npm run build` passes (see the commit log for the exact run).
@@ -149,6 +163,9 @@ Gate at end of session: `npx tsc --noEmit` clean, `npm run lint` 0 errors,
    branch run of the SQL suite, then apply, merge, deploy, grant.
 7. Tell Ali: use **Add a directory entry** (dashboard card), never "Post a
    listing", for businesses that aren't ours. See `docs/OUTREACH-RUNBOOK.md`.
+8. **Watch the enquiry queue** (`/dashboard/admin/enquiries`, also mirrored to
+   the help@ inbox). Every enquiry on an unclaimed listing is both a farmer
+   to help and the best claim pitch there is. Decide who owns forwarding.
 
 ## Decisions locked 4 Jul 2026 (Josh, binding, unchanged)
 

@@ -87,6 +87,15 @@ export default function PrivacyPage() {
           identifier, and timestamps.
         </p>
         <p className="text-neutral-800">
+          <strong>Quote requests:</strong> if you use &ldquo;Get a quote&rdquo;
+          on a listing, your name, the phone number and/or email you give,
+          the job postcode, your message, and the time, IP address and
+          browser used to record your consent. We pass these details to that
+          one business only, so they can quote you. If the listing is
+          unclaimed, our team forwards them by phone or email. No account is
+          needed and we don&apos;t add you to any list.
+        </p>
+        <p className="text-neutral-800">
           <strong>Server logs:</strong> IP address, browser user agent,
           request timestamps. Standard infrastructure logging from Vercel.
         </p>
@@ -277,6 +286,7 @@ export default function PrivacyPage() {
             Flag records: kept while the listing exists; cascade-deleted
             with the listing or the flagger&apos;s account.
           </li>
+          <li>Quote requests: deleted 12 months after you send them.</li>
           <li>
             Defamation complaints: kept for 7 years (limitation period
             under the Defamation Act 2005).
