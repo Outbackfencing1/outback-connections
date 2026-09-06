@@ -91,6 +91,7 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
 | `20260906050000_analytics_bot_flag_and_gate_metrics` | `is_bot` on `events` + `search_queries` (backfilled from user agents); `admin_gate_metrics(p_weeks)`. |
 | `20260906060000_function_execute_privileges` + `…061000_…_public` | Closed the default-privilege gap: service-role-only RPCs and trigger functions no longer callable by anon/authenticated via PostgREST; admin RPCs revoked from anon only; default privileges no longer grant anon EXECUTE on new functions. |
 | `20260906070000_enquiries_and_claim_polish` | `listing_enquiries` + `purge_old_enquiries()`; `approve_claim` v3 (claimed provenance + boilerplate strip); `admin_gate_metrics` v2 (enquiries); fencing label. |
+| `20260906080000_admin_demand_by_region` | `admin_demand_by_region(p_months)` planning report (aggregate only). |
 
 ### Code (local commits, unpushed)
 - **Staff quick-add** `/dashboard/directory/add` (admins + contributors): one
@@ -138,8 +139,19 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
   `data_source='claimed'` (with the consent version they accepted at signup)
   and the "UNCLAIMED directory listing" boilerplate is stripped.
 - **Home page FencingFinder**: postcode box straight to the fencing
-  directory plus the regions that actually have contractors. Category label
-  is now "Fencing contractor".
+  directory plus the regions that actually have contractors, and "Post the
+  fencing job" for farmers who don't want to pick. Category label is now
+  "Fencing contractor".
+- **Job requests without the wait**: `/post/service/request` (demand side)
+  skips the 24h account-age rule; `?category=fencing-contractor` preselects
+  with farmer copy. After posting, claimed businesses with a confirmed email
+  in the same region (then state) are emailed, capped at 20. Unclaimed rows
+  are never auto-emailed.
+- **Demand by region** (`/dashboard/admin/demand`, `admin_demand_by_region()`):
+  quote requests + job requests + located human searches per region and
+  category against live supply, monthly totals, and the gaps (demand, no
+  supply). This is the planning view Josh asked for; it fills as enquiries
+  and requests arrive.
 
 Gate at end of session: `npx tsc --noEmit` clean, `npm run lint` 0 errors,
 `npm run build` passes (see the commit log for the exact run).
@@ -185,6 +197,20 @@ Gate at end of session: `npx tsc --noEmit` clean, `npm run lint` 0 errors,
    is a reminder, not automation.
 6. JSON-LD rule: JobPosting only on first-party job ads.
 7. Claim Outback Fencing as listing #1 (entry now exists; claim is yours).
+
+## The long game (Josh, 6 Sep): useful for thousands, then worldwide, 10k daily users
+
+Farmers stay free forever and the "no lead fees" promise on the home page is
+kept. Revenue comes from businesses and aggregate data, in this order:
+Outback Fencing's own supply sales via the disclosed trade offer (now);
+featured/boosted business listings once a region + category has competition;
+a paid verified/pro business profile (ABN badge, photos, service area,
+enquiry routing, their own enquiry stats); aggregate demand data, never PII.
+Growth is region by region, category by category, seeding before promoting.
+Every enquiry on an unclaimed row is a claim pitch; every claimed business
+shares its own page. Country packs (`country_code`, `regions`) make NZ/US
+config, not rewrites. The demand-by-region report is the forecasting tool;
+next step is correlating it with Shopify orders by postcode.
 
 ## Next sprint candidates (not started)
 
