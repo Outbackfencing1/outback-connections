@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import ClaimButton from "@/components/detail/ClaimButton";
+import TradeOfferCard from "@/components/detail/TradeOfferCard";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = {
@@ -32,6 +33,20 @@ export default async function ClaimBusinessPage({
   ]);
 
   if (!business) notFound();
+
+  // The business's live directory listing decides whether the fencing trade
+  // offer is relevant here.
+  const { data: liveListing } = await supabase
+    .from("listings")
+    .select("category:categories(slug)")
+    .eq("business_id", business.id)
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+  const liveCategory = Array.isArray(liveListing?.category)
+    ? liveListing?.category[0]
+    : liveListing?.category;
+  const categorySlug = (liveCategory as { slug?: string } | null | undefined)?.slug ?? null;
 
   const name = business.trading_name || business.legal_name || "This business";
   const location = [business.state_code, business.postcode].filter(Boolean).join(" ");
@@ -89,6 +104,8 @@ export default async function ClaimBusinessPage({
             </div>
           </div>
         )}
+
+        <TradeOfferCard categorySlug={categorySlug} placement="claim" />
 
         {business.source_url && (
           <p className="mt-6 text-xs text-neutral-500">

@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { listingHref } from "@/lib/format";
 import ContactBlock from "@/components/detail/ContactBlock";
 import ScrapedNotice from "@/components/detail/ScrapedNotice";
+import TradeOfferCard from "@/components/detail/TradeOfferCard";
 import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
@@ -243,6 +244,8 @@ export default async function ServiceDetailPage({
           />
         )}
       </section>
+
+      <TradeOfferCard categorySlug={cat?.slug ?? null} placement="listing" />
 
       {!isOwner && (
         <div className="mt-8 space-y-3">

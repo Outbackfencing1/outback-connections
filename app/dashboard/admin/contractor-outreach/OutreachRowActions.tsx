@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import {
   getOutreachHistory,
   recordOutreach,
+  sendClaimInvite,
   type OutreachHistoryRow,
   type RecordOutreachInput,
 } from "./actions";
@@ -230,6 +231,24 @@ export default function OutreachRowActions({
     setMessage(copied ? "Invitation copied." : "Couldn't copy — select and copy the text below.");
   }
 
+  async function emailInvite() {
+    if (!email) return;
+    const ok = window.confirm(
+      `Send the claim-invite email to ${email} now?\n\nIt goes from Outback Connections, includes the claim link, and is logged as "invite sent".`
+    );
+    if (!ok) return;
+    setBusy(true);
+    setMessage(null);
+    const result = await sendClaimInvite(businessId);
+    setBusy(false);
+    setMessageOk(result.ok);
+    setMessage(result.message);
+    if (result.ok) {
+      setStatus("invite_sent");
+      router.refresh();
+    }
+  }
+
   async function loadHistory() {
     if (history || historyBusy) return;
     setHistoryBusy(true);
@@ -311,6 +330,15 @@ export default function OutreachRowActions({
           className={quickButton}
         >
           Mark invite sent
+        </button>
+        <button
+          type="button"
+          onClick={emailInvite}
+          disabled={busy || contactDisabled || !email}
+          title={email ? "Sends the claim-invite email from Outback Connections and logs it" : "No email on file"}
+          className="rounded bg-green-700 px-2 py-1 text-[11px] font-semibold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Send invite email
         </button>
       </div>
 
