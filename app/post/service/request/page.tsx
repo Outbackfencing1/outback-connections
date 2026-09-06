@@ -13,8 +13,14 @@ export const metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function PostServiceRequestPage() {
-  const guard = await checkPostingGuard();
+export default async function PostServiceRequestPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const wanted = typeof sp.category === "string" ? sp.category : "";
+  const guard = await checkPostingGuard({ skipAccountAge: true });
   if (!guard.ok && guard.reason === "not_signed_in") {
     redirect("/signin?next=/post/service/request");
   }
@@ -42,13 +48,21 @@ export default async function PostServiceRequestPage() {
     .eq("pillar", "services")
     .eq("active", true)
     .order("sort_order");
+  const preselected = (cats ?? []).find((c) => c.slug === wanted);
+  const isFencing = preselected?.slug === "fencing-contractor";
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
-      <h1 className="text-2xl font-bold tracking-tight">Request a service</h1>
+      <h1 className="text-2xl font-bold tracking-tight">
+        {isFencing ? "Got a fencing job?" : "Request a service"}
+      </h1>
       <p className="mt-2 text-sm text-neutral-700">
-        Need a bore pump fixed, a mob mustered, a drone spray? Describe the
-        job and let providers come to you.
+        {isFencing
+          ? "Describe the fence: roughly how far, what type, where, and when. Fencing contractors listed in your region are told straight away, and anyone browsing can see it too."
+          : "Need a bore pump fixed, a mob mustered, a drone spray? Describe the job and let providers come to you."}
+      </p>
+      <p className="mt-1 text-xs text-neutral-500">
+        Free. Your contact details are only shown to signed-in users. You can close it any time.
       </p>
 
       <div className="mt-8">
@@ -56,6 +70,7 @@ export default async function PostServiceRequestPage() {
           categories={cats ?? []}
           action={postServiceRequest}
           mode="requesting"
+          defaults={preselected ? { category_id: preselected.id } : undefined}
         />
       </div>
 

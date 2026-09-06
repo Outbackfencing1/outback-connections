@@ -16,6 +16,7 @@ const ADMIN_LINKS: { href: string; label: string }[] = [
   { href: "/dashboard/directory/add", label: "Add directory entry" },
   { href: "/dashboard/admin/import", label: "Import" },
   { href: "/dashboard/admin/analytics", label: "Analytics" },
+  { href: "/dashboard/admin/demand", label: "Demand by region" },
   { href: "/dashboard/admin/lockdown", label: "Lockdown" },
   { href: "/dashboard/admin/duplicate-accounts", label: "Duplicate accounts" },
   { href: "/legal/incidents", label: "Incidents" },

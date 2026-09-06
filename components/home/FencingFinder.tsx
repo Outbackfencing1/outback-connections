@@ -76,6 +76,16 @@ export default async function FencingFinder() {
             </Link>
           </div>
         )}
+        <p className="mt-4 text-sm text-neutral-800">
+          Don&apos;t want to pick?{" "}
+          <Link
+            href={`/post/service/request?category=${CATEGORY}`}
+            className="font-semibold text-green-800 underline"
+          >
+            Post the fencing job
+          </Link>{" "}
+          and the contractors listed in your region are told.
+        </p>
         <p className="mt-3 text-xs text-neutral-600">
           Free to use. Ask any contractor for a quote straight from their listing, no account
           needed. Unclaimed entries were found online; our team forwards your request.

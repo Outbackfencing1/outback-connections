@@ -114,6 +114,12 @@ export default async function AnalyticsPage() {
       </div>
 
       {gate && <GateBlock gate={gate} />}
+      <p className="mt-3 text-sm">
+        <Link href="/dashboard/admin/demand" className="font-medium text-green-800 underline">
+          Demand by region →
+        </Link>{" "}
+        <span className="text-neutral-600">what people asked for, where, and whether anyone is listed to do it.</span>
+      </p>
       <p className="mt-2 text-sm text-neutral-700">
         Supply, demand and the zero-result gap by vertical and region. Read-only;
         populates as listings are imported and people browse.

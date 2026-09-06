@@ -33,7 +33,15 @@ export type PostingGuardFail =
 // audit feedback — 7 days was filtering legitimate signups too aggressively.
 const ACCOUNT_AGE_REQUIREMENT_HOURS = 24;
 
-export async function checkPostingGuard(): Promise<PostingGuardOk | PostingGuardFail> {
+export type PostingGuardOptions = {
+  /** Demand-side posts (a farmer describing a job) skip the 24h account-age
+   *  wait. Sign-in, verified email, lockdown and rate limits still apply. */
+  skipAccountAge?: boolean;
+};
+
+export async function checkPostingGuard(
+  opts: PostingGuardOptions = {}
+): Promise<PostingGuardOk | PostingGuardFail> {
   // Lockdown short-circuit. Lookup is cached for 30s.
   const { getLockdownState } = await import("./lockdown");
   const lockdown = await getLockdownState();
@@ -67,7 +75,7 @@ export async function checkPostingGuard(): Promise<PostingGuardOk | PostingGuard
   const ageMs = Date.now() - created;
   const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
   const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
-  if (ageHours < ACCOUNT_AGE_REQUIREMENT_HOURS) {
+  if (!opts.skipAccountAge && ageHours < ACCOUNT_AGE_REQUIREMENT_HOURS) {
     return {
       ok: false,
       reason: "account_too_new",
