@@ -95,6 +95,7 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
 | `20260906090000_staff_role` | `user_profiles.is_staff`, `current_user_is_staff()`, staff read policies, outreach view + RPCs re-pointed. |
 | `20260906100000_enquiry_outcomes` | `listing_enquiries.followup_sent_at/outcome/outcome_at`; `business_response_stats(listing)`. |
 | `20260906110000_for_sale_vertical` | kind `for_sale`, vertical `sale`, pillar `sale` + 8 categories, `sale_details` with RLS. |
+| `20260906120000_sales_by_postcode` | `sales_by_postcode_monthly` (aggregate, staff read) + demand report v3 with sales columns and coverage. |
 
 ### Code (local commits, unpushed)
 - **Staff quick-add** `/dashboard/directory/add` (admins + contributors): one
@@ -181,6 +182,15 @@ Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans onl
   sitemap wiring (hidden while empty), post hub card, home hero link. First
   party only; no payment, no commission; contact details sign-in gated like
   everything else. `lib/sale.ts` price helpers are tested.
+- **Forecasting join** (migration 20260906120000): `sales_by_postcode_monthly`
+  (aggregate orders + revenue per postcode per month, staff read) fed by
+  `/dashboard/admin/sales-upload`, which takes the raw Shopify "Export
+  orders" CSV or an aggregated sheet and collapses it in the browser (no
+  names, emails or order ids are sent). The demand report now shows sales
+  next to demand by region and by month, with green rows where farmers ask
+  but nothing has sold. Shopify's own analytics can produce the same numbers
+  (ShopifyQL: `FROM sales SHOW orders, net_sales GROUP BY shipping_postal_code
+  TIMESERIES month`); a token-gated sync cron is a candidate for later.
 - **Demand by region** (`/dashboard/admin/demand`, `admin_demand_by_region()`):
   quote requests + job requests + located human searches per region and
   category against live supply, monthly totals, and the gaps (demand, no

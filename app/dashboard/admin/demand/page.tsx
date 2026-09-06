@@ -25,9 +25,34 @@ type RegionRow = {
   supply: number;
   demand: number;
 };
-type MonthRow = { month: string; enquiries: number; requests: number; searches: number };
+type MonthRow = {
+  month: string;
+  enquiries: number;
+  requests: number;
+  searches: number;
+  sales_orders?: number;
+  sales_revenue_cents?: number;
+};
 type Gap = { region_name: string | null; state: string | null; category: string | null; demand: number };
-type Report = { window_months: number; by_region: RegionRow[]; by_month: MonthRow[]; gaps: Gap[] };
+type SalesRegion = {
+  region_name: string | null;
+  state: string | null;
+  sales_orders: number;
+  sales_revenue_cents: number;
+  demand: number;
+  supply: number;
+};
+type Report = {
+  window_months: number;
+  by_region: RegionRow[];
+  sales_by_region?: SalesRegion[];
+  by_month: MonthRow[];
+  gaps: Gap[];
+  sales_coverage?: { months: number; first_month: string | null; last_month: string | null; updated_at: string | null };
+};
+
+const aud = (cents: number) =>
+  (cents / 100).toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 });
 
 const WINDOWS = [3, 6, 12] as const;
 
@@ -125,6 +150,55 @@ export default async function DemandPage({
           </section>
 
           <section className="mt-8">
+            <h2 className="text-lg font-semibold text-neutral-900">Sales next to demand, by region</h2>
+            {!report.sales_coverage || report.sales_coverage.months === 0 ? (
+              <p className="mt-1 text-sm text-neutral-600">
+                No sales data loaded yet.{" "}
+                <Link href="/dashboard/admin/sales-upload" className="underline">
+                  Upload the Shopify order export
+                </Link>{" "}
+                and this fills in.
+              </p>
+            ) : (
+              <>
+                <p className="mt-1 text-xs text-neutral-600">
+                  Sales cover {report.sales_coverage.first_month} to {report.sales_coverage.last_month}
+                  {report.sales_coverage.updated_at ? `, uploaded ${new Date(report.sales_coverage.updated_at).toLocaleDateString("en-AU")}` : ""}.{" "}
+                  <Link href="/dashboard/admin/sales-upload" className="underline">Update</Link>. Demand here is all categories combined.
+                </p>
+                <div className="mt-2 overflow-x-auto rounded-xl border border-neutral-200">
+                  <table className="min-w-full divide-y divide-neutral-200 text-sm">
+                    <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-600">
+                      <tr>
+                        <th className="px-3 py-2">Region</th>
+                        <th className="px-3 py-2">Orders</th>
+                        <th className="px-3 py-2">Revenue</th>
+                        <th className="px-3 py-2">Demand on Connections</th>
+                        <th className="px-3 py-2">Listed businesses</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-100">
+                      {(report.sales_by_region ?? []).slice(0, 60).map((r, i) => (
+                        <tr key={i} className={r.demand > 0 && r.sales_orders === 0 ? "bg-green-50" : ""}>
+                          <td className="px-3 py-2 font-medium text-neutral-900">{label(r)}</td>
+                          <td className="px-3 py-2">{r.sales_orders}</td>
+                          <td className="px-3 py-2">{aud(r.sales_revenue_cents)}</td>
+                          <td className="px-3 py-2">{r.demand}</td>
+                          <td className="px-3 py-2">{r.supply}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-2 text-xs text-neutral-500">
+                  Green rows: farmers are asking on Connections but nothing has sold there yet. Those are the regions to
+                  put the trade offer in front of.
+                </p>
+              </>
+            )}
+          </section>
+
+          <section className="mt-8">
             <h2 className="text-lg font-semibold text-neutral-900">By month</h2>
             <div className="mt-2 overflow-x-auto rounded-xl border border-neutral-200">
               <table className="min-w-full divide-y divide-neutral-200 text-sm">
@@ -134,6 +208,8 @@ export default async function DemandPage({
                     <th className="px-3 py-2">Quote requests</th>
                     <th className="px-3 py-2">Job requests</th>
                     <th className="px-3 py-2">Located searches</th>
+                    <th className="px-3 py-2">Orders (sales)</th>
+                    <th className="px-3 py-2">Revenue (sales)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
@@ -143,6 +219,8 @@ export default async function DemandPage({
                       <td className="px-3 py-2">{m.enquiries}</td>
                       <td className="px-3 py-2">{m.requests}</td>
                       <td className="px-3 py-2">{m.searches}</td>
+                      <td className="px-3 py-2">{m.sales_orders ?? 0}</td>
+                      <td className="px-3 py-2">{aud(m.sales_revenue_cents ?? 0)}</td>
                     </tr>
                   ))}
                 </tbody>

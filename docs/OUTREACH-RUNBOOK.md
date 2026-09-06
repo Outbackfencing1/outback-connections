@@ -81,6 +81,13 @@ which have waited more than 48 hours), claims waiting for approval, rows
 about to expire, and the regions where farmers asked and nobody was listed.
 If the "waiting more than 48 hours" line is not zero, that's the first job.
 
+## Monthly: upload the sales export
+
+First Monday, alongside the directory refresh: Shopify → Orders → Export →
+All orders (CSV) → **Admin → Sales upload**. The browser reduces it to
+orders and revenue per postcode per month; nothing personal is uploaded.
+The demand report then shows where farmers ask versus where we sell.
+
 ## Numbers that matter
 
 `/dashboard/admin/analytics` → **Traction gate**: human searches per week

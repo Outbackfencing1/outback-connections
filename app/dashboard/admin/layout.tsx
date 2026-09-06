@@ -15,6 +15,7 @@ const ADMIN_LINKS: { href: string; label: string; staff: boolean }[] = [
   { href: "/dashboard/admin/import", label: "Import", staff: true },
   { href: "/dashboard/admin/analytics", label: "Analytics", staff: true },
   { href: "/dashboard/admin/demand", label: "Demand by region", staff: true },
+  { href: "/dashboard/admin/sales-upload", label: "Sales upload", staff: true },
   { href: "/dashboard/admin/claims", label: "Claims", staff: false },
   { href: "/dashboard/admin/flags", label: "Flags", staff: false },
   { href: "/dashboard/admin/moderation", label: "Moderation", staff: false },
