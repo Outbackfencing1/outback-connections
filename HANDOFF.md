@@ -1,155 +1,190 @@
 # HANDOFF
 
-Date: 2026-07-04 (previous: 2026-06-11)
-Branch: `main`.
-**Local-only / UNPUSHED commits awaiting a deliberate watched push:**
-`74ff80c`, `dbce423` (services vertical: ingest fn + scraper mode), `adb57a2` (Gate 1 SEO/AI rails), `4a7721a` (Gate 3 services seeds + DRAFT categories), plus the 4 Jul Adzuna-layer commit (see below).
-Nothing deploys until that watched push.
+Date: 2026-09-06 (previous: 2026-07-04)
+Branch: `main`. Live: https://www.outbackconnections.com.au
 
-## 4 Jul 2026 session — sprint prep (no deploy, no prod writes)
+**Local-only / UNPUSHED commits awaiting Josh's push** (his global Claude
+setting `Bash(git push *)` deny blocks agent pushes): everything after
+`49eb53d` (PR #16). Push = Vercel production deploy. After pushing, confirm the
+build goes READY and spot-check `/services`, one fencing listing, and
+`/dashboard/admin/analytics`.
 
-1. **Watched push DE-RISKED:** `npm install` + `npx tsc --noEmit` + `npm run build` pass
-   locally on the full unpushed head (the 11 Jun caveat "not typecheck-verified" is cleared).
-2. **Adzuna syndicated layer BUILT (sprint item 2), env-gated:** `lib/adzuna.ts`
-   (fetch → normalise → regions-table postcode resolve → service-role upsert into
-   listings/job_details/listing_sources), `/api/cron/adzuna-sync` (daily 05:00 UTC,
-   `?dry=1&limit=N` staged-rollout knobs), `scripts/adzuna-pull.mjs` (manual driver),
-   `SyndicatedNotice` + "via Adzuna" card badge + browse attribution line. Rules:
-   attributed, link-out via `/listings/[id]/source`, NO JSON-LD, NOT claimable, no
-   business rows. No DB migration needed (`listings.metadata` carries ad extras).
-   Without `ADZUNA_APP_ID`/`ADZUNA_APP_KEY` the cron returns `not_configured`.
-3. **Directory pilot validated (sprint item 3 prep):** `preview_scraped_import` dry-run
-   on the staged 8 → 8/8 valid, 8 would_create, 0 dupes, `station-hand` resolves. Junk
-   audit: **"Dubbo Farmers' Markets" is junk** (type=Market, an event not an employer);
-   Karim is a real farm (sparse Google data). *(Superseded same evening: the full-payload
-   audit cut it to 5 — see the executed-runbook section below.)*
+```bash
+git push origin main
+```
 
-## 4 Jul 2026 — runbook EXECUTED (evening session, Josh-authorised push)
+All database migrations from this session are ALREADY APPLIED to the live
+project. The code that uses them is what's waiting on the push. Until pushed,
+the live site runs PR #16 code against the new schema, which is compatible
+(new columns have defaults; new functions are unused by old code).
 
-- **Watched push DONE**: `c949426..6978707` (8 commits) → Vercel build READY. Live checks
-  all pass: robots.txt (AI bots allowed), sitemap.xml (42 URLs), /services (20 categories),
-  Farm Hand emits JobPosting+Organization+BreadcrumbList JSON-LD, adzuna-sync returns 401
-  unauthenticated (= CRON_SECRET is set in prod and the auth gate works).
-- **Pilot import DONE — 5, not 7**: full-payload junk audit caught 2 more noise rows before
-  import: Cadagi Farm (Google type "Wedding venue" — the plan's canonical example) and
-  Rosedale Farm ("Bed & breakfast" farm-stay). Imported via `ingest_scraped_business()`:
-  Martelli Orchards, Hillside Harvest, Paraway Pastoral Co., Karim, DNW Livestock Services
-  (all created; curated file now `data/staged-directory-pilot-5.json`). NOTE: `.env.local`
-  has no Supabase keys — the import ran via the RPC over MCP; the CLI script needs
-  NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in .env.local to be usable.
-- **Honesty audit PASS**: /jobs shows 6 (5 Unclaimed-badged + Farm Hand); detail pages show
-  ScrapedNotice + LocalBusiness JSON-LD (no JobPosting), claim CTA present, contact columns
-  NULL (phone only in private raw_payload), 45-day expiry, claim_status=unclaimed.
-- ⚠️ **Farm Hand ad expires 08 Jul 2026** — renew it (owner renew flow) or it drops off,
-  taking the only JobPosting-emitting page with it. (The renewal-reminders cron should
-  also email a signed renew link ~3 days out — check the inbox.)
-- **Junk-rate carry-forward — `scripts/filter-scraped-types.mjs`**: the hand-staged pilot
-  was 37% junk even after a name-level audit; the 5,890-lead NSW scrape will be dirtier.
-  The script classifies by raw Google `type` (KEEP rural / CUT accommodation-events-food-
-  tourism / REVIEW unknowns — review is never silently kept), accepts staged or raw
-  Outscraper shapes, `--allow`/`--block` overrides. Validated against the pilot ground
-  truth: keeps exactly the imported 5, cuts exactly the 3 junk rows. **The NSW list must
-  pass through this before it becomes the claim-invite campaign** — otherwise Ali emails
-  a wedding venue about claiming their rural business listing.
+---
 
-## Decisions locked 4 Jul 2026 (Josh, binding — do not relitigate)
+## What Outback Connections is now (the Aug–Sep 2026 pivot)
 
-1. **Traction gate = numbers, not vibes**: within 30 days of Jess's FB push —
-   **25 organic human searches/week + 5 claim submissions + 10 first-party posts.**
-   On a miss, the diagnosis matters more than the miss: searches-without-claims =
-   claim-flow problem; claims-without-posts = posting-friction problem; nothing-at-all =
+A **rural business directory + staff outreach tool**, run by Outback Fencing &
+Steel Supplies (disclosed on every page). The live vertical is **Services**:
+fencing contractors across NSW, which feed the wholesale pipeline (clip-gun
+and trade pricing). Jobs and Freight exist but are empty and, as of this
+session, hidden from navigation and the sitemap while empty.
+
+This replaced the "generic rural jobs/freight platform, parked" framing of the
+July handoff. It is money-first aligned: the directory is the lead source, the
+claim flow is the retention mechanism, and the trade offer on fencing pages is
+the revenue message.
+
+## Live numbers, 6 Sep 2026 (after this session)
+
+| Measure | Value |
+|---|---|
+| Active directory listings (Services) | 53 (52 fencing contractors + Outback Fencing) |
+| Businesses / claimed | 58 / 0 |
+| Live job ads / freight listings | 0 / 0 |
+| Human searches with a filter, last 7 days | 26 (gate target 25/week) |
+| Claims last 30 days / first-party posts last 30 days | 0 / 0 (targets 5 / 10) |
+| Crawler share of browse loads, last 30 days | 40% |
+| Contact reveals, last 30 days | 36 |
+
+Read live at `/dashboard/admin/analytics` (new "Traction gate" block, humans only).
+
+## What happened between the handoffs
+
+- **14 Aug (Codex, PR #16, merged, deployed):** contractor outreach workspace
+  at `/dashboard/admin/contractor-outreach`, `/claim/[businessId]`, Next.js 16
+  + `proxy.ts`, three migrations (outreach tables + RPC, safe vertical
+  reclassification in ingest, contact columns hidden from anon). 18 fencing
+  contractors ingested properly.
+- **14 Aug (Codex, PR #17, OPEN, unmerged):** `/dashboard/outreach` team
+  tracker + outreach-only access for Jess and Daryl, two more migrations.
+  Its own release gate: run `supabase/tests/outreach_access_and_suppression.sql`
+  on a disposable Supabase branch first. **Needs Josh's decision on who does
+  outreach before it's worth finishing.**
+- **26 Aug–4 Sep (staff):** 39 fencing contractors hand-entered through the
+  PUBLIC post form (the only path they had), so the site treated them as
+  owner-posted: contact block, LocalBusiness JSON-LD, 30-day expiry, no
+  business record, not claimable. Fixed this session (below).
+- Farm Hand ad expired 8 Jul, never renewed. Pilot-5 scraped jobs expired
+  mid-Aug. Adzuna never configured. Outreach table was empty (unused).
+
+## This session (6 Sep 2026, Claude, autonomous per Josh's "no rules")
+
+### Data (applied to prod, atomic, verified)
+1. **39 hand-entered contractors migrated.** 34 re-ingested via
+   `ingest_scraped_business()` as scraped/unclaimed rows with business records
+   (Facebook / Yellow Pages / TrueLocal / own website / web attribution; phone +
+   email private in `listing_sources.raw_payload`; 60-day expiry to 5 Nov).
+   5 were duplicates of 14 Aug rows and were closed pointing at them. All 39
+   originals closed (`status='closed'`, `canonical_listing_id` set); old URLs
+   301 to the new rows. 0 manual rows remain active.
+2. **Outback Fencing & Steel Supplies directory entry created** (listing
+   `c2f877ed-…`, business `0e402f26-…`, category `rural-supplies`, unclaimed)
+   so Josh can claim it through the real flow (decision 7, 4 Jul).
+3. `user_profiles.directory_contributor = true` for the staff account that was
+   adding contractors (the outbackfencingsupplies.com.au user, not admin).
+
+### Migrations (all applied)
+| File | What |
+|---|---|
+| `20260906020000_ingest_platform_labels` | Ingest wording: "we found listed on Facebook / on its official website / online" instead of raw slugs; "is a fencing contractor" from the category label. |
+| `20260906030000_directory_contributor_flag` | `user_profiles.directory_contributor` (service-role-only to set; grants only the quick-add page). |
+| `20260906040000_services_supply_categories` | Promoted from `_drafts`: rural-supplies, produce-stock-feed, farm-machinery-dealer, fodder-hay. |
+| `20260906050000_analytics_bot_flag_and_gate_metrics` | `is_bot` on `events` + `search_queries` (backfilled from user agents); `admin_gate_metrics(p_weeks)`. |
+| `20260906060000_function_execute_privileges` + `…061000_…_public` | Closed the default-privilege gap: service-role-only RPCs and trigger functions no longer callable by anon/authenticated via PostgREST; admin RPCs revoked from anon only; default privileges no longer grant anon EXECUTE on new functions. |
+
+### Code (local commits, unpushed)
+- **Staff quick-add** `/dashboard/directory/add` (admins + contributors): one
+  business through the same preview + ingest RPCs as bulk import. Search-URL
+  fallback when no page URL, flagged `metadata.source_url_kind=search` so the
+  detail page says "Find the original listing on Facebook". Nudge on the
+  public "Offer a service" form; card on the dashboard; admin nav link.
+- **Trade offer card** (`components/detail/TradeOfferCard.tsx`) on fencing
+  listings and the claim page. Disclosed as the operator's own offer; links to
+  the clipgun product + store with UTM `trade_cta`.
+- **One-click claim-invite email** in the outreach workspace ("Send invite
+  email"): Resend from the Connections address, reply-to help@, 14-day
+  cooldown per business, logged as `emailed` / `invite_sent`. Copy in
+  `lib/claim-invite-email.ts` includes a reply-"remove" opt-out.
+- **Empty verticals hidden**: Jobs/Freight nav links and sitemap entries only
+  when they have live rows; honest "nothing listed yet" states; home freight
+  card becomes "Post freight" while empty.
+- **Analytics**: `lib/analytics.ts` flags crawlers and sets a daily
+  pseudonymous `session_id` (hash of ip + UA + date, no cookie); analytics
+  page shows the traction gate week by week.
+- **Directory expiry digest**: renewal cron emails `NOTIFICATION_TO` once per
+  row, 7 days before a scraped entry expires (owners still get their 3-day
+  renewal mail; scraped rows are excluded from that loop now).
+- **Account deletions** now write the `account_deletions` audit row.
+- **Prisma removed** (schema, client, deps, postinstall).
+- **CI** (`.github/workflows/ci.yml`: tsc, lint, build, migration-name check),
+  `AGENTS.md` (rules for every agent/person), PR template, README rewrite.
+- Old-slug 301s on the services detail page via `canonical_listing_id`.
+
+Gate at end of session: `npx tsc --noEmit` clean, `npm run lint` 0 errors,
+`npm run build` passes (see the commit log for the exact run).
+
+## Josh's actions, in order
+
+1. **Push** (`git push origin main`), watch the Vercel build go READY.
+2. **Claim Outback Fencing** through the real UI: sign in as admin →
+   `/services/rural-supplies` → the Outback Fencing listing → "Claim it" →
+   `/dashboard/admin/claims` → approve. Screenshot each step: that's the
+   invite-campaign how-to asset. Register the free `ABR_GUID` the same
+   afternoon and run ABN verification on it.
+3. **Supabase Auth dashboard:** turn on leaked-password protection (still the
+   only WARN the advisors can't clear from SQL).
+4. **Vercel env:** `FROM_EMAIL=Outback Connections <help@outbackconnections.com.au>`
+   (Resend DNS was verified 4 Jul). Redeploy.
+5. **Vercel Web Analytics:** enable it on the project (it's off, so UTM
+   attribution for Jess's Facebook push has nowhere to land).
+6. **Decide PR #17** (who does outreach: Ali only via admin, or Jess + Daryl
+   with scoped access). If yes, its release gate is a disposable Supabase
+   branch run of the SQL suite, then apply, merge, deploy, grant.
+7. Tell Ali: use **Add a directory entry** (dashboard card), never "Post a
+   listing", for businesses that aren't ours. See `docs/OUTREACH-RUNBOOK.md`.
+
+## Decisions locked 4 Jul 2026 (Josh, binding, unchanged)
+
+1. Traction gate = 25 organic human searches/week + 5 claim submissions +
+   10 first-party posts within 30 days of Jess's FB push. Now readable at
+   `/dashboard/admin/analytics`. Diagnosis on a miss: searches-without-claims
+   = claim-flow problem; claims-without-posts = posting friction; nothing =
    distribution didn't land.
-2. **UTM discipline is non-negotiable**: every link Jess posts carries
-   `utm_source=facebook&utm_medium=jess_organic` — otherwise the one best distribution
-   shot produces an unattributable spike and teaches nothing.
-3. **Syndicated ratio: total active Adzuna ads < 4× active first-party jobs (floor 4)**
-   — ENFORCED IN CODE in `lib/adzuna.ts` (creation headroom; re-sightings always
-   refresh; cap climbs automatically as first-party grows). With 1 first-party job the
-   first import creates only ~4 ads — that is correct behaviour, not a bug.
-4. **First-touch rule for the NSW list** (implemented as `--touch` in
-   `scripts/filter-scraped-types.mjs`, keyed on place_id): rural STORES → clip-gun pitch
-   first (revenue message; Daryl's wholesale pipeline), claim-invite no sooner than
-   3–4 weeks later as a soft P.S.; contractors/services/farms → claim-invite only;
-   cut/review → suppressed. Ali and Ericka work from the same filtered file. Nobody gets
-   two cold asks.
-5. **Directory freshness = calendar, not code**: first Monday of each month, re-run the
-   directory ingest (idempotent). Do NOT build automated re-sighting — claims are the
-   real retention mechanism; automating the stopgap is the productive-procrastination
-   trap the June reframe named.
-6. **JSON-LD rule**: nothing ships that breaks it. Every future spot-check includes the
-   negative Rich Results case on a syndicated row, not just the positive on first-party.
-7. **Claim Outback Fencing as listing #1** (disclosed-COI model behaving consistently):
-   dogfood claim → approve → ABN-verify before any farmer touches it; register the free
-   `ABR_GUID` the same afternoon (also unblocks parked item "ABN verification");
-   screenshot-log the whole flow — that walkthrough IS the invite-campaign how-to asset.
+2. UTM discipline: every link Jess posts carries
+   `utm_source=facebook&utm_medium=jess_organic`.
+3. Syndicated ratio (Adzuna) < 4× first-party jobs, enforced in code. Moot
+   while Jobs is empty.
+4. First-touch rule for the NSW list: stores get the clip-gun pitch first;
+   contractors/services/farms get the claim invite; nobody gets two cold asks.
+5. Directory freshness = calendar, not code: first Monday monthly, re-run the
+   ingest (idempotent). No automated re-sighting. The new 7-day expiry digest
+   is a reminder, not automation.
+6. JSON-LD rule: JobPosting only on first-party job ads.
+7. Claim Outback Fencing as listing #1 (entry now exists; claim is yours).
 
-## This week's sequence (Josh)
+## Next sprint candidates (not started)
 
-Farm Hand renewal (before Wed 8 Jul, #1) → FROM_EMAIL + HIBP in one sitting →
-claim Outback Fencing + ABR GUID (the afternoon job) → run the NSW list through
-`filter-scraped-types.mjs --touch` (suppression column) → Adzuna key with the 4:1 cap
-(now automatic) → gate numbers live from the moment of Jess's push.
+- CSV upload on the bulk import page (the JSON paste is fine for scripts, not
+  for a spreadsheet from Ali).
+- Regional landing pages: `/services/fencing-contractor/[region]`.
+- Scrape more fencing contractors across NSW with `scripts/scrape-rural-directory.mjs`
+  + `scripts/filter-scraped-types.mjs` (spends Outscraper credits; confirm budget).
+- Minimal test harness (vitest) for `lib/source-platforms.ts`, `lib/adzuna.ts`
+  ratio logic, `lib/signed-tokens.ts`.
+- Branch protection on `main` requiring the CI check (GitHub settings).
+- The outback-ops frozen branch `cba4056` is still waiting for its
+  independent review (other repo).
 
-## Runbook — Josh's remaining actions, in order
+## Email sender
 
-1. ~~Watched push~~ **DONE 4 Jul** (see session log above). Still open from this step:
-   run the official Rich Results test on the Farm Hand ad (JSON-LD confirmed emitting,
-   formal test pending) — and once Adzuna rows exist (step 4), run it on a syndicated ad
-   and confirm Rich Results detects **nothing** (the two-layer model needs the negative
-   case verified, not just the positive).
-2. **Vercel env:** Resend DNS for outbackconnections.com.au is **verified live**
-   (DKIM + SPF checked 4 Jul) — update `FROM_EMAIL` to
-   `Outback Connections <help@outbackconnections.com.au>`. (`CRON_SECRET` confirmed set.)
-3. ~~Directory import~~ **DONE 4 Jul** (5 records — see session log above).
-4. **Adzuna key** (sprint item 2): register free at https://developer.adzuna.com/
-   (instant; free tier 250 calls/day vs our 8/day), set `ADZUNA_APP_ID` +
-   `ADZUNA_APP_KEY` in Vercel, redeploy, then staged rollout:
-   `node scripts/adzuna-pull.mjs --dry` → review sample → `--limit 10` → spot-check
-   `/jobs` → **hold at 10 for 24h** so one full expire-scraped cycle runs against
-   Adzuna rows — confirm re-sighting refreshes live ads and dead ads retire. A dead ad
-   surviving the cycle means a dedupe/expiry bug, far easier to diagnose at 10 rows
-   than 250. Then widen; the daily cron takes over.
-5. **Supabase Auth dashboard** (unchanged, needs you): leaked-password protection
-   toggle; email-confirmation + SMTP settings per LEGAL-HARDENING-PASS.md.
-
-## State
-
-- **Production is live** at https://www.outbackconnections.com.au. The marketplace (auth, schema, browse, posting, dashboard, admin) is fully built and shipped.
-- **Spine architecture** built per `SPINE-BUILD.md` (the source of truth): businesses (reputation home) + business_members + claims + countries; polymorphic listings + job/freight/service detail tables; listing_sources; events + search_queries; categories taxonomy. Trust ladder + honesty model (scraped never shown as employer-posted).
-- **Password-first auth — shipped + pushed** (`c949426`, live): `/signin` + `/signup` default to password; magic link demoted to a labelled backup; Terms/Privacy + 18+ consent intact. No Supabase Auth dashboard changes made.
-- **Gate 1 — AI + search discovery rails (committed, UNPUSHED `adb57a2`):** JobPosting JSON-LD on real ads only (never scraped); LocalBusiness on directory + service listings; sitewide Organization; BreadcrumbList; `robots.ts` explicit AI/search bot allow-list; dynamic `sitemap.ts` from live data; `public/llms.txt`. All blocks structurally validated. Not typecheck-verified locally (no `node_modules`) → eyeball the Vercel build on the watched push.
-- **Services vertical (committed, UNPUSHED `74ff80c`/`dbce423`):** `ingest_scraped_business`/`preview_scraped_import` extended for `vertical=service` (applied to DB, tested, cleaned); `scripts/scrape-rural-directory.mjs` has a `services` mode.
-- **Gate 3 DRAFT (parked):** `supabase/migrations/_drafts/add_services_supply_categories.sql` adds supply buckets (rural-supplies, produce-stock-feed, farm-machinery-dealer, fodder-hay). **NOT applied** — scraped supply rows resolve to `services-other` until it is.
-- **DB note:** the real "Farm Hand" user listing + its single `search_queries` row are genuine telemetry — left intact. No test rows in prod.
-
-## Email sender — important (unchanged)
-
-Outgoing transactional email still sends **from `support@outbackfencingsupplies.com.au`** (the Resend-verified domain). Site copy + reply-to point at `help@outbackconnections.com.au`; the From header won't switch until Resend DNS verification on `outbackconnections.com.au` completes.
-
-## Parked next sprint (FEATURE FREEZE until the traction gate)
-
-Do not pick these up until the traction gate is cleared:
-
-1. **Adzuna API key + ingestion** — real job-ad source for the jobs vertical.
-2. **50 real claimable jobs** — seed genuine, claimable listings.
-3. **Consent + postcode capture** on signup and listings.
-4. **Facebook auto-share** of new listings.
-5. **ABN verification** on claimed profiles (`lib/abr.ts` + `mark_business_abn_verified()` exist; untested vs live ABR — needs `ABR_GUID`).
-
-## Older parked items (do not pick up without confirming)
-
-1. **Sentry DSN** — `lib/sentry.ts` is a no-op stub. Needs `SENTRY_DSN` + `npx @sentry/wizard@latest -i nextjs`.
-2. **`account_deletions` wiring** — table exists; the delete-account flow doesn't yet write a row.
-3. **Lawyer review** — see `LEGAL-HARDENING-PASS.md`.
-4. **Leaked-password protection** — Supabase Auth dashboard toggle (Josh).
+Transactional mail still sends from `support@outbackfencingsupplies.com.au`
+until `FROM_EMAIL` is switched (action 4). Reply-to and site copy already say
+`help@outbackconnections.com.au`.
 
 ## Resume order
 
-1. `SPINE-BUILD.md` — architecture source of truth + gate status.
-2. `LEGAL-HARDENING-PASS.md` — legal pass, env vars, lawyer items.
-3. `docs/JOBS-INGESTION-PLAN.md` — the live job-AD ingestion blueprint (source = open decision; Adzuna now chosen per the parked sprint).
+1. `AGENTS.md` — the rules.
+2. `SPINE-BUILD.md` — architecture + gate status.
+3. This file.
+4. `docs/OUTREACH-RUNBOOK.md` — how staff use the directory + outreach tools.
 
-`PLAN-MARKETPLACE.md` is stale — do not treat as a build plan.
-
----
-**Project parked.** Effort moved to outback-ops (alert triage, merge sequence, shopify-sync fix, briefing delivery).
+`PLAN-MARKETPLACE.md`, `PLAN.md`, `docs/JOBS-INGESTION-PLAN.md` are historical.

@@ -3,7 +3,7 @@
 **Project:** Outback Connections — Australia's free rural operating system (Jobs, Freight, Services now; Harvest/Livestock later).
 **Stack:** Next.js 14 (App Router) · Supabase (Postgres + Auth + RLS) · Vercel · Resend.
 **Supabase project:** `csisezoohgfrpjrhkmls` (ap-southeast-2). **Live:** https://www.outbackconnections.com.au
-**Schema management:** raw SQL via Supabase MCP, one logical change per timestamped file in `supabase/migrations/`. Prisma is dead weight (vestigial; removal drafted, not applied). The live DB is the source of truth; the migration files reproduce it.
+**Schema management:** raw SQL via Supabase MCP, one logical change per timestamped file in `supabase/migrations/`. Prisma was removed on 6 Sep 2026. The live DB is the source of truth; the migration files reproduce it.
 
 This doc is the spine's source of truth. Update it when the spine changes.
 
@@ -39,6 +39,15 @@ events (append-only) · search_queries (incl. zero-result demand gap)   (capture
 | `…_categories_country_scope` (M5) | `categories.country_code` (default AU); slug uniqueness → `(country_code, slug)`; country-scoped browse index. |
 | `…_business_source_key_and_ingest_fn` | `businesses.source_platform/source_external_id` (place_id dedupe key) + unique index; **`ingest_scraped_business()`** (the write path). |
 | `…_preview_scraped_import_fn` | **`preview_scraped_import()`** — read-only dry-run for the admin import preview. |
+| `20260608…` (expire, claim fns, ABN fn, analytics, hardening, funnel) + `20260609…_ingest_preview_service_vertical` | Gate 1B: expiry cron fn, `approve_claim`/`reject_claim`, `mark_business_abn_verified`, `admin_analytics_summary`, search_path pins, service vertical in ingest/preview. |
+| `20260814090000_contractor_outreach` | `business_outreach` + `business_outreach_events`, `admin_contractor_outreach` view, `record_contractor_outreach()`, `current_user_is_admin()`; dropped the own-row UPDATE policy on `user_profiles` (is_admin self-grant hole). |
+| `20260814100000_ingest_safe_vertical_reclassification` | Ingest may move a scraper-owned unclaimed row between verticals on re-sighting; never touches claimed/owned/moderated rows. |
+| `20260814110000_private_contact_column_privileges` | Column-level grants: anon cannot read `contact_*` on listings/businesses. |
+| `20260906020000_ingest_platform_labels` | Human platform wording + category-aware descriptor in the ingest copy. |
+| `20260906030000_directory_contributor_flag` | `user_profiles.directory_contributor` for the staff quick-add page. |
+| `20260906040000_services_supply_categories` | Supply buckets (rural-supplies, produce-stock-feed, farm-machinery-dealer, fodder-hay). |
+| `20260906050000_analytics_bot_flag_and_gate_metrics` | `is_bot` on capture tables; `admin_gate_metrics()`. |
+| `20260906060000` + `…061000_function_execute_privileges` | EXECUTE revoked from anon/authenticated/PUBLIC where only the service role or triggers should call; default privileges no longer grant anon EXECUTE. |
 
 `insertListing()` (lib/posting) sets `vertical`/`side` on user posts.
 
@@ -66,10 +75,13 @@ Transitions: scraped ingest creates `unclaimed`; claim approval → `claimed` + 
 
 **Preview — `preview_scraped_import(jsonb)`** (read-only, service_role): per-row validation, category resolve + fallback, would-create vs would-update (deduped), summary. Mirrors ingest resolution; read-only so drift only affects preview accuracy.
 
+**Source platforms:** `google_maps`, `facebook`, `yellow_pages`, `truelocal`, `official_website`, `web` (`lib/source-platforms.ts`). When only the platform is known, `source_url` is a search on that platform and `listings.metadata.source_url_kind='search'`; the UI then says "Find the original listing on …".
+
 **Import format:** `docs/INGEST-IMPORT-FORMAT.md` (the `ImportRecord[]` contract). Scrape → preview → commit:
 - `scripts/scrape-rural-directory.mjs <jobs|freight> [--test] [--raw]` (Outscraper, dedupe by place_id, async+poll, CSV+JSON out). Josh runs it (key in `.env.local`).
 - `/dashboard/admin/import` (admin-gated): paste JSON → Preview (dry run) → Commit (writes valid rows via the RPC). Reusable for every import.
 - `scripts/ingest-rural-directory.mjs` — CLI alternative to the web commit.
+- `/dashboard/directory/add` (admins + `directory_contributor`): ONE business through the same preview + ingest RPCs. This is the staff path; the public post form is never used for a third party's business.
 
 **Honesty UI:** scraped rows show an amber **Unclaimed** badge (cards) and a **ScrapedNotice** (detail) in place of the contact block — "unclaimed, not posted by the business", source link, claim CTA. **JSON-LD gate:** the jobs detail page emits `JobPosting` structured data ONLY for real posts (`data_source !== 'scraped'`) — a directory entry is never advertised to Google as a job.
 
@@ -97,12 +109,20 @@ Transitions: scraped ingest creates `unclaimed`; claim approval → `claimed` + 
 - **Security hardening — APPLIED** — search_path pinned on the 6 functions (`gen_short_id` = `public,extensions`); `admin_duplicate_accounts_by_ip` → security_invoker + anon/authenticated SELECT revoked (latent leak closed).
 - **Admin nav** — gated nav across `/dashboard/admin/*` + dashboard entry card.
 
+**BUILT + applied, Aug–Sep 2026:**
+- **Contractor outreach workspace** (`/dashboard/admin/contractor-outreach`), claim page (`/claim/[businessId]`), one-click claim-invite email, trade-offer card on fencing pages.
+- **Staff quick-add** (`/dashboard/directory/add`) + `directory_contributor` flag. The 39 staff-entered rows of Aug–Sep were migrated into proper directory rows on 6 Sep.
+- **Analytics**: bot flag + daily pseudonymous session id on capture; traction-gate metrics on the analytics page.
+- **EXECUTE privilege hardening** applied (the "separate lower-priority pass" from June).
+- **Prisma removed.** Supply categories applied (Gate 3).
+
 **STILL OPEN:**
-- **First real import** (Josh): pilot 8 → preview → commit → agent reconciles + honesty audit → staged scale 10→50→250→1k→5k.
-- **Live job-AD ingestion** (distinct from the business directory): see `docs/JOBS-INGESTION-PLAN.md`; the job-ad SOURCE is an open decision for Josh; schema columns drafted in `supabase/migrations/_drafts/`.
+- **Claims**: zero so far. Josh claims Outback Fencing first (listing exists); then the invite campaign.
+- **PR #17** (team tracker + scoped outreach access for Jess/Daryl): open, gated on its SQL suite run on a disposable branch; needs the who-does-outreach decision.
+- **Jobs / Freight**: empty and hidden while empty. Live job-AD ingestion (Adzuna, env-gated, built) stays parked until Jobs matters.
 - **ABR live-key testing** (`ABR_GUID`); **leaked-password protection** (Supabase Auth dashboard toggle).
-- **Drafted, not applied**: drop dead `jobs`/`profiles` + Prisma removal (`_drafts/drop_legacy_jobs_profiles.sql`); job-postings columns (`_drafts/`).
-- **Deferred**: `vertical` NOT NULL once all write paths set it; M6 `regions` geo/lat-lng + `region_id` FKs; the SECURITY DEFINER **EXECUTE** revocations (separate lower-priority pass).
+- **Drafted, not applied**: drop dead `jobs`/`profiles` (`_drafts/drop_legacy_jobs_profiles.sql`); job-postings columns (`_drafts/`).
+- **Deferred**: `vertical` NOT NULL once all write paths set it; M6 `regions` geo/lat-lng + `region_id` FKs; `user_profiles_public` still a SECURITY DEFINER view (display_name only, DML revoked 14 Aug).
 
 ---
 
