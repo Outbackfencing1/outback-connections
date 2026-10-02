@@ -38,6 +38,11 @@ export default async function PostServiceOfferingPage() {
 
   const directoryAccess = await requireDirectoryContributor();
   const canAddDirectory = directoryAccess.ok;
+  // Staff list other people's businesses; this form is for your OWN business
+  // and marks the row owner-posted. Send staff to the directory form instead.
+  if (directoryAccess.ok && !directoryAccess.isAdmin) {
+    redirect("/dashboard/directory/add?from=post");
+  }
 
   const supa = createClient();
   const { data: cats } = await supa
