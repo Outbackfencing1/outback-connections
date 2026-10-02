@@ -13,10 +13,16 @@ import {
   zodErrorsToMap,
   type ActionResult,
 } from "@/lib/posting";
+import { requireDirectoryContributor } from "@/lib/directory-access";
 
 export async function postServiceOffering(formData: FormData): Promise<ActionResult> {
   const guard = await checkPostingGuard();
   if (!guard.ok) return { ok: false, errors: { _: guard.message } };
+
+  // Staff accounts list other people's businesses: that goes through the
+  // directory form so it is marked unclaimed with its source.
+  const staff = await requireDirectoryContributor();
+  if (staff.ok && !staff.isAdmin) redirect("/dashboard/directory/add?from=post");
 
   if (honeypotTripped(formData)) {
     redirect("/dashboard/listings");

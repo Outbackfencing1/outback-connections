@@ -9,6 +9,10 @@
       "schedule": "0 23 * * *"
     },
     {
+      "path": "/api/cron/adopt-staff-posts",
+      "schedule": "30 21 * * *"
+    },
+    {
       "path": "/api/cron/purge-auth-events",
       "schedule": "0 3 * * *"
     },

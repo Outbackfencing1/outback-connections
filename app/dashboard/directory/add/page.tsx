@@ -16,7 +16,13 @@ export const metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function DirectoryAddPage() {
+export default async function DirectoryAddPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const fromPost = sp.from === "post";
   const access = await requireDirectoryContributor();
   if (!access.ok && access.reason === "not_signed_in") {
     redirect("/signin?next=/dashboard/directory/add");
@@ -55,6 +61,16 @@ export default async function DirectoryAddPage() {
           ← Dashboard
         </Link>
       </div>
+      {fromPost && (
+        <div className="mt-4 rounded-xl border border-green-300 bg-green-50 p-4 text-sm text-green-900">
+          <p className="font-semibold">Please add businesses here.</p>
+          <p className="mt-1">
+            You opened the public &quot;post a listing&quot; form. That form is only for
+            your own business. Every business you find online goes on this page.
+            Same details, one extra box: where you found it.
+          </p>
+        </div>
+      )}
       <p className="mt-2 text-sm text-neutral-700">
         For a business you found online that isn&apos;t yours. It goes in as an{" "}
         <strong>unclaimed</strong> listing with a business record, says where you found

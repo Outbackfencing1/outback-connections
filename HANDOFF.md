@@ -20,6 +20,31 @@ the live site runs PR #16 code against the new schema, which is compatible
 
 ---
 
+## 2 Oct 2026: staff posts through the public form get re-filed daily
+
+Between 7 Sep and 1 Oct Ali added 94 fencing contractors (great volume) but
+through the PUBLIC "post a listing" form, so every row was owner-posted
+(`data_source='manual'`): no Unclaimed badge, no source, phone/email in the
+signed-in-readable columns, no business record to claim, Ali as the owner.
+Farmer enquiries on them still went to the team (no business = unclaimed
+path), so no farmer data leaked.
+
+Fix (branch `fix/adopt-staff-posts`, no migration):
+
+- `/post/service/offering` now redirects staff and directory contributors
+  (not admins) to `/dashboard/directory/add?from=post`, page and server
+  action both, with a plain-English note on arrival.
+- `/api/cron/adopt-staff-posts` (daily 21:30 UTC = 7:30am AEST) re-files
+  any such row through the same path as the quick-add page
+  (`buildDirectoryRecord` + `ingest_scraped_business`), closes the
+  original with `canonical_listing_id` so its URL 301s, and nulls its
+  contact columns. Rows that fail the screen in
+  `lib/staff-post-adoption.ts` (place-name titles, off-topic trades) are
+  closed, not deleted, and listed in the team email. `?dry=1&k=<secret>`
+  shows the plan.
+- Dry run against the live 94 (public fields only): 92 publish, 2 held
+  ("Seven Hills NSW", "Dubbo Scaffolding").
+
 ## What Outback Connections is now (the Aug–Sep 2026 pivot)
 
 A **rural business directory + staff outreach tool**, run by Outback Fencing &
