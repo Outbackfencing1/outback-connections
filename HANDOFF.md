@@ -1,24 +1,55 @@
 # HANDOFF
 
-Date: 2026-09-06 (previous: 2026-07-04)
+Date: 2026-10-04 (previous: 2026-09-06)
 Branch: `main`. Live: https://www.outbackconnections.com.au
 
-**Local-only / UNPUSHED commits awaiting Josh's push** (his global Claude
-setting `Bash(git push *)` deny blocks agent pushes): everything after
-`49eb53d` (PR #16). Push = Vercel production deploy. After pushing, confirm the
-build goes READY and spot-check `/services`, one fencing listing, and
-`/dashboard/admin/analytics`.
-
-```bash
-git push origin main
-```
-
-All database migrations from this session are ALREADY APPLIED to the live
-project. The code that uses them is what's waiting on the push. Until pushed,
-the live site runs PR #16 code against the new schema, which is compatible
-(new columns have defaults; new functions are unused by old code).
+Everything from the 6 Sep session is on `main` and deployed (PR #18, 7 Sep;
+PR #19, the staff-post clean-up, 2 Oct).
+Pushing to `main` deploys production. All migrations in
+`supabase/migrations/` are applied to the live project.
 
 ---
+
+## 4 Oct 2026: the staff-post clean-up was failing; fixed (branch `ccr-a7a02618-x1gnjy`)
+
+Live check (read-only) before the fix: the 2 and 3 Oct runs of
+`/api/cron/adopt-staff-posts` created 53 unclaimed copies but could not close
+a single original. `listings_contact_required` needs a phone, email OR
+source_url, and the close cleared both contacts on rows with no source_url.
+So 92 staff posts were still live as owner-posted with phone/email readable by
+any signed-in user, 53 of those contractors showed twice in the directory,
+and 40 closed rows (38 from 6 Sep + 2 held) still held contact. The 9 "found
+on its official website" rows also failed the record builder every day (that
+platform needs a page URL), and the dry run never ran the builder, so it
+couldn't show either failure.
+
+Fixed, no migration:
+- Closing an original now sets `source_url` (the new row's attribution URL;
+  a web search for held rows) when it clears phone/email.
+- `planStaffPost()` (lib, tested) runs the screen AND the record builder, for
+  both the dry run and the real run. Google Maps / own-website posts with no
+  page URL are filed as "found online" (web search). State comes from the
+  row, then the description, then the postcode. Anything the builder still
+  rejects is held, never left live.
+- Held rows have phone/email moved to a private `listing_sources` row
+  (`source_platform='staff_post'`, admin read) and cleared; a held row is
+  never picked up again, so a person's call sticks.
+- Each run also sweeps closed staff posts that still carry phone/email (the
+  40 above) the same way.
+- Quote requests on an adopted original move to the new row.
+- **After deploy:** hit `/api/cron/adopt-staff-posts?dry=1&k=<CRON_SECRET>`
+  (expect ~92 adopt, ~0 hold, 40 to clear), then let the 7:30am run go, or
+  call it once without `dry`. Re-ingest is idempotent, so the 53 existing
+  copies are updated, not duplicated.
+
+Also in this branch: `safeNextPath` refuses any control character (`/\t/evil.com`
+resolved off-site after sign-in); the two public legal-concern forms get a
+honeypot and a loose hourly cap (3 per email, 20 overall, refusals point to
+help@); staff see a warning on the job, freight and for-sale forms (those
+stay open to them for Outback Fencing's own ads). Left for later: the renew
+and unsubscribe links act on GET (mail scanners can trigger them);
+`CRON_SECRET` is accepted as `?k=` (lands in logs); a staff account's own
+real business would still be re-filed as unclaimed (only admins are exempt).
 
 ## 2 Oct 2026: staff posts through the public form get re-filed daily
 

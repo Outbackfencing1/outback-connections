@@ -6,7 +6,15 @@
 // /api/cron/adopt-staff-posts then re-files the good ones through the same
 // path as /dashboard/directory/add and closes the original (it 301s to the
 // new row). Pure: no server imports, so it is unit-tested.
-import { normalisePlatform, type DirectoryEntryInput } from "./directory-records";
+import {
+  AU_STATES,
+  buildDirectoryRecord,
+  normalisePlatform,
+  type DirectoryEntryInput,
+  type DirectoryImportRecord,
+} from "./directory-records";
+import { buildSearchUrl, SOURCE_PLATFORM_OPTIONS } from "./source-platforms";
+import type { SourceUrlKind } from "./source-platforms";
 
 export type StaffPostRow = {
   id: string;
@@ -55,7 +63,7 @@ export function parseFoundOn(description: string | null | undefined): {
   if (site) return { platform: "official_website", suburb: site[1].trim(), state: site[2].toUpperCase() };
   const m = d.match(/found listed on ([a-z_ ]+?) in ([^,.]+), ([A-Z]{2,3})/i);
   if (m) {
-    const platform = normalisePlatform(m[1]) ?? "web";
+    const platform = normalisePlatform(m[1].replace(/^the /i, "")) ?? "web";
     return { platform, suburb: m[2].trim(), state: m[3].toUpperCase() };
   }
   return { platform: "web", suburb: "", state: "" };
@@ -74,6 +82,11 @@ export function screenStaffPost(row: StaffPostRow): Screen {
   if (reasons.length > 0) return { verdict: "hold", reasons };
 
   const found = parseFoundOn(row.description);
+  // Google Maps and "own website" need the exact page, and these posts never
+  // carry one. Say "found online" (a web search for the name) rather than
+  // claim a page we can't link to.
+  const needsUrl = SOURCE_PLATFORM_OPTIONS.find((o) => o.value === found.platform)?.needsUrl ?? false;
+  const platform = needsUrl ? "web" : found.platform;
   const phone = (row.contact_phone ?? "").replace(/[^0-9 ()+-]/g, "").trim();
   const email = (row.contact_email ?? "").trim();
   return {
@@ -84,13 +97,74 @@ export function screenStaffPost(row: StaffPostRow): Screen {
       category_slug: row.category_slug ?? "",
       postcode: row.postcode ?? "",
       suburb: found.suburb,
-      state: (row.state || found.state || "NSW").toUpperCase(),
-      platform: found.platform,
+      state: resolveState(row.state, found.state, row.postcode),
+      platform,
       source_url: "",
       website: "",
       phone: phone.length >= 6 && phone.length <= 20 ? phone : "",
       email: /^[^@ ]+@[^@ ]+[.][^@ ]+$/.test(email) ? email : "",
-      notes: `Re-filed from a public-form post (listing ${row.id}).`,
+      notes:
+        `Re-filed from a public-form post (listing ${row.id}).` +
+        (needsUrl ? ` The post said it was found on ${found.platform}, with no page URL.` : ""),
     },
   };
+}
+
+/** Australian postcode -> state code, or null if it doesn't look Australian. */
+export function stateFromPostcode(postcode: string | null | undefined): string | null {
+  if (!/^[0-9]{4}$/.test(postcode ?? "")) return null;
+  const n = Number(postcode);
+  if (n >= 200 && n <= 299) return "ACT";
+  if (n >= 800 && n <= 999) return "NT";
+  if ((n >= 2600 && n <= 2618) || (n >= 2900 && n <= 2920)) return "ACT";
+  if (n >= 1000 && n <= 2999) return "NSW";
+  if ((n >= 3000 && n <= 3999) || (n >= 8000 && n <= 8999)) return "VIC";
+  if ((n >= 4000 && n <= 4999) || (n >= 9000 && n <= 9999)) return "QLD";
+  if (n >= 5000 && n <= 5999) return "SA";
+  if (n >= 6000 && n <= 6999) return "WA";
+  if (n >= 7000 && n <= 7999) return "TAS";
+  return null;
+}
+
+const isState = (v: string): boolean => (AU_STATES as readonly string[]).includes(v);
+
+/** First valid state code from the row, the description, then the postcode. */
+function resolveState(rowState: string | null, foundState: string, postcode: string | null): string {
+  for (const c of [rowState, foundState]) {
+    const v = (c ?? "").trim().toUpperCase();
+    if (isState(v)) return v;
+  }
+  return stateFromPostcode(postcode) ?? "";
+}
+
+export type Plan =
+  | { verdict: "adopt"; record: DirectoryImportRecord; urlKind: SourceUrlKind }
+  | { verdict: "hold"; reasons: string[] };
+
+/**
+ * The whole decision for one row: the screen, then the same record builder
+ * the quick-add page uses. A row the builder rejects is held for a person,
+ * never left live as an owner post. The cron's dry run and the real run both
+ * call this, so the dry run shows exactly what will happen.
+ */
+export function planStaffPost(row: StaffPostRow): Plan {
+  const screen = screenStaffPost(row);
+  if (screen.verdict === "hold") return screen;
+  const built = buildDirectoryRecord(screen.input, {
+    enteredBy: row.user_id,
+    enteredVia: "adopted from public post form",
+    enteredAt: row.created_at,
+  });
+  if (!built.ok) return { verdict: "hold", reasons: Object.values(built.errors).map((e) => `could not re-file: ${e}`) };
+  return { verdict: "adopt", record: built.record, urlKind: built.urlKind };
+}
+
+/**
+ * Source link for a closed original once its phone/email are cleared. Every
+ * listing must keep a phone, an email or a source URL (listings_contact_required),
+ * so clearing the contact columns alone fails.
+ */
+export function closedOriginalSourceUrl(row: Pick<StaffPostRow, "title" | "postcode" | "state">): string {
+  const state = resolveState(row.state, "", row.postcode) || "NSW";
+  return buildSearchUrl("web", row.title ?? "", row.postcode ?? "", state);
 }

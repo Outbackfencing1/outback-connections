@@ -59,6 +59,13 @@ export default function LegalConcernForm({ listingId }: Props) {
   return (
     <form onSubmit={onSubmit} className="rounded-lg border border-amber-200 bg-amber-50 p-4">
       <input type="hidden" name="listing_id" value={listingId} />
+      {/* Honeypot: hidden from people, filled by bots. */}
+      <div aria-hidden="true" style={{ position: "absolute", left: "-10000px", top: "auto", width: 1, height: 1, overflow: "hidden" }}>
+        <label>
+          Website (leave blank)
+          <input type="text" name="website" tabIndex={-1} autoComplete="off" defaultValue="" />
+        </label>
+      </div>
 
       <p className="text-sm font-semibold text-amber-900">Report a legal concern</p>
       <p className="mt-1 text-xs text-amber-900">

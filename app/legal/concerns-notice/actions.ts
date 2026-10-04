@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendThrottledEmail } from "@/lib/email-throttle";
 import { NOTIFICATION_TO } from "@/lib/email";
+import { legalIntakeGuard } from "@/lib/legal-intake-guard";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
@@ -110,6 +111,8 @@ export async function submitConcernsNotice(formData: FormData): Promise<SubmitRe
         "Service temporarily unavailable. Please email help@outbackconnections.com.au directly.",
     };
   }
+  const guard = await legalIntakeGuard(admin, formData, data.complainant_email);
+  if (!guard.ok) return guard;
 
   // Resolve listing if possible
   let listingId: string | null = tryResolveListingId(data.listing_url);

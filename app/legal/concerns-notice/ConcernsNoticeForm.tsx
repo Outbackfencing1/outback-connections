@@ -41,6 +41,13 @@ export default function ConcernsNoticeForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-5" noValidate>
+      {/* Honeypot: hidden from people, filled by bots. */}
+      <div aria-hidden="true" style={{ position: "absolute", left: "-10000px", top: "auto", width: 1, height: 1, overflow: "hidden" }}>
+        <label>
+          Website (leave blank)
+          <input type="text" name="website" tabIndex={-1} autoComplete="off" defaultValue="" />
+        </label>
+      </div>
       <Field id="notice_type" label="Notice type" required>
         <select
           id="notice_type"

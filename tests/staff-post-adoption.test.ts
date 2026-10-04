@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { buildDirectoryRecord } from "@/lib/directory-records";
-import { parseFoundOn, screenStaffPost, type StaffPostRow } from "@/lib/staff-post-adoption";
+import {
+  closedOriginalSourceUrl,
+  parseFoundOn,
+  planStaffPost,
+  screenStaffPost,
+  stateFromPostcode,
+  type StaffPostRow,
+} from "@/lib/staff-post-adoption";
 
 const base: StaffPostRow = {
   id: "00000000-0000-0000-0000-000000000001",
@@ -68,5 +75,77 @@ describe("screenStaffPost", () => {
     const s = screenStaffPost({ ...base, contact_phone: "call me" });
     expect(s.verdict).toBe("adopt");
     if (s.verdict === "adopt") expect(s.input.phone).toBe("");
+  });
+});
+
+describe("planStaffPost", () => {
+  const found = (on: string) => `X is a fencing business we found listed on ${on} in Orange, NSW. This is an UNCLAIMED directory listing.`;
+
+  it("adopts every boilerplate variant seen on the live staff posts", () => {
+    for (const on of ["Facebook", "yellow_pages", "its official website", "its website", "the yellow_pages", "yelow_pages", "Localsearch", "the Polo_map"]) {
+      const p = planStaffPost({ ...base, description: found(on) });
+      expect(p.verdict, on).toBe("adopt");
+    }
+    expect(planStaffPost({ ...base, description: "Great fencers" }).verdict).toBe("adopt");
+  });
+
+  it("says 'found online' when the post names a site that needs a page URL it doesn't have", () => {
+    const p = planStaffPost({ ...base, description: found("its official website") });
+    expect(p.verdict).toBe("adopt");
+    if (p.verdict !== "adopt") return;
+    expect(p.record.source_platform).toBe("web");
+    expect(p.urlKind).toBe("search");
+    expect(p.record.source_url).toMatch(/^https:[/][/]www[.]google[.]com[/]search/);
+    expect(String(p.record.raw_payload.notes)).toMatch(/official_website/);
+  });
+
+  it("strips a leading 'the' before matching the platform", () => {
+    const p = planStaffPost({ ...base, description: found("the yellow_pages") });
+    if (p.verdict === "adopt") expect(p.record.source_platform).toBe("yellow_pages");
+  });
+
+  it("fills a missing or unusable state from the description, then the postcode", () => {
+    const fromDesc = planStaffPost({ ...base, state: null });
+    expect(fromDesc.verdict === "adopt" && fromDesc.record.state).toBe("NSW");
+    const fromPostcode = planStaffPost({ ...base, state: "New South Wales", description: "Great fencers", postcode: "3350" });
+    expect(fromPostcode.verdict === "adopt" && fromPostcode.record.state).toBe("VIC");
+  });
+
+  it("holds a row the record builder rejects instead of leaving it live", () => {
+    const p = planStaffPost({ ...base, title: `${"Very Long Fencing Name ".repeat(6)}Pty Ltd` });
+    expect(p.verdict).toBe("hold");
+    if (p.verdict === "hold") expect(p.reasons.join(" ")).toMatch(/could not re-file/);
+  });
+
+  it("keeps phone and email only in the private payload", () => {
+    const p = planStaffPost(base);
+    expect(p.verdict).toBe("adopt");
+    if (p.verdict !== "adopt") return;
+    expect(p.record.raw_payload.phone).toBe("0400 000 000");
+    expect(JSON.stringify({ ...p.record, raw_payload: null })).not.toMatch(/0400|example[.]com/);
+  });
+});
+
+describe("stateFromPostcode", () => {
+  it("maps Australian postcode ranges", () => {
+    expect(stateFromPostcode("2800")).toBe("NSW");
+    expect(stateFromPostcode("2600")).toBe("ACT");
+    expect(stateFromPostcode("2913")).toBe("ACT");
+    expect(stateFromPostcode("0870")).toBe("NT");
+    expect(stateFromPostcode("4350")).toBe("QLD");
+    expect(stateFromPostcode("5290")).toBe("SA");
+    expect(stateFromPostcode("6430")).toBe("WA");
+    expect(stateFromPostcode("7250")).toBe("TAS");
+    expect(stateFromPostcode("3550")).toBe("VIC");
+    expect(stateFromPostcode("abc")).toBeNull();
+    expect(stateFromPostcode(null)).toBeNull();
+  });
+});
+
+describe("closedOriginalSourceUrl", () => {
+  it("always gives a source link so the contact columns can be cleared", () => {
+    expect(closedOriginalSourceUrl({ title: "Kings Fencing & Gates", postcode: "2800", state: null })).toBe(
+      "https://www.google.com/search?q=Kings+Fencing+and+Gates+2800+NSW"
+    );
   });
 });

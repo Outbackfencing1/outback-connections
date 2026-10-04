@@ -1,7 +1,7 @@
 # SPINE-BUILD.md — architecture source of truth
 
 **Project:** Outback Connections — Australia's free rural operating system (Jobs, Freight, Services now; Harvest/Livestock later).
-**Stack:** Next.js 14 (App Router) · Supabase (Postgres + Auth + RLS) · Vercel · Resend.
+**Stack:** Next.js 16 (App Router) · Supabase (Postgres + Auth + RLS) · Vercel · Resend.
 **Supabase project:** `csisezoohgfrpjrhkmls` (ap-southeast-2). **Live:** https://www.outbackconnections.com.au
 **Schema management:** raw SQL via Supabase MCP, one logical change per timestamped file in `supabase/migrations/`. Prisma was removed on 6 Sep 2026. The live DB is the source of truth; the migration files reproduce it.
 
