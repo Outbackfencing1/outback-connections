@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { checkPostingGuard } from "@/lib/posting";
+import StaffPostNotice from "@/components/posting/StaffPostNotice";
 import PostJobForm from "@/components/posting/PostJobForm";
 import { postJob } from "./actions";
 
@@ -45,6 +46,7 @@ export default async function PostJobPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
       <h1 className="text-2xl font-bold tracking-tight">Post a job</h1>
+      <StaffPostNotice kind="job" />
       <p className="mt-2 text-sm text-neutral-700">
         Free to post. Free for workers to reach out. No lead fees, ever.
       </p>

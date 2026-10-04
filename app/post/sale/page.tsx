@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { checkPostingGuard } from "@/lib/posting";
+import StaffPostNotice from "@/components/posting/StaffPostNotice";
 import PostSaleForm from "@/components/posting/PostSaleForm";
 import { postForSale } from "./actions";
 
@@ -46,6 +47,7 @@ export default async function PostSalePage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
       <h1 className="text-2xl font-bold tracking-tight">Sell hay, stock or gear</h1>
+      <StaffPostNotice kind="sale" />
       <p className="mt-2 text-sm text-neutral-700">
         Livestock, hay, grain, machinery, a trailer, fencing steel. Post it once and it stays
         findable. Free, no commission, buyers contact you directly.

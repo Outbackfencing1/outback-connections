@@ -33,7 +33,7 @@ need `SUPABASE_SERVICE_ROLE_KEY`, which is only set on Vercel.
 ## Gate before pushing
 
 ```bash
-npx tsc --noEmit && npm run lint && npm run build
+npm test && npx tsc --noEmit && npm run lint && npm run build
 ```
 
 CI (`.github/workflows/ci.yml`) runs the same on every push and pull request.

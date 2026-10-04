@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { setFlash } from "@/lib/posting";
+import { legalIntakeGuard } from "@/lib/legal-intake-guard";
 import { NOTIFICATION_TO, sendEmail } from "@/lib/email";
 import { listingHref } from "@/lib/format";
 
@@ -207,6 +208,8 @@ export async function submitLegalConcern(formData: FormData): Promise<LegalRepor
   if (!admin) {
     return { ok: false, message: "Couldn't record the complaint right now. Email help@outbackconnections.com.au instead." };
   }
+  const guard = await legalIntakeGuard(admin, formData, parsed.data.complainant_email);
+  if (!guard.ok) return guard;
   const { data: inserted, error } = await admin
     .from("defamation_complaints")
     .insert({

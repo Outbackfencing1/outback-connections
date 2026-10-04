@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { checkPostingGuard } from "@/lib/posting";
+import StaffPostNotice from "@/components/posting/StaffPostNotice";
 import PostFreightForm from "@/components/posting/PostFreightForm";
 import { postFreight } from "./actions";
 
@@ -45,6 +46,7 @@ export default async function PostFreightPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
       <h1 className="text-2xl font-bold tracking-tight">Post freight</h1>
+      <StaffPostNotice kind="freight" />
       <p className="mt-2 text-sm text-neutral-700">
         Need something moved, or got a truck running empty? Post it. Free.
       </p>
