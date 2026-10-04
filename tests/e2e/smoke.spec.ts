@@ -114,3 +114,15 @@ test("a migrated contractor URL redirects instead of 404", async ({ request }) =
   expect([301, 302, 307, 308]).toContain(res.status());
   expect(res.headers()["location"] ?? "").toMatch(/\/services\/listing\//);
 });
+
+test("emailed one-click links answer with a visible page, never a silent redirect", async ({ request }) => {
+  // Bad tokens only: a real token would be a write path. GET must not redirect
+  // or change anything; it shows why nothing happened.
+  for (const path of ["/unsubscribe", "/unsubscribe?t=not-a-token", "/listings/00000000-0000-0000-0000-000000000000/renew?t=not-a-token"]) {
+    const res = await request.get(path, { maxRedirects: 0 });
+    expect(res.status(), path).toBe(400);
+    const html = await res.text();
+    expect(html, path).toMatch(/isn&#39;t valid|isn't valid/);
+    expect(html, path).toContain('name="robots" content="noindex"');
+  }
+});

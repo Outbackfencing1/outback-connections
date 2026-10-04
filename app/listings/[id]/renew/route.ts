@@ -2,33 +2,41 @@
 // Item 14: renew from the renewal-reminder email. The emailed link (GET)
 // only shows a confirm page; the renew happens on its button (POST). Mail
 // scanners that prefetch links therefore never renew on the owner's behalf.
-import { NextResponse, type NextRequest } from "next/server";
+// Every outcome, including a failed save, is shown on a page here: the link
+// works without a session, so the dashboard can't be relied on to say what
+// happened.
+import { type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyToken } from "@/lib/signed-tokens";
-import { escapeHtml } from "@/lib/email";
+import { actionPageResponse } from "@/lib/action-page";
 
-const BASE_URL =
-  process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
+const RENEW_DAYS = 30;
+const DASHBOARD = { href: "/dashboard/listings", label: "Manage your listings" };
 
-type Checked =
-  | { ok: true; listing: { id: string; status: string; title: string } }
-  | { ok: false; reason: string };
+type Listing = { id: string; status: string; title: string };
+type Checked = { ok: true; listing: Listing } | { ok: false; reason: Failure };
+type Failure = "invalid" | "expired" | "not_yours" | "deleted" | "server_error";
 
 async function check(id: string, token: string | null): Promise<Checked> {
-  if (!token) return { ok: false, reason: "missing_token" };
+  if (!token) return { ok: false, reason: "invalid" };
   const v = verifyToken(token);
-  if (!v.ok) return { ok: false, reason: v.reason };
-  if (v.payload.p !== "renew" || v.payload.l !== id) return { ok: false, reason: "mismatch" };
+  if (!v.ok) {
+    if (v.reason === "expired") return { ok: false, reason: "expired" };
+    if (v.reason === "no_secret") return { ok: false, reason: "server_error" };
+    return { ok: false, reason: "invalid" };
+  }
+  if (v.payload.p !== "renew" || v.payload.l !== id) return { ok: false, reason: "invalid" };
 
   const admin = createAdminClient();
   if (!admin) return { ok: false, reason: "server_error" };
 
   // Confirm ownership matches the token's user
-  const { data: listing } = await admin
+  const { data: listing, error } = await admin
     .from("listings")
     .select("id, user_id, status, title")
     .eq("id", id)
     .maybeSingle();
+  if (error) return { ok: false, reason: "server_error" };
   if (!listing || listing.user_id !== v.payload.u) return { ok: false, reason: "not_yours" };
   if (listing.status === "deleted_by_user" || listing.status === "deleted_by_admin") {
     return { ok: false, reason: "deleted" };
@@ -36,8 +44,49 @@ async function check(id: string, token: string | null): Promise<Checked> {
   return { ok: true, listing };
 }
 
-const back = (reason: string) =>
-  NextResponse.redirect(`${BASE_URL}/dashboard/listings?renew=${encodeURIComponent(reason)}`, 303);
+const FAILURES: Record<Failure, { status: number; heading: string; message: string }> = {
+  invalid: {
+    status: 400,
+    heading: "That renewal link isn't valid",
+    message: "Nothing was changed. You can renew the listing from your dashboard instead.",
+  },
+  expired: {
+    status: 400,
+    heading: "That renewal link has expired",
+    message: "Nothing was changed. You can renew the listing from your dashboard instead.",
+  },
+  not_yours: {
+    status: 403,
+    heading: "That link is for a different account",
+    message: "Nothing was changed. Sign in with the account that posted the listing to renew it.",
+  },
+  deleted: {
+    status: 410,
+    heading: "That listing has been deleted",
+    message: "Deleted listings can't be renewed. You can post it again from your dashboard.",
+  },
+  server_error: {
+    status: 500,
+    heading: "We couldn't renew it",
+    message: "Something went wrong on our side and nothing was changed. Try again in a few minutes.",
+  },
+};
+
+function failurePage(reason: Failure, retry?: { id: string; token: string }): Response {
+  const f = FAILURES[reason];
+  return actionPageResponse(
+    {
+      heading: f.heading,
+      message: f.message,
+      tone: "error",
+      form: retry ? { action: renewPath(retry.id), token: retry.token, button: "Try again" } : undefined,
+      link: DASHBOARD,
+    },
+    f.status
+  );
+}
+
+const renewPath = (id: string) => `/listings/${encodeURIComponent(id)}/renew`;
 
 export async function GET(
   request: NextRequest,
@@ -46,25 +95,18 @@ export async function GET(
   const { id } = await params;
   const token = request.nextUrl.searchParams.get("t");
   const c = await check(id, token);
-  if (!c.ok) return back(c.reason);
+  if (!c.ok) return failurePage(c.reason);
 
-  const action = `${BASE_URL}/listings/${encodeURIComponent(id)}/renew`;
-  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Renew your listing — Outback Connections</title>
-<style>body{font-family:-apple-system,system-ui,sans-serif;max-width:32rem;margin:0 auto;padding:2.5rem 1rem;color:#111;line-height:1.5;}
-button{margin-top:1rem;border:0;border-radius:0.75rem;background:#15803d;color:#fff;font-size:1rem;font-weight:600;padding:0.75rem 1.5rem;cursor:pointer;}
-a{color:#15803d;}</style></head><body>
-<h1>One more click to renew</h1>
-<p>Keep <strong>${escapeHtml(c.listing.title)}</strong> up for another 30 days?</p>
-<form method="post" action="${action}">
-<input type="hidden" name="t" value="${escapeHtml(token ?? "")}">
-<button type="submit">Renew for 30 days</button>
-</form>
-<p style="margin-top:1.5rem;"><a href="${BASE_URL}/dashboard/listings">Manage your listings</a></p>
-</body></html>`;
-  return new NextResponse(html, {
-    status: 200,
-    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
-  });
+  return actionPageResponse(
+    {
+      heading: "One more click to renew",
+      message: `Keep "${c.listing.title}" up for another ${RENEW_DAYS} days?`,
+      tone: "neutral",
+      form: { action: renewPath(id), token: token ?? "", button: `Renew for ${RENEW_DAYS} days` },
+      link: DASHBOARD,
+    },
+    200
+  );
 }
 
 export async function POST(
@@ -74,20 +116,35 @@ export async function POST(
   const { id } = await params;
   const form = await request.formData().catch(() => null);
   const t = form?.get("t");
-  const c = await check(id, typeof t === "string" ? t : null);
-  if (!c.ok) return back(c.reason);
+  const token = typeof t === "string" ? t : null;
+  const c = await check(id, token);
+  if (!c.ok) return failurePage(c.reason, c.reason === "server_error" && token ? { id, token } : undefined);
 
   const admin = createAdminClient();
-  if (!admin) return back("server_error");
+  if (!admin) return failurePage("server_error", { id, token: token ?? "" });
 
-  // Extend expires_at by 30 days from now and reactivate if expired
-  const newExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  // Extend expires_at from now and reactivate if expired
+  const expires = new Date(Date.now() + RENEW_DAYS * 24 * 60 * 60 * 1000);
   const newStatus = c.listing.status === "expired" ? "active" : c.listing.status;
   const { error } = await admin
     .from("listings")
-    .update({ expires_at: newExpiry, status: newStatus })
+    .update({ expires_at: expires.toISOString(), status: newStatus })
     .eq("id", id);
-  if (error) return back("server_error");
+  if (error) return failurePage("server_error", { id, token: token ?? "" });
 
-  return back("ok");
+  const until = expires.toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Australia/Sydney",
+  });
+  return actionPageResponse(
+    {
+      heading: "Renewed",
+      message: `"${c.listing.title}" stays up until ${until}.`,
+      tone: "ok",
+      link: DASHBOARD,
+    },
+    200
+  );
 }
