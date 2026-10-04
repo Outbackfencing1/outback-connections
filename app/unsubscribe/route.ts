@@ -14,16 +14,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyToken, type VerifyResult } from "@/lib/signed-tokens";
 import { actionPageResponse } from "@/lib/action-page";
 
-const SETTINGS = { href: "/dashboard/settings", label: "Account settings" };
+// Marketing consent is revoked by RevokeMarketingForm on the "Your data" page.
+const MARKETING_SETTINGS = { href: "/dashboard/privacy", label: "Turn off marketing emails on the Your data page" };
 
 function invalid(v: VerifyResult | null): Response {
   const expired = v !== null && v.ok === false && v.reason === "expired";
   return actionPageResponse(
     {
       heading: expired ? "That unsubscribe link has expired" : "That unsubscribe link isn't valid",
-      message: "Nothing was changed. You can also turn off marketing emails in your account settings.",
+      message: "Nothing was changed. You can turn off marketing emails yourself on the Your data page (sign in first).",
       tone: "error",
-      link: SETTINGS,
+      link: MARKETING_SETTINGS,
     },
     400
   );
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
         message: "Something went wrong on our side and nothing was changed. Try again in a few minutes.",
         tone: "error",
         form: { action: confirmPath(token ?? ""), token: token ?? "", button: "Try again" },
-        link: SETTINGS,
+        link: MARKETING_SETTINGS,
       },
       500
     );

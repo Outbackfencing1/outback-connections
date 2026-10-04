@@ -11,7 +11,10 @@ import { verifyToken } from "@/lib/signed-tokens";
 import { actionPageResponse } from "@/lib/action-page";
 
 const RENEW_DAYS = 30;
-const DASHBOARD = { href: "/dashboard/listings", label: "Manage your listings" };
+const DASHBOARD = { href: "/dashboard/listings", label: "Your listings" };
+// The dashboard has no renew action (Edit doesn't extend expiry), so the
+// recovery offered is a person, or posting again.
+const HELP = "Email help@outbackconnections.com.au with the listing name and we'll renew it for you.";
 
 type Listing = { id: string; status: string; title: string };
 type Checked = { ok: true; listing: Listing } | { ok: false; reason: Failure };
@@ -48,22 +51,22 @@ const FAILURES: Record<Failure, { status: number; heading: string; message: stri
   invalid: {
     status: 400,
     heading: "That renewal link isn't valid",
-    message: "Nothing was changed. You can renew the listing from your dashboard instead.",
+    message: `Nothing was changed. ${HELP}`,
   },
   expired: {
     status: 400,
     heading: "That renewal link has expired",
-    message: "Nothing was changed. You can renew the listing from your dashboard instead.",
+    message: `Nothing was changed. ${HELP}`,
   },
   not_yours: {
     status: 403,
     heading: "That link is for a different account",
-    message: "Nothing was changed. Sign in with the account that posted the listing to renew it.",
+    message: `Nothing was changed. If the listing is yours, ${HELP.charAt(0).toLowerCase()}${HELP.slice(1)}`,
   },
   deleted: {
     status: 410,
     heading: "That listing has been deleted",
-    message: "Deleted listings can't be renewed. You can post it again from your dashboard.",
+    message: "Deleted listings can't be renewed. You can post it again from the Post a listing page.",
   },
   server_error: {
     status: 500,

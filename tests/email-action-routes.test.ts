@@ -154,10 +154,14 @@ describe("renew link", () => {
     expect(db.updates).toHaveLength(0);
   });
 
-  it("refuses an expired token with its own message", async () => {
+  it("refuses an expired token with its own message and a recovery that exists", async () => {
     const res = await postRenew(renewToken({ ttlMs: -1000 }));
     expect(res.status).toBe(400);
-    expect(await res.text()).toContain("expired");
+    const html = await res.text();
+    expect(html).toContain("expired");
+    // The dashboard can't renew a listing, so the page mustn't promise it can.
+    expect(html).not.toMatch(/renew the listing from your dashboard/i);
+    expect(html).toContain("help@outbackconnections.com.au");
     expect(db.updates).toHaveLength(0);
   });
 
@@ -216,6 +220,7 @@ describe("unsubscribe link", () => {
     const html = await res.text();
     expect(html).toContain("We couldn&#39;t unsubscribe you");
     expect(html).toContain("Try again");
+    expect(html).toContain('href="/dashboard/privacy"');
   });
 
   it.each([
@@ -238,6 +243,11 @@ describe("unsubscribe link", () => {
       await unsubPOST(new NextRequest(unsubUrl(token), { method: "POST" })),
     ]) {
       expect(res.status).toBe(400);
+      // The fallback must lead to the page that actually revokes marketing
+      // consent (RevokeMarketingForm on /dashboard/privacy).
+      const html = await res.text();
+      expect(html).toContain('href="/dashboard/privacy"');
+      expect(html).not.toContain("/dashboard/settings");
     }
     expect(db.updates).toHaveLength(0);
   });
