@@ -2,7 +2,13 @@
 
 // Enquiry form for the digital-services page. A new idempotency key is made
 // once per form, so a double click or a retry on bad signal saves one row.
-import { useState, useTransition } from "react";
+//
+// It only submits through the server action, which needs JavaScript. Without
+// it (script blocked, failed to load, or not hydrated yet) the button stays
+// disabled, which also blocks Enter-to-submit, and a notice points to email.
+// method="post" is a backstop: even a forced native submit never puts the
+// customer's details in the URL, and nothing claims the enquiry was received.
+import { useState, useSyncExternalStore, useTransition } from "react";
 import { submitDigitalServicesEnquiry } from "./actions";
 import { INTERESTS } from "@/lib/digital-services/offer";
 
@@ -17,11 +23,15 @@ function newKey(): string {
   });
 }
 
+const noopSubscribe = () => () => {};
+
 export default function DigitalServicesEnquiryForm() {
   const [key] = useState(newKey);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [done, setDone] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  // false in the server render and until hydration, true once the client runs.
+  const ready = useSyncExternalStore(noopSubscribe, () => true, () => false);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -47,7 +57,13 @@ export default function DigitalServicesEnquiryForm() {
     errors[k] ? <span className="mt-1 block text-xs text-red-700">{errors[k]}</span> : null;
 
   return (
-    <form onSubmit={onSubmit} noValidate className="rounded-xl border border-neutral-200 bg-white p-5">
+    <form method="post" onSubmit={onSubmit} noValidate className="rounded-xl border border-neutral-200 bg-white p-5">
+      <noscript>
+        <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          This form needs JavaScript. Please email help@outbackconnections.com.au with your business name and what
+          you need, and Josh will reply.
+        </p>
+      </noscript>
       <input type="hidden" name="idempotency_key" value={key} />
       {/* Honeypot: hidden from people, filled by bots. */}
       <div aria-hidden="true" style={{ position: "absolute", left: "-10000px", top: "auto", width: 1, height: 1, overflow: "hidden" }}>
@@ -131,7 +147,7 @@ export default function DigitalServicesEnquiryForm() {
 
       <button
         type="submit"
-        disabled={pending}
+        disabled={pending || !ready}
         className="mt-4 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-60"
       >
         {pending ? "Sending…" : "Send enquiry"}

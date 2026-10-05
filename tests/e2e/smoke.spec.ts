@@ -125,3 +125,18 @@ test("digital services page: off means 404; on means the three offers and an hon
   await expect(page.getByRole("button", { name: "Send enquiry" })).toBeVisible();
   // Never submits: read-only smoke.
 });
+
+test("digital services form can't leak details without JavaScript", async ({ browser }) => {
+  const ctx = await browser.newContext({ javaScriptEnabled: false });
+  const page = await ctx.newPage();
+  const res = await page.goto("/digital-services");
+  if (res?.status() === 404) return ctx.close(); // switched off
+  // The button is disabled until the client runs (also blocks Enter), the form
+  // posts rather than GETs, and a notice points to email.
+  await expect(page.getByRole("button", { name: "Send enquiry" })).toBeDisabled();
+  await expect(page.locator("form")).toHaveAttribute("method", "post");
+  await page.fill("input[name=email]", "smoke@example.com");
+  await page.locator("input[name=email]").press("Enter");
+  await expect(page).not.toHaveURL(/email=|smoke%40example/);
+  await ctx.close();
+});
