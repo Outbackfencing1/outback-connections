@@ -45,11 +45,13 @@ jobs:
       - name: Smoke
         run: |
           echo "Testing $SMOKE_BASE_URL"
-          npx playwright test
-      - name: Upload traces on failure
+          # Never trace here: a trace records the bypass header, and the
+          # results folder is uploaded below.
+          npx playwright test --trace=off
+      - name: Upload results on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-traces
+          name: playwright-results
           path: test-results/
           retention-days: 7
