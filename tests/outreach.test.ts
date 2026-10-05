@@ -3,7 +3,7 @@
 // reconciled, never resent; and that reply sync is idempotent. No network.
 import { describe, expect, it, vi } from "vitest";
 import { draftHash, type PilotApproval, type PilotDraft } from "@/lib/digital-services/dispatch-guard";
-import { dispatchFirstContact, reconcileAttempt, syncReplies, type NewEvent, type OutreachStore, type StoredEvent } from "@/lib/digital-services/outreach/dispatch";
+import { closeAttemptNotSent, dispatchFirstContact, reconcileAttempt, syncReplies, type NewEvent, type OutreachStore, type StoredEvent } from "@/lib/digital-services/outreach/dispatch";
 import { buildRaw, gmailConfig } from "@/lib/digital-services/outreach/gmail";
 
 const OWNER = "33333333-3333-4333-8333-333333333333";
@@ -19,7 +19,8 @@ const ENV = {
 const SUBJECT = "A guided quote form for Fixture Cleaning";
 const BODY = "Hi,\n\nFixture body.\n\nJosh";
 
-function memoryStore(opts: { approvals?: boolean; refuseAttempt?: boolean } = {}) {
+function memoryStore(opts: { approvals?: boolean; refuseAttempt?: boolean; failOutcomeWrites?: number } = {}) {
+  let failOutcome = opts.failOutcomeWrites ?? 0;
   const draft: PilotDraft = { id: "d1", company_id: "OC-901", revision: 1, subject: SUBJECT, body: BODY, sha256: draftHash(SUBJECT, BODY) };
   const approvals: PilotApproval[] =
     opts.approvals === false
@@ -47,6 +48,10 @@ function memoryStore(opts: { approvals?: boolean; refuseAttempt?: boolean } = {}
     },
     async insertEvent(e) {
       if (e.kind === "send_attempt" && opts.refuseAttempt) return { error: { code: "OC403", message: "refused" } };
+      if (e.kind === "send_failed" && failOutcome > 0) {
+        failOutcome--;
+        return { error: { code: "PGRST001", message: "database unreachable" } };
+      }
       // The database's uniqueness rules, in miniature.
       const dup = events.some(
         (x) =>
@@ -155,6 +160,29 @@ describe("dispatchFirstContact", () => {
       ["send_attempt", MSGID],
       ["send_failed", MSGID],
     ]);
+  });
+
+  it("a refusal whose record can't be saved is reported as unrecorded, then closed only after a mailbox check", async () => {
+    const { f } = gmail({ ...base, "/messages/send": () => json({ error: { message: "Invalid To header" } }, 400) });
+    const store = memoryStore({ failOutcomeWrites: 2 });
+    const r = await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f, messageId: () => MSGID });
+    expect(r).toMatchObject({ status: "failed_unrecorded", messageId: MSGID });
+    expect(store.events.map((e) => e.kind)).toEqual(["send_attempt"]);
+    expect(await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f })).toMatchObject({ status: "held", holds: ["unresolved_attempt"] });
+
+    // The mailbox has nothing under our Message-ID or in Sent: closed as not sent.
+    const empty = gmail({ ...base, "/messages": () => json({}) });
+    expect(await closeAttemptNotSent("OC-901", "Gmail refused: Invalid To header", { store, env: ENV, fetch: empty.f })).toEqual({ status: "closed" });
+    expect(store.events.at(-1)).toMatchObject({ kind: "send_failed", rfc822_message_id: MSGID });
+    expect(await closeAttemptNotSent("OC-901", "again", { store, env: ENV, fetch: empty.f })).toEqual({ status: "nothing_unresolved" });
+  });
+
+  it("closing an attempt that actually went out records it as contacted instead", async () => {
+    const store = memoryStore();
+    await store.insertEvent({ company_id: "OC-901", kind: "send_attempt", lane: "cowork", draft_id: "d1", sender: SENDER, rfc822_message_id: MSGID, recorded_by: "t" });
+    const found = gmail({ ...base, "/messages": (u) => (u.searchParams.get("q") === `rfc822msgid:${MSGID}` ? json({ messages: [{ id: "gm-5", threadId: "th-5" }] }) : json({})) });
+    expect(await closeAttemptNotSent("OC-901", "assumed not sent", { store, env: ENV, fetch: found.f })).toEqual({ status: "found_sent", providerId: "gm-5" });
+    expect(store.events.at(-1)).toMatchObject({ kind: "contacted", provider_message_id: "gm-5" });
   });
 
   it("an unknown outcome stays unresolved, blocks a resend, and is reconciled from the mailbox", async () => {

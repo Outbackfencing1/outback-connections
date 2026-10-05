@@ -459,6 +459,20 @@ describe("quotes and payment evidence (no manual 'paid')", { timeout: 30_000 }, 
     ).rejects.toThrow(/evidenced/);
   });
 
+  it("managed care is billed from go-live: its stages need only an accepted quote", async () => {
+    const pg = await salesDb();
+    const q = (
+      await pg.query<{ id: string }>(
+        `insert into digital_services_quotes (customer_label, offer, amount_cents, gst_treatment, terms_version, scope_summary, status, sent_at)
+         values ('Fixture care', 'care_149', 14900, 'exclusive', 't', 'Hosting within written limits', 'sent', now()) returning id`
+      )
+    ).rows[0];
+    await expect(stage(pg, q.id, "in_production")).rejects.toThrow(/accepted quote/);
+    await pg.query(`update digital_services_quotes set status = 'accepted', accepted_at = now() where id = $1`, [q.id]);
+    await stage(pg, q.id, "in_production");
+    await stage(pg, q.id, "launched");
+  });
+
   it("a sent quote's price, GST, terms and scope are fixed", async () => {
     const pg = await salesDb();
     const q = (await quote(pg)).rows[0];

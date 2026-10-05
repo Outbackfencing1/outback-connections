@@ -42,12 +42,18 @@ describe("validateCandidate", () => {
     );
     expect(validateCandidate(ok({ evidence: [] }), TODAY).errors).toContain("evidence: at least one public source is required");
   });
+  it("parses URLs: a bare scheme or a hostless value is not a website or a source", () => {
+    expect(validateCandidate(ok({ website: "https://", public_email: null }), TODAY).errors).toContain("website must be an https URL with a hostname");
+    const e = validateCandidate(ok({ website: null, public_email: null, evidence: [{ claim: "c", url: "https://", observed_on: "2026-10-01" }] }), TODAY).errors;
+    expect(e).toContain("evidence[0]: claim and an https url with a hostname are required");
+    expect(validateCandidate(ok({ website: "https://localhost", public_email: null }), TODAY).errors).toContain("website must be an https URL with a hostname");
+  });
   it("refuses future observations, bad ABNs, non-https sites and unknown categories", () => {
     const e = validateCandidate(
       ok({ abn: "11 111 111 111", website: "http://fixture.example", category: "plumbing", evidence: [{ claim: "c", url: "https://x.example", observed_on: "2026-12-01" }] }),
       TODAY
     ).errors;
-    expect(e).toEqual(expect.arrayContaining(["abn fails the checksum", "website must be an https URL", "category must be cleaning or detailing", "evidence[0]: observed_on must be a past date"]));
+    expect(e).toEqual(expect.arrayContaining(["abn fails the checksum", "website must be an https URL with a hostname", "category must be cleaning or detailing", "evidence[0]: observed_on must be a past date"]));
   });
 });
 

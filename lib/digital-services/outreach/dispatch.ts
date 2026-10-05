@@ -63,6 +63,7 @@ export type DispatchResult =
   | { status: "sent"; messageId: string; providerId: string; threadId: string }
   | { status: "sent_unrecorded"; messageId: string } // sent, but recording it failed: reconcile
   | { status: "failed"; reason: string } // Gmail refused it: nothing sent
+  | { status: "failed_unrecorded"; messageId: string; reason: string } // refused, but the record failed: closeAttemptNotSent()
   | { status: "unconfirmed"; messageId: string }; // may have been sent: reconcile, never resend
 
 const RECORDER = "outreach-dispatch";
@@ -129,7 +130,10 @@ export async function dispatchFirstContact(companyId: string, lane: Lane, deps: 
     sent = await sendRaw(token, raw, f);
   } catch (e) {
     if (e instanceof GmailError && e.outcome === "definite") {
-      await insert(deps.store, { ...base, kind: "send_failed", note: e.message.slice(0, 300) });
+      const closed = await insert(deps.store, { ...base, kind: "send_failed", note: e.message.slice(0, 300) });
+      // Until the refusal is recorded the attempt stays open (and blocks the
+      // company), so say so rather than reporting a clean failure.
+      if (closed !== "ok") return { status: "failed_unrecorded", messageId, reason: e.message };
       return { status: "failed", reason: e.message };
     }
     return { status: "unconfirmed", messageId };
@@ -178,6 +182,51 @@ export async function reconcileAttempt(companyId: string, deps: Deps): Promise<R
     recorded_by: "outreach-reconcile",
   });
   return ok === "ok" ? { status: "recorded", providerId: found.id } : { status: "record_failed", messageId: open.rfc822_message_id };
+}
+
+export type CloseResult =
+  | { status: "nothing_unresolved" | "not_connected" | "unknown_company" }
+  | { status: "found_sent"; providerId: string } // it did go out: recorded as contacted instead
+  | { status: "closed" }
+  | { status: "ambiguous" | "record_failed"; messageId: string };
+
+/**
+ * Close an unresolved attempt as NOT sent, e.g. after a definite Gmail refusal
+ * whose record didn't save, or an intent record that couldn't be confirmed.
+ * The mailbox is checked first: if the message is there, it's recorded as
+ * contacted instead; if the search is ambiguous, nothing is closed.
+ */
+export async function closeAttemptNotSent(companyId: string, reason: string, deps: Deps): Promise<CloseResult> {
+  const env = deps.env ?? process.env;
+  const f = deps.fetch ?? fetch;
+  const cfg = gmailConfig(env);
+  if (!cfg) return { status: "not_connected" };
+  const state = await deps.store.load(companyId);
+  if (!state) return { status: "unknown_company" };
+  const resolved = new Set(state.events.filter((e) => e.kind === "contacted" || e.kind === "send_failed").map((e) => e.rfc822_message_id));
+  const open = state.events.find((e) => e.kind === "send_attempt" && !resolved.has(e.rfc822_message_id));
+  if (!open?.rfc822_message_id) return { status: "nothing_unresolved" };
+  const draft = state.drafts.find((d) => d.id === open.draft_id);
+  const token = await accessToken(cfg, f);
+  const found = await findSent(
+    token,
+    { messageId: open.rfc822_message_id, to: state.company.contact_address ?? "", subject: draft?.subject ?? "", since: new Date(open.occurred_at) },
+    f
+  );
+  if (found === "ambiguous") return { status: "ambiguous", messageId: open.rfc822_message_id };
+  const common = {
+    company_id: companyId,
+    lane: open.lane ?? undefined,
+    draft_id: open.draft_id ?? null,
+    sender: open.sender ?? undefined,
+    rfc822_message_id: open.rfc822_message_id,
+  };
+  if (found) {
+    const ok = await insert(deps.store, { ...common, kind: "contacted", provider_message_id: found.id, provider_thread_id: found.threadId, recorded_by: "outreach-close" });
+    return ok === "ok" ? { status: "found_sent", providerId: found.id } : { status: "record_failed", messageId: open.rfc822_message_id };
+  }
+  const ok = await insert(deps.store, { ...common, kind: "send_failed", note: `not sent (checked mailbox): ${reason}`.slice(0, 300), recorded_by: "outreach-close" });
+  return ok === "ok" ? { status: "closed" } : { status: "record_failed", messageId: open.rfc822_message_id };
 }
 
 const OPT_OUT = /\b(unsubscribe|remove me|take me off|stop emailing|do not contact|don't contact|not interested)\b/i;

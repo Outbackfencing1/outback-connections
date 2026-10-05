@@ -24,7 +24,9 @@
 -- client_review → approved → launched → handed_over). The database refuses
 -- production before the quote is accepted and the payment due before
 -- production is evidenced (a website's deposit; the full price otherwise), and
--- launch/hand-over before it's paid in full, both from payment evidence. Once
+-- launch/hand-over before it's paid in full, both from payment evidence.
+-- Managed care (care_149) is billed from go-live, so its stages need only an
+-- accepted quote with GST decided. Once
 -- a quote has left draft, its price, GST treatment, terms and scope are fixed.
 -- digital_services_conversations: an append-only log of calls, emails,
 -- meetings and notes, linked to an enquiry, a pilot company or a quote.
@@ -123,6 +125,10 @@ begin
   factor := case new.gst_treatment when 'exclusive' then 1.1 when 'pending' then null else 1.0 end;
   if factor is null then
     raise exception 'GST treatment is still pending' using errcode = 'OC402';
+  end if;
+  -- Managed care is billed from go-live, so nothing is due before it starts.
+  if new.offer = 'care_149' then
+    return new;
   end if;
   select coalesce(sum(amount_cents), 0) into paid
     from public.digital_services_payments where quote_id = new.id;

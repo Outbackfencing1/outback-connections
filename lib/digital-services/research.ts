@@ -71,6 +71,17 @@ export function validAbn(raw: string): boolean {
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 
+/** A parsed https URL with a real hostname (a dot, no spaces), or null. */
+export function httpsUrl(raw: string | null): URL | null {
+  if (!raw || !/^https:\/\//i.test(raw)) return null;
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(u.hostname) ? u : null;
+  } catch {
+    return null;
+  }
+}
+
 export function validateCandidate(raw: unknown, today: string): { candidate: Candidate | null; errors: string[] } {
   const errors: string[] = [];
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { candidate: null, errors: ["not an object"] };
@@ -80,7 +91,7 @@ export function validateCandidate(raw: unknown, today: string): { candidate: Can
   const category = str(r.category);
   if (!category || !(RESEARCH_LANES as readonly string[]).includes(category)) errors.push("category must be cleaning or detailing");
   const website = str(r.website);
-  if (website && !/^https:\/\//i.test(website)) errors.push("website must be an https URL");
+  if (website && !httpsUrl(website)) errors.push("website must be an https URL with a hostname");
   const locality = str(r.locality);
   const state = str(r.state)?.toUpperCase() ?? null;
   if (!locality) errors.push("locality missing");
@@ -99,9 +110,9 @@ export function validateCandidate(raw: unknown, today: string): { candidate: Can
       const claim = str(ev.claim);
       const url = str(ev.url);
       const observed_on = str(ev.observed_on);
-      if (!claim || !url || !/^https:\/\//i.test(url)) errors.push(`evidence[${i}]: claim and an https url are required`);
+      if (!claim || !httpsUrl(url)) errors.push(`evidence[${i}]: claim and an https url with a hostname are required`);
       else if (!observed_on || !/^\d{4}-\d{2}-\d{2}$/.test(observed_on) || observed_on > today) errors.push(`evidence[${i}]: observed_on must be a past date`);
-      else evidence.push({ claim, url, observed_on });
+      else evidence.push({ claim, url: url!, observed_on });
     }
   }
   const domain = canonicalDomain(website);

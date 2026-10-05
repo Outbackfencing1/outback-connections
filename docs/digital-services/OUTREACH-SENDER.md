@@ -120,6 +120,7 @@ messages and a release that calls the dispatcher.
   - `contacted` with Gmail's message and thread IDs;
   - `send_failed` on a definite Gmail refusal;
   - an unknown outcome (timeout, 5xx) stays unresolved. `reconcileAttempt()` finds it in the mailbox (by Message-ID, then recipient + exact subject in Sent). It never resends.
+  - If a refusal or an unconfirmed intent can't be recorded, the attempt stays open and the result says so. `closeAttemptNotSent()` checks the mailbox first: it records `contacted` if the message did go out, and closes the attempt as not sent only when nothing is found.
 - **Reply sync:** `syncReplies()` records replies, opt-outs ("unsubscribe", "remove me", "not interested"…) and bounces once each. It never replies to anyone. A reply or opt-out holds any further contact.
 - **Not wired:** nothing in the app calls the dispatcher yet. No route, button or schedule. Wiring it is a separate, approved change.
 
