@@ -24,9 +24,9 @@ export function pageFrom(raw: string | undefined): number {
 }
 
 /** What happened to an owner's status change; shown back on the queue. */
-export type StatusChange = "saved" | "not_found" | "failed" | "invalid" | "unavailable";
+export type StatusChange = "saved" | "not_found" | "failed" | "unconfirmed" | "invalid" | "unavailable";
 
-type UpdateResult = { data: { id: string; status: string }[] | null; error: { message: string } | null };
+type UpdateResult = { data: { id: string; status: string }[] | null; error: { message: string; code?: string } | null };
 
 /**
  * Validate and apply a status change. "saved" only when the database returns
@@ -41,20 +41,26 @@ export async function applyStatusChange(
   if (typeof id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return "invalid";
   if (typeof status !== "string" || !(STATUSES as readonly string[]).includes(status)) return "invalid";
   if (!update) return "unavailable";
-  // Setting a status is idempotent, so a thrown (transport) error is retried
-  // once: a lost response after the write committed then reads back "saved".
-  // A database error is an explicit refusal and isn't retried.
+  // Setting a status is idempotent, so a transport failure is retried once: a
+  // lost response after the write committed then reads back "saved". Supabase
+  // reports a network failure as an error with no code (or by throwing); an
+  // error carrying a database/PostgREST code is an explicit refusal and is
+  // final. Still unconfirmed after the retry is reported as unconfirmed, never
+  // as "the database refused".
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const { data, error } = await update(id, status as Status);
-      if (error) return "failed";
+      if (error) {
+        if (error.code) return "failed";
+        continue;
+      }
       if (!data || data.length === 0) return "not_found";
       return data[0].status === status ? "saved" : "failed";
     } catch {
-      // retry once, then report failure
+      // transport failure: retry once
     }
   }
-  return "failed";
+  return "unconfirmed";
 }
 
 /** Keep only the queue's own view parameters from a posted query string. */

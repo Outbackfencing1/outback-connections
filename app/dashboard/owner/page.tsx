@@ -56,6 +56,7 @@ const NOTICES: Record<StatusChange, { ok: boolean; text: string }> = {
   saved: { ok: true, text: "Status saved." },
   not_found: { ok: false, text: "Not saved: that enquiry no longer exists (it may have been purged)." },
   failed: { ok: false, text: "Not saved: the database refused the change. Nothing was changed; try again." },
+  unconfirmed: { ok: false, text: "We couldn't confirm the change. Refresh to see whether it saved; trying again is safe." },
   invalid: { ok: false, text: "Not saved: that status isn't allowed." },
   unavailable: { ok: false, text: "Not saved: the enquiry database isn't connected on this environment." },
 };

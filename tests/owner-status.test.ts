@@ -11,12 +11,25 @@ describe("applyStatusChange", () => {
     expect(await applyStatusChange({ id: ID, status: "replied" }, update)).toBe("saved");
     expect(update).toHaveBeenCalledWith(ID, "replied");
   });
-  it("a database error is a visible failure, not a success", async () => {
-    expect(await applyStatusChange({ id: ID, status: "replied" }, async () => ({ data: null, error: { message: "permission denied" } }))).toBe("failed");
+  it("a database refusal (an error with a code) is a visible failure, not a success", async () => {
+    expect(await applyStatusChange({ id: ID, status: "replied" }, async () => ({ data: null, error: { message: "permission denied", code: "42501" } }))).toBe("failed");
   });
-  it("a thrown client error is retried once, then reported as a failure", async () => {
+  it("a transport error returned without a code is retried, and a committed write reads back as saved", async () => {
+    const update = vi
+      .fn()
+      .mockResolvedValueOnce({ data: null, error: { message: "TypeError: fetch failed", code: "" } })
+      .mockResolvedValueOnce({ data: [{ id: ID, status: "replied" }], error: null });
+    expect(await applyStatusChange({ id: ID, status: "replied" }, update)).toBe("saved");
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+  it("a transport error that persists is unconfirmed, never 'refused'", async () => {
+    const update = vi.fn(async () => ({ data: null, error: { message: "TypeError: fetch failed" } }));
+    expect(await applyStatusChange({ id: ID, status: "replied" }, update)).toBe("unconfirmed");
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+  it("a thrown client error is retried once, then reported as unconfirmed", async () => {
     const update = vi.fn(async () => { throw new Error("network"); });
-    expect(await applyStatusChange({ id: ID, status: "replied" }, update)).toBe("failed");
+    expect(await applyStatusChange({ id: ID, status: "replied" }, update)).toBe("unconfirmed");
     expect(update).toHaveBeenCalledTimes(2);
   });
   it("a lost response is retried and reads back the committed change as saved", async () => {
@@ -27,7 +40,7 @@ describe("applyStatusChange", () => {
     expect(await applyStatusChange({ id: ID, status: "replied" }, update)).toBe("saved");
   });
   it("an explicit database refusal isn't retried", async () => {
-    const update = vi.fn(async () => ({ data: null, error: { message: "permission denied" } }));
+    const update = vi.fn(async () => ({ data: null, error: { message: "permission denied", code: "42501" } }));
     expect(await applyStatusChange({ id: ID, status: "replied" }, update)).toBe("failed");
     expect(update).toHaveBeenCalledTimes(1);
   });
@@ -55,7 +68,7 @@ describe("queueViewParams", () => {
 
 // The server action itself, with the owner gate and Next's redirect mocked.
 const access = vi.hoisted(() => ({ ok: true as boolean }));
-const db = vi.hoisted(() => ({ result: { data: [] as unknown[] | null, error: null as { message: string } | null }, calls: 0 }));
+const db = vi.hoisted(() => ({ result: { data: [] as unknown[] | null, error: null as { message: string; code?: string } | null }, calls: 0 }));
 const revalidate = vi.hoisted(() => vi.fn());
 vi.mock("next/cache", () => ({ revalidatePath: revalidate }));
 vi.mock("next/navigation", () => ({
@@ -120,7 +133,7 @@ describe("setEnquiryStatus action", () => {
   });
 
   it("a refused write says failed and does not revalidate as if it worked", async () => {
-    db.result = { data: null, error: { message: "permission denied" } };
+    db.result = { data: null, error: { message: "permission denied", code: "42501" } } as typeof db.result;
     expect(await post({ id: ID, status: "closed" })).toBe("/dashboard/owner?notice=failed&ref=DSE-0F8FAD5B");
     expect(revalidate).not.toHaveBeenCalled();
   });
