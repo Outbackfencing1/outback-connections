@@ -23,7 +23,9 @@
 -- BEFORE INSERT trigger under a per-IP advisory lock, so concurrent submits
 -- can't all slip past the app's early count check. Raises SQLSTATE OC429.
 --
--- Rollback: drop trigger if exists trg_ds_enquiries_rate_limit on public.digital_services_enquiries;
+-- Rollback: drop trigger if exists trg_ds_enquiries_keep_alert on public.digital_services_enquiries;
+--           drop function if exists public.ds_enquiries_keep_alert();
+--           drop trigger if exists trg_ds_enquiries_rate_limit on public.digital_services_enquiries;
 --           drop function if exists public.ds_enquiries_rate_limit();
 --           drop function if exists public.purge_old_digital_services_enquiries();
 --           drop table if exists public.digital_services_enquiries;
@@ -81,6 +83,28 @@ grant select, insert, update, delete on public.digital_services_enquiries to ser
 -- inserts from one IP queue on a transaction-scoped advisory lock; each then
 -- counts with a fresh snapshot (plpgsql, READ COMMITTED), so it sees the rows
 -- the earlier ones committed. Rows without an IP aren't limited here.
+-- A confirmed owner alert is permanent: once notified_at is set, an update
+-- can't clear it or attach a failure (two concurrent sends must not let the
+-- slower failure overwrite the faster success).
+create or replace function public.ds_enquiries_keep_alert()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if old.notified_at is not null and new.notified_at is null then
+    new.notified_at := old.notified_at;
+    new.notify_error := old.notify_error;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_ds_enquiries_keep_alert on public.digital_services_enquiries;
+create trigger trg_ds_enquiries_keep_alert
+  before update on public.digital_services_enquiries
+  for each row execute function public.ds_enquiries_keep_alert();
+
 create or replace function public.ds_enquiries_rate_limit()
 returns trigger
 language plpgsql

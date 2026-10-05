@@ -52,7 +52,12 @@ function storeFor(): IntakeStore | null {
       return { data, error };
     },
     markNotified: async (id, patch) => {
-      const { error } = await admin.from(TABLE).update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id);
+      // A failure never replaces a confirmed alert (two concurrent sends: the
+      // slower failure mustn't wipe the faster success). The database enforces
+      // the same rule with a trigger.
+      let q = admin.from(TABLE).update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id);
+      if (patch.notified_at === null) q = q.is("notified_at", null);
+      const { error } = await q;
       return { error };
     },
   };

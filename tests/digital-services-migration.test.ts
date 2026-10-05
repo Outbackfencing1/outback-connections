@@ -106,6 +106,23 @@ describe("digital_services_enquiries migration", { timeout: 30_000 }, () => {
     await pg.exec(`reset role`);
   });
 
+  it("a confirmed owner alert can't be overwritten by a later failure", async () => {
+    const pg = await db();
+    const ins = await insert(pg, row("8f8fad5b-d9cb-469f-a165-70867728950e"));
+    const id = (ins.rows[0] as { id: string }).id;
+    await pg.query(`update digital_services_enquiries set notified_at = now(), notify_error = null where id = $1`, [id]);
+    await pg.query(`update digital_services_enquiries set notified_at = null, notify_error = 'slower send failed' where id = $1`, [id]);
+    const r = await pg.query<{ notified: boolean; notify_error: string | null }>(
+      `select notified_at is not null as notified, notify_error from digital_services_enquiries where id = $1`, [id]);
+    expect(r.rows[0]).toEqual({ notified: true, notify_error: null });
+    // Before any success, a failure is still recorded normally.
+    const ins2 = await insert(pg, row("9f8fad5b-d9cb-469f-a165-70867728950e"));
+    const id2 = (ins2.rows[0] as { id: string }).id;
+    await pg.query(`update digital_services_enquiries set notify_error = 'down' where id = $1`, [id2]);
+    const r2 = await pg.query<{ notify_error: string }>(`select notify_error from digital_services_enquiries where id = $1`, [id2]);
+    expect(r2.rows[0].notify_error).toBe("down");
+  });
+
   it("purge removes rows older than 12 months only", async () => {
     const pg = await db();
     await insert(pg, row("5f8fad5b-d9cb-469f-a165-70867728950e"));

@@ -22,6 +22,19 @@ describe("applyStatusChange", () => {
     expect(await applyStatusChange({ id: ID, status: "replied" }, update)).toBe("saved");
     expect(update).toHaveBeenCalledTimes(2);
   });
+  it("PostgREST connection-group codes (PGRST000-003) are outages: retried, not refusals", async () => {
+    const update = vi
+      .fn()
+      .mockResolvedValueOnce({ data: null, error: { message: "Database client error. Retrying the connection.", code: "PGRST001" } })
+      .mockResolvedValueOnce({ data: [{ id: ID, status: "replied" }], error: null });
+    expect(await applyStatusChange({ id: ID, status: "replied" }, update)).toBe("saved");
+    const down = vi.fn(async () => ({ data: null, error: { message: "pool timeout", code: "PGRST003" } }));
+    expect(await applyStatusChange({ id: ID, status: "replied" }, down)).toBe("unconfirmed");
+    expect(down).toHaveBeenCalledTimes(2);
+    const refused = vi.fn(async () => ({ data: null, error: { message: "schema cache", code: "PGRST204" } }));
+    expect(await applyStatusChange({ id: ID, status: "replied" }, refused)).toBe("failed");
+    expect(refused).toHaveBeenCalledTimes(1);
+  });
   it("a transport error that persists is unconfirmed, never 'refused'", async () => {
     const update = vi.fn(async () => ({ data: null, error: { message: "TypeError: fetch failed" } }));
     expect(await applyStatusChange({ id: ID, status: "replied" }, update)).toBe("unconfirmed");

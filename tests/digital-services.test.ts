@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { decideOwnerAccess } from "@/lib/digital-services/owner-access";
-import { alertDestination, alertReadiness, digitalServicesPublic } from "@/lib/digital-services/flags";
+import { alertDestination, alertReadiness, digitalServicesNoticeShown, digitalServicesPublic } from "@/lib/digital-services/flags";
 import {
   matchesSearch,
   processIntake,
@@ -377,5 +377,14 @@ describe("outreach sender", () => {
     expect(outreachSender({ DIGITAL_SERVICES_OUTREACH_SENDER: "josh@outbackconnections.com.au" })).toEqual({ address: "josh@outbackconnections.com.au", verified: false });
     expect(outreachSender({ DIGITAL_SERVICES_OUTREACH_SENDER: "josh@outbackconnections.com.au", DIGITAL_SERVICES_OUTREACH_SENDER_VERIFIED_ON: "yes" })?.verified).toBe(false);
     expect(outreachSender({ DIGITAL_SERVICES_OUTREACH_SENDER: "josh@outbackconnections.com.au", DIGITAL_SERVICES_OUTREACH_SENDER_VERIFIED_ON: "2026-10-07" })?.verified).toBe(true);
+  });
+});
+
+describe("digital-services privacy section", () => {
+  it("shows while the page is on, and after it's off while a launch date is recorded", () => {
+    expect(digitalServicesNoticeShown({})).toBe(false);
+    expect(digitalServicesNoticeShown({ DIGITAL_SERVICES_PUBLIC: "on" })).toBe(true);
+    expect(digitalServicesNoticeShown({ DIGITAL_SERVICES_LAUNCHED_ON: "2026-10-20" })).toBe(true);
+    expect(digitalServicesNoticeShown({ DIGITAL_SERVICES_LAUNCHED_ON: "soon" })).toBe(false);
   });
 });

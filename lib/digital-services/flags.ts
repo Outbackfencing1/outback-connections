@@ -43,3 +43,13 @@ const DEFAULT_ALERT_TO = "help@outbackconnections.com.au";
 export function alertDestination(env: Record<string, string | undefined> = process.env): string {
   return env.DIGITAL_SERVICES_ALERT_TO?.trim() || env.NOTIFICATION_EMAIL?.trim() || DEFAULT_ALERT_TO;
 }
+
+/**
+ * The privacy notice must keep describing the enquiry form for as long as
+ * enquiries it collected are kept (12 months), not only while the form is
+ * live. DIGITAL_SERVICES_LAUNCHED_ON is the date the page was first switched
+ * on; leave it set until 12 months after the page is switched off.
+ */
+export function digitalServicesNoticeShown(env: Record<string, string | undefined> = process.env): boolean {
+  return digitalServicesPublic(env) || /^\d{4}-\d{2}-\d{2}$/.test(env.DIGITAL_SERVICES_LAUNCHED_ON?.trim() ?? "");
+}

@@ -5,7 +5,8 @@ their values. All are optional; the defaults keep everything switched off.
 
 | Variable | What it does |
 |---|---|
-| `DIGITAL_SERVICES_PUBLIC` | The public `/digital-services` page, its nav/footer/sitemap links and the matching privacy section are shown only when this is exactly `on`. |
+| `DIGITAL_SERVICES_PUBLIC` | The public `/digital-services` page and its nav/footer/sitemap links are shown only when this is exactly `on`. The matching privacy section is shown too. |
+| `DIGITAL_SERVICES_LAUNCHED_ON` | The date (YYYY-MM-DD) the page was first switched on. Set it at launch and leave it for 12 months after the page is switched off: it keeps the privacy section visible while enquiries collected by the form are still kept. |
 | `DIGITAL_SERVICES_OWNER_USER_ID` | Josh's Supabase auth user id (uuid). It is the only account allowed into `/dashboard/owner`; missing or malformed means nobody gets in. Use the same id for `app.ds_owner_user_id` when applying the pilot migration. |
 | `DIGITAL_SERVICES_ALERT_TO` | Where new-enquiry alerts go (reference and link only). Blank falls back to `NOTIFICATION_EMAIL`, then help@. |
 | `RESEND_API_KEY` | The existing mail transport. Without it, owner alerts are only logged and the owner dashboard shows alerts as Blocked. |

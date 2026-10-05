@@ -23,6 +23,15 @@ export function pageFrom(raw: string | undefined): number {
   return Number.isFinite(n) && n >= 1 ? Math.min(n, 10_000) : 1;
 }
 
+/**
+ * PostgREST's connection-group codes (PGRST000–PGRST003: can't connect to the
+ * database, pool timeout) are outages, not refusals, so they're retried like
+ * a network failure. Any other code is the database answering "no".
+ */
+export function isTransportCode(code: string): boolean {
+  return /^PGRST00[0-3]$/.test(code);
+}
+
 /** What happened to an owner's status change; shown back on the queue. */
 export type StatusChange = "saved" | "not_found" | "failed" | "unconfirmed" | "invalid" | "unavailable";
 
@@ -51,7 +60,7 @@ export async function applyStatusChange(
     try {
       const { data, error } = await update(id, status as Status);
       if (error) {
-        if (error.code) return "failed";
+        if (error.code && !isTransportCode(error.code)) return "failed";
         continue;
       }
       if (!data || data.length === 0) return "not_found";

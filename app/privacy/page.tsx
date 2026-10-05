@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { digitalServicesPublic } from "@/lib/digital-services/flags";
+import { digitalServicesNoticeShown, digitalServicesPublic } from "@/lib/digital-services/flags";
 
 export const metadata = {
   title: "Privacy notice — Outback Connections",
@@ -277,18 +277,22 @@ export default function PrivacyPage() {
         </p>
       </section>
 
-      {/* Shown only while the Websites & digital tools page is switched on
-          (DIGITAL_SERVICES_PUBLIC=on), so the notice describes that form
-          exactly when it can be used. Wording proposed; Josh approves it
+      {/* Shown while the Websites & digital tools page is on, and afterwards
+          for as long as its enquiries are kept (DIGITAL_SERVICES_LAUNCHED_ON;
+          see docs/digital-services/ENV.md). Wording proposed; Josh approves it
           before the page is switched on (docs/digital-services/TERMS-PROPOSED.md). */}
-      {digitalServicesPublic() && (
+      {digitalServicesNoticeShown() && (
         <section id="digital-services" className="mt-8 space-y-3">
           <h2 className="text-xl font-bold">Websites and digital tools enquiries</h2>
           <p className="text-neutral-800">
-            If you use the enquiry form on our{" "}
-            <Link href="/digital-services" className="underline">
-              Websites &amp; digital tools
-            </Link>{" "}
+            If you use (or used) the enquiry form on our{" "}
+            {digitalServicesPublic() ? (
+              <Link href="/digital-services" className="underline">
+                Websites &amp; digital tools
+              </Link>
+            ) : (
+              "Websites & digital tools"
+            )}{" "}
             page, Outback Fencing &amp; Steel Supplies Pty Ltd collects the business name, your name, email, phone
             and website (both optional), what you&apos;re interested in and your message. We also record when you
             agreed, your IP address and your browser type.
@@ -323,7 +327,7 @@ export default function PrivacyPage() {
             with the listing or the flagger&apos;s account.
           </li>
           <li>Quote requests: deleted 12 months after you send them.</li>
-          {digitalServicesPublic() && <li>Websites and digital tools enquiries: deleted 12 months after you send them.</li>}
+          {digitalServicesNoticeShown() && <li>Websites and digital tools enquiries: deleted 12 months after you send them.</li>}
           <li>
             Defamation complaints: kept for 7 years (limitation period
             under the Defamation Act 2005).
