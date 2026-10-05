@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test as base, type APIRequestContext } from "@playwright/test";
 
 // Read-only smoke: the farmer's path and the honesty rules, on a real deploy.
 // Never submits a form, never signs in, never writes. Safe to run against
@@ -7,6 +7,21 @@ import { expect, test } from "@playwright/test";
 //
 // Data-dependent checks skip rather than fail when the directory is empty on
 // the target (previews may point at an empty branch database).
+
+// Checks that must not follow redirects need the app's own first response.
+// With x-vercel-set-bypass-cookie, Vercel answers a cookieless request with a
+// 307 that sets the bypass cookie, which page navigations follow silently but
+// a maxRedirects: 0 request would report. `direct` sends the bypass header
+// alone, so Vercel passes the request straight to the app.
+const test = base.extend<{ direct: APIRequestContext }>({
+  direct: async ({ playwright, baseURL, extraHTTPHeaders, storageState, userAgent }, provide) => {
+    const headers = { ...(extraHTTPHeaders ?? {}) };
+    delete headers["x-vercel-set-bypass-cookie"];
+    const ctx = await playwright.request.newContext({ baseURL, extraHTTPHeaders: headers, storageState, userAgent });
+    await provide(ctx);
+    await ctx.dispose();
+  },
+});
 
 test("home: the fencing door is open", async ({ page }) => {
   const res = await page.goto("/");
@@ -106,18 +121,18 @@ test("crawler rails: robots and sitemap", async ({ request }) => {
   expect(await sitemap.text()).toContain("/services");
 });
 
-test("a migrated contractor URL redirects instead of 404", async ({ request }) => {
+test("a migrated contractor URL redirects instead of 404", async ({ direct }) => {
   // Set SMOKE_LEGACY_SLUG to an old slug that carries canonical_listing_id;
   // production's is the Boundary Builders row migrated on 6 Sep 2026.
   const slug = process.env.SMOKE_LEGACY_SLUG ?? (process.env.SMOKE_BASE_URL ? "" : "boundary-builders-farm-fencing-2820-LST-QVBYD9EJ");
   if (!slug) test.skip(true, "no legacy slug for this target");
-  const res = await request.get(`/services/listing/${slug}`, { maxRedirects: 0 });
+  const res = await direct.get(`/services/listing/${slug}`, { maxRedirects: 0 });
   expect([301, 302, 307, 308]).toContain(res.status());
   expect(res.headers()["location"] ?? "").toMatch(/\/services\/listing\//);
 });
 
-test("digital services page: off means 404; on means the three offers and an honest form", async ({ request, page }) => {
-  const res = await request.get("/digital-services", { maxRedirects: 0 });
+test("digital services page: off means 404; on means the three offers and an honest form", async ({ direct, page }) => {
+  const res = await direct.get("/digital-services", { maxRedirects: 0 });
   expect([200, 404]).toContain(res.status());
   if (res.status() === 404) return; // switched off (DIGITAL_SERVICES_PUBLIC != on)
   await page.goto("/digital-services");
