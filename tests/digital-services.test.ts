@@ -369,3 +369,13 @@ describe("pilot preview links", () => {
     expect(previewHref("https://example.com", "../admin")).toBeNull();
   });
 });
+
+describe("outreach sender", () => {
+  it("is named explicitly and verified only with a recorded test date", async () => {
+    const { outreachSender } = await import("@/lib/digital-services/pilot");
+    expect(outreachSender({})).toBeNull();
+    expect(outreachSender({ DIGITAL_SERVICES_OUTREACH_SENDER: "josh@outbackconnections.com.au" })).toEqual({ address: "josh@outbackconnections.com.au", verified: false });
+    expect(outreachSender({ DIGITAL_SERVICES_OUTREACH_SENDER: "josh@outbackconnections.com.au", DIGITAL_SERVICES_OUTREACH_SENDER_VERIFIED_ON: "yes" })?.verified).toBe(false);
+    expect(outreachSender({ DIGITAL_SERVICES_OUTREACH_SENDER: "josh@outbackconnections.com.au", DIGITAL_SERVICES_OUTREACH_SENDER_VERIFIED_ON: "2026-10-07" })?.verified).toBe(true);
+  });
+});

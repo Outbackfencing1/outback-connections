@@ -2,6 +2,7 @@
 // Supabase roles stubbed, then checks the constraints the app relies on.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { draftHash } from "@/lib/digital-services/dispatch-guard";
 import { PGlite } from "@electric-sql/pglite";
 
 const SQL = readFileSync("supabase/migrations/_drafts/digital_services_enquiries.sql", "utf8");
@@ -141,7 +142,7 @@ describe("digital_services_pilot migration (owner-only prospect data)", { timeou
     }
     await pg.exec(`set role service_role`);
     await pg.query(
-      `insert into digital_services_pilot (id, company, lane, preview_token, preview_check, reserved_for_cowork) values ('OC-999', 'Test Co', 'email', '0123456789abcdef0123', 'pass', true)`
+      `insert into digital_services_pilot (id, company, lane, preview_token, preview_check, reserved_for) values ('OC-999', 'Test Co', 'email', '0123456789abcdef0123', 'pass', 'cowork')`
     );
     const r = await pg.query<{ c: number }>(`select count(*)::int as c from digital_services_pilot`);
     expect(r.rows[0].c).toBe(1);
@@ -155,5 +156,123 @@ describe("digital_services_pilot migration (owner-only prospect data)", { timeou
     await expect(
       pg.query(`insert into digital_services_pilot (id, company, lane, preview_token) values ('OC-997', 'Co', 'email', '../../etc')`)
     ).rejects.toThrow(/check/i);
+  });
+});
+
+describe("pilot drafts, approvals and first-contact enforcement", { timeout: 30_000 }, () => {
+  async function seeded() {
+    const pg = new PGlite();
+    await pg.exec(`create role anon; create role authenticated; create role service_role;`);
+    await pg.exec(PILOT_SQL);
+    await pg.exec(`insert into digital_services_pilot (id, company, lane, reserved_for, contact_address, contact_basis, contact_basis_confirmed_at, contact_basis_confirmed_by)
+                   values ('OC-901', 'Fixture Cleaners', 'email', 'cowork', 'info@example.test', 'published on the business contact page', now(), 'Joshua')`);
+    const ins = async (rev: number, subject: string, body: string) =>
+      (await pg.query<{ id: string; sha256: string }>(
+        `insert into digital_services_pilot_drafts (company_id, revision, subject, body, sha256, author) values ('OC-901', $1, $2, $3, 'ignored', 'claude-code') returning id, sha256`,
+        [rev, subject, body]
+      )).rows[0];
+    const approveAll = async (d: { id: string; sha256: string }) => {
+      for (const kind of ["evidence_refresh", "preview_review", "copy_review", "message_approval"])
+        await pg.query(`insert into digital_services_pilot_approvals (draft_id, draft_sha256, kind, actor) values ($1, $2, $3, 'Joshua')`, [d.id, d.sha256, kind]);
+    };
+    const contact = (draftId: string, over: { lane?: string; sender?: string } = {}) =>
+      pg.query(`insert into digital_services_pilot_events (company_id, kind, lane, draft_id, sender, recorded_by) values ('OC-901', 'contacted', $1, $2, $3, 'test')`, [
+        over.lane ?? "cowork",
+        draftId,
+        over.sender ?? "josh@outbackconnections.com.au",
+      ]);
+    return { pg, ins, approveAll, contact };
+  }
+
+  it("hashes drafts in the database exactly as the server guard does, and refuses edits", async () => {
+    const { pg, ins } = await seeded();
+    const d = await ins(1, "Subject", "Body line one.\nBody line two.");
+    expect(d.sha256).toBe(draftHash("Subject", "Body line one.\nBody line two."));
+    await expect(pg.query(`update digital_services_pilot_drafts set body = 'changed' where id = $1`, [d.id])).rejects.toMatchObject({ code: "OC409" });
+  });
+
+  it("refuses first contact until the latest revision has all four approvals", async () => {
+    const { ins, approveAll, contact } = await seeded();
+    const d1 = await ins(1, "Old", "Old body");
+    await approveAll(d1);
+    const d2 = await ins(2, "New", "New body");
+    await expect(contact(d1.id)).rejects.toMatchObject({ code: "OC403" }); // approved, but not the latest revision
+    await expect(contact(d2.id)).rejects.toThrow(/lacks 4 approval/); // approvals don't carry over
+  });
+
+  it("refuses the other lane, help@ and a second first contact; allows exactly one", async () => {
+    const { pg, ins, approveAll, contact } = await seeded();
+    const d = await ins(1, "Subject", "Body");
+    await approveAll(d);
+    await expect(contact(d.id, { lane: "engine" })).rejects.toThrow(/reserved for another lane/);
+    await expect(contact(d.id, { sender: "help@outbackconnections.com.au" })).rejects.toThrow(/never help@/);
+    await contact(d.id);
+    await expect(contact(d.id)).rejects.toThrow(/duplicate key|unique/i);
+    const n = await pg.query<{ c: number }>(`select count(*)::int as c from digital_services_pilot_events where kind = 'contacted'`);
+    expect(n.rows[0].c).toBe(1);
+  });
+
+  it("suppression and an unconfirmed contact basis block first contact", async () => {
+    const { pg, ins, approveAll, contact } = await seeded();
+    const d = await ins(1, "Subject", "Body");
+    await approveAll(d);
+    await pg.query(`update digital_services_pilot set contact_basis_confirmed_at = null where id = 'OC-901'`);
+    await expect(contact(d.id)).rejects.toThrow(/contact basis/);
+    await pg.query(`update digital_services_pilot set contact_basis_confirmed_at = now() where id = 'OC-901'`);
+    await pg.query(`insert into digital_services_pilot_events (company_id, kind, recorded_by) values ('OC-901', 'opted_out', 'test')`);
+    await expect(contact(d.id)).rejects.toThrow(/suppressed/);
+  });
+});
+
+const SALES_SQL = readFileSync("supabase/migrations/_drafts/digital_services_sales.sql", "utf8");
+
+describe("quotes and payment evidence (no manual 'paid')", { timeout: 30_000 }, () => {
+  async function salesDb() {
+    const pg = new PGlite();
+    await pg.exec(`create role anon; create role authenticated; create role service_role;`);
+    await pg.exec(SALES_SQL);
+    await pg.exec(SALES_SQL);
+    return pg;
+  }
+  const quote = (pg: PGlite, over = "") =>
+    pg.query<{ id: string }>(
+      `insert into digital_services_quotes (customer_label, offer, amount_cents, deposit_cents, terms_version, scope_summary${over ? ", " + over.split("=")[0] : ""})
+       values ('Fixture customer', 'website_1990', 199000, 99500, 'proposed-2026-10-04', 'Up to five template pages, guided form, two revision rounds'${over ? ", " + over.split("=")[1] : ""}) returning id`
+    );
+
+  it("has no paid status, and a quote can't be sent while GST treatment is pending", async () => {
+    const pg = await salesDb();
+    const q = (await quote(pg)).rows[0];
+    await expect(pg.query(`update digital_services_quotes set status = 'paid' where id = $1`, [q.id])).rejects.toThrow(/check/i);
+    await expect(pg.query(`update digital_services_quotes set status = 'sent', sent_at = now() where id = $1`, [q.id])).rejects.toThrow(/check/i);
+  });
+
+  it("deposit received is derived only from evidenced payments, and evidence can't be counted twice", async () => {
+    const pg = await salesDb();
+    const q = (await quote(pg)).rows[0];
+    const balance = async () =>
+      (await pg.query<{ paid_cents: number; deposit_received: boolean }>(`select paid_cents, deposit_received from digital_services_quote_balance where quote_id = $1`, [q.id])).rows[0];
+    expect(await balance()).toMatchObject({ paid_cents: 0, deposit_received: false });
+    const pay = () =>
+      pg.query(
+        `insert into digital_services_payments (quote_id, amount_cents, received_on, evidence_source, evidence_ref, recorded_by) values ($1, 99500, '2026-10-10', 'bank_statement', 'TXN-FIXTURE-1', 'Joshua')`,
+        [q.id]
+      );
+    await pay();
+    await expect(pay()).rejects.toThrow(/duplicate key|unique/i);
+    expect(await balance()).toMatchObject({ paid_cents: 99500, deposit_received: true });
+    await expect(
+      pg.query(`insert into digital_services_payments (quote_id, amount_cents, received_on, evidence_source, evidence_ref, recorded_by) values ($1, 100, '2026-10-10', 'bank_statement', '  ', 'Joshua')`, [q.id])
+    ).rejects.toThrow(/check/i);
+  });
+
+  it("is invisible to anon and authenticated", async () => {
+    const pg = await salesDb();
+    for (const role of ["anon", "authenticated"]) {
+      await pg.exec(`set role ${role}`);
+      await expect(pg.query(`select * from digital_services_quotes`)).rejects.toThrow(/permission denied/i);
+      await expect(pg.query(`select * from digital_services_quote_balance`)).rejects.toThrow(/permission denied/i);
+      await pg.exec(`reset role`);
+    }
   });
 });

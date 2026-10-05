@@ -36,6 +36,37 @@ not published:
 
 Josh's decisions are bundled at the end of `TERMS-PROPOSED.md`.
 
+### Later on 5 Oct: first-customer priority (master rev 14, handover rev 3)
+
+**Enquiry flow:**
+- The owner status change now says "saved" only when the database returns the updated row. A refused write or a missing row shows a red "Not saved" notice, and the queue isn't revalidated.
+- Proven end to end on a **local** stack (`scripts/local-stack/`: Postgres 16 + PostgREST + a gateway that mimics Supabase, persona sign-ins):
+  - the four personas behave correctly;
+  - no JavaScript means no save and no URL leak;
+  - the form saves one row, a failed alert keeps the lead, and a replayed submit creates no duplicate;
+  - Joshua's queue status changes save, and failures are shown.
+- Not a hosted test. Hosted end-to-end needs the enquiry migration applied (approval needed).
+
+**Pilot records:** the pilot draft migration now has revisioned email drafts with database-computed hashes, approvals bound to the exact revision, and contact, reply and suppression events. A first contact is refused unless:
+- the reservation matches the lane;
+- the company isn't suppressed and hasn't replied;
+- the contact basis is confirmed;
+- all four approvals exist on the latest revision;
+- a sender is named and isn't help@.
+
+Only one first contact per company is possible. `lib/digital-services/dispatch-guard.ts` applies the same rules in the server. Three cleaners are prepared and held; the records are private (`oc_planning.agent_updates` event `claude-code-three-cleaner-pilot-pack-2026-10-05`).
+
+**Sale:**
+- `docs/digital-services/FIRST-CUSTOMER-KIT.md`: scope/terms checklist, quote record, asset intake, delivery checklist.
+- Draft migration `digital_services_sales.sql`: quotes have no "paid" status. Payments need bank or provider evidence, and evidence can't be counted twice.
+
+**Outreach sender:** named via `DIGITAL_SERVICES_OUTREACH_SENDER`. It counts as verified only with `DIGITAL_SERVICES_OUTREACH_SENDER_VERIFIED_ON`, set after the owned-inbox send/reply test. help@ is refused.
+
+**Not done (access):**
+- evidence refresh for the three sites (network policy blocks them);
+- the owned-inbox test (no Outback Connections Workspace mailbox is connected);
+- hosted smoke (paused until the trace-safety fix is on `main`; separate draft PR).
+
 ## 4 Oct 2026: the staff-post clean-up was failing; fixed (branch `ccr-a7a02618-x1gnjy`)
 
 Live check (read-only) before the fix: the 2 and 3 Oct runs of

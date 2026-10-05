@@ -114,3 +114,35 @@ workflow and run one send/reply test between owned inboxes.
 3. Cowork's call on the one preview copy note.
 
 The previews themselves are not a blocker.
+
+## First-customer priority (5 October 2026, master revision 14)
+
+Joshua narrowed the goal to the first paying customers. Three cleaners from the
+reserved Cowork cohort are prepared and **held**:
+- one for the A$1,990 website;
+- two for the A$490 guided form on their useful existing site, which stays as it is.
+
+Their per-company records are in owner-only storage (`oc_planning.agent_updates`,
+event `claude-code-three-cleaner-pilot-pack-2026-10-05`), not here. Each record holds:
+- **Draft revision 1:** Cowork's unsent original, kept as history.
+- **Draft revision 2:** the current offer, with a concept-only disclosure and a GST wording placeholder.
+- **Approval slots:** four, all empty.
+- **Evidence-refresh list:** claim by claim.
+- **Draft quote:** GST pending.
+
+| Check | State |
+|---|---|
+| Cowork drafts | Read from the shared artifact: 8 unsent, 0 of 8 review boxes ticked |
+| Evidence refresh | **Not done.** This session's network policy blocks all three business sites |
+| Preview behaviour (390/1440) | Pass. No request on submit, "DEMONSTRATION — not sent or booked", no overflow |
+| Preview content | Notes on all three. Generic site-type options ("Home"/"Strata building") on the two commercial cleaners; one "Book a workplace visit" service card. Repairs are a preview release (approval needed) |
+| Contact basis confirmed | 0 of 3 |
+| Approvals (evidence, preview, copy, message) | 0 of 12 |
+| Verified outreach sender | None (help@ is never used) |
+| First contact | Held for all three. The server guard and the database both refuse it today |
+
+Enforcement is now in code:
+- `lib/digital-services/dispatch-guard.ts`, the server-side check any future dispatch must pass;
+- the `digital_services_pilot` draft migration, which refuses a "contacted" event unless every condition holds and allows only one first contact per company.
+
+Both are tested, including two simultaneous dispatches on a real Postgres 16, of which exactly one succeeded.

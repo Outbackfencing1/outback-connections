@@ -8,8 +8,19 @@ import { getOwnerAccess } from "@/lib/digital-services/owner";
 import { alertReadiness, digitalServicesPublic } from "@/lib/digital-services/flags";
 import { matchesSearch, referenceFor } from "@/lib/digital-services/intake";
 import { INTERESTS } from "@/lib/digital-services/offer";
-import { PILOT_BLOCKERS, PILOT_TABLE, previewHref, type PilotRow } from "@/lib/digital-services/pilot";
-import { PAGE_SIZE, SEARCH_CHUNK, SEARCH_MAX_ROWS, STATUSES, pageFrom, statusesFor } from "@/lib/digital-services/queue";
+import {
+  OFFER_LABELS,
+  PILOT_APPROVALS_TABLE,
+  PILOT_BLOCKERS,
+  PILOT_DRAFTS_TABLE,
+  PILOT_EVENTS_TABLE,
+  PILOT_TABLE,
+  outreachSender,
+  previewHref,
+  type PilotRow,
+} from "@/lib/digital-services/pilot";
+import { HOLD_LABELS, firstContactHolds, type PilotApproval, type PilotDraft, type PilotEvent } from "@/lib/digital-services/dispatch-guard";
+import { PAGE_SIZE, SEARCH_CHUNK, SEARCH_MAX_ROWS, STATUSES, pageFrom, statusesFor, type StatusChange } from "@/lib/digital-services/queue";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { setEnquiryStatus } from "./actions";
 
@@ -33,6 +44,14 @@ type Enquiry = {
 };
 
 const SITE = "https://www.outbackconnections.com.au";
+
+const NOTICES: Record<StatusChange, { ok: boolean; text: string }> = {
+  saved: { ok: true, text: "Status saved." },
+  not_found: { ok: false, text: "Not saved: that enquiry no longer exists (it may have been purged)." },
+  failed: { ok: false, text: "Not saved: the database refused the change. Nothing was changed; try again." },
+  invalid: { ok: false, text: "Not saved: that status isn't allowed." },
+  unavailable: { ok: false, text: "Not saved: the enquiry database isn't connected on this environment." },
+};
 
 function Check({ ok, label, detail }: { ok: boolean | null; label: string; detail: string }) {
   const tone = ok === true ? "text-green-800" : ok === false ? "text-red-800" : "text-amber-800";
@@ -72,6 +91,10 @@ export default async function OwnerPage({
   const page = pageFrom(typeof sp.page === "string" ? sp.page : undefined);
   const statuses = statusesFor(statusFilter);
 
+  const viewQuery = new URLSearchParams({ status: statusFilter, ...(q ? { q } : {}), page: String(page) }).toString();
+  const notice = typeof sp.notice === "string" ? NOTICES[sp.notice as StatusChange] : undefined;
+  const noticeRef = typeof sp.ref === "string" && /^DSE-[0-9A-F]{8}$/.test(sp.ref) ? sp.ref : "";
+
   const admin = createAdminClient();
   let shown: Enquiry[] = [];
   let total: number | null = null;
@@ -108,10 +131,24 @@ export default async function OwnerPage({
   }
   // Pilot rows: owner-only table, read after the owner check (never in source).
   let pilot: PilotRow[] | null = null;
+  let drafts: PilotDraft[] = [];
+  let approvals: PilotApproval[] = [];
+  let events: (PilotEvent & { occurred_at: string })[] = [];
   if (admin) {
-    const { data, error } = await admin.from(PILOT_TABLE).select("*").order("id");
-    if (!error) pilot = (data as PilotRow[] | null) ?? [];
+    const [p, d, a, e] = await Promise.all([
+      admin.from(PILOT_TABLE).select("*").order("id"),
+      admin.from(PILOT_DRAFTS_TABLE).select("id, company_id, revision, subject, body, sha256"),
+      admin.from(PILOT_APPROVALS_TABLE).select("draft_id, draft_sha256, kind, actor, approved_at"),
+      admin.from(PILOT_EVENTS_TABLE).select("company_id, kind, occurred_at"),
+    ]);
+    if (!p.error) pilot = (p.data as PilotRow[] | null) ?? [];
+    drafts = (d.data as PilotDraft[] | null) ?? [];
+    approvals = (a.data as PilotApproval[] | null) ?? [];
+    events = (e.data as (PilotEvent & { occurred_at: string })[] | null) ?? [];
   }
+  const sender = outreachSender();
+  const latestDraft = (companyId: string) =>
+    drafts.filter((d) => d.company_id === companyId).sort((x, y) => y.revision - x.revision)[0] ?? null;
   const pages = total !== null ? Math.max(1, Math.ceil(total / PAGE_SIZE)) : 1;
   const link = (p: number) =>
     `/dashboard/owner?${new URLSearchParams({ status: statusFilter, ...(q ? { q } : {}), page: String(p) }).toString()}`;
@@ -142,7 +179,19 @@ export default async function OwnerPage({
             detail={digitalServicesPublic() ? "/digital-services is live." : "Off (DIGITAL_SERVICES_PUBLIC is not 'on'). Switch on after terms are confirmed."}
           />
           <Check ok={alerts.ok} label="Owner alerts" detail={alerts.detail} />
-          <Check ok={false} label="Outreach sender" detail="No verified Outback Connections mailbox is connected. No outreach can send." />
+          <Check
+            ok={sender?.verified && !/^help@/i.test(sender.address) ? true : false}
+            label="Outreach sender"
+            detail={
+              !sender
+                ? "No outreach sender named (DIGITAL_SERVICES_OUTREACH_SENDER). No outreach can send."
+                : /^help@/i.test(sender.address)
+                  ? "help@ is the support/transactional address and can't be the outreach sender."
+                  : sender.verified
+                    ? `${sender.address}: owned-inbox send/reply test recorded.`
+                    : `${sender.address} is named but its owned-inbox send/reply test isn't recorded (DIGITAL_SERVICES_OUTREACH_SENDER_VERIFIED_ON).`
+            }
+          />
           <Check ok={false} label="Engine" detail="The digital-services engine source isn't in this repository yet; reservations, drafts and replies aren't connected." />
         </ul>
       </section>
@@ -169,13 +218,25 @@ export default async function OwnerPage({
                   <th className="px-3 py-2">Company</th>
                   <th className="px-3 py-2">Lane</th>
                   <th className="px-3 py-2">Preview</th>
-                  <th className="px-3 py-2">Reservation</th>
-                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Offer</th>
+                  <th className="px-3 py-2">Draft</th>
+                  <th className="px-3 py-2">First contact</th>
                 </tr>
               </thead>
               <tbody>
                 {pilot.map((p) => {
                   const href = previewHref(SITE, p.preview_token);
+                  const draft = latestDraft(p.id);
+                  const contacted = events.find((e) => e.company_id === p.id && e.kind === "contacted");
+                  const holds = firstContactHolds({
+                    lane: p.reserved_for ?? "cowork",
+                    company: p,
+                    drafts,
+                    draftId: draft?.id ?? null,
+                    approvals,
+                    events,
+                    sender,
+                  });
                   const label = p.preview_check === "pass" ? "Pass" : p.preview_check === "pass-with-note" ? "Pass, see note" : "Not checked";
                   return (
                     <tr key={p.id} className="border-t border-neutral-100 align-top">
@@ -193,8 +254,28 @@ export default async function OwnerPage({
                         {p.checked_at && <span className="block text-xs text-neutral-500">{p.checked_at}</span>}
                         {p.preview_note && <span className="mt-1 block text-xs text-amber-800">{p.preview_note}</span>}
                       </td>
-                      <td className="px-3 py-2">{p.reserved_for_cowork ? "Reserved for Cowork (engine hold)" : "—"}</td>
-                      <td className="px-3 py-2">{p.lane === "email" ? "Held: approval + sender" : "Josh, in person"}</td>
+                      <td className="px-3 py-2">{p.offer ? OFFER_LABELS[p.offer] : "—"}</td>
+                      <td className="px-3 py-2">
+                        {draft ? `Revision ${draft.revision}` : "—"}
+                        {draft && (
+                          <span className="block text-xs text-neutral-500">
+                            {approvals.filter((a) => a.draft_id === draft.id && a.draft_sha256 === draft.sha256).length}/4 approvals
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {contacted ? (
+                          `Contacted ${new Date(contacted.occurred_at).toLocaleDateString("en-AU")}`
+                        ) : p.lane !== "email" ? (
+                          "Josh, in person"
+                        ) : (
+                          <>
+                            <span className="font-semibold text-amber-800">Held</span>
+                            {p.reserved_for && <span className="block text-xs text-neutral-500">Reserved for {p.reserved_for}</span>}
+                            <span className="block text-xs text-neutral-600">{holds.map((h) => HOLD_LABELS[h] ?? h).join("; ")}</span>
+                          </>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -206,6 +287,15 @@ export default async function OwnerPage({
 
       <section className="mt-10">
         <h2 className="text-lg font-semibold">Enquiries</h2>
+        {notice && (
+          <p
+            role={notice.ok ? "status" : "alert"}
+            className={`mt-3 rounded-xl border px-4 py-3 text-sm ${notice.ok ? "border-green-200 bg-green-50 text-green-900" : "border-red-200 bg-red-50 text-red-900"}`}
+          >
+            {noticeRef ? `${noticeRef}: ` : ""}
+            {notice.text}
+          </p>
+        )}
         <form className="mt-3 flex flex-wrap gap-2" method="get">
           <input
             name="q"
@@ -267,6 +357,7 @@ export default async function OwnerPage({
               ) : null}
               <form action={setEnquiryStatus} className="mt-3 flex items-center gap-2">
                 <input type="hidden" name="id" value={r.id} />
+                <input type="hidden" name="view" value={viewQuery} />
                 <select name="status" defaultValue={r.status} className="rounded border border-neutral-300 px-2 py-1 text-xs">
                   {STATUSES.map((s) => (
                     <option key={s} value={s}>
