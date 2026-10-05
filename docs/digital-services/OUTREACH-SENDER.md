@@ -115,14 +115,20 @@ messages and a release that calls the dispatcher.
   - Confirms the sender is an accepted send-as address of the connected mailbox.
   - Runs the first-contact guard: lane reservation, suppression, contact basis for the current address, the latest revision with all four approvals (Josh's own), and a verified sender that isn't help@.
 - **Records intent:** writes a `send_attempt` with its own Message-ID. The database re-checks every rule and refuses a second attempt while one is unresolved.
+- **Records the handoff:** writes a `send_handoff` marker just before calling Gmail. Without a confirmed marker, Gmail is never called.
 - **Sends once.**
 - **Records the outcome:**
   - `contacted` with Gmail's message and thread IDs;
   - `send_failed` on a definite Gmail refusal;
   - an unknown outcome (timeout, 5xx) stays unresolved. `reconcileAttempt()` finds it in the mailbox (by Message-ID, then recipient + exact subject in Sent). It never resends.
-  - If a refusal or an unconfirmed intent can't be recorded, the attempt stays open and the result says so. `closeAttemptNotSent()` checks the mailbox first: it records `contacted` if the message did go out, and closes the attempt as not sent only when nothing is found.
+  - If a refusal or an unconfirmed intent can't be recorded, the attempt stays open and the result says so. `closeAttemptNotSent()` checks the mailbox first and records `contacted` if the message did go out.
+  - It closes an attempt as not sent only if Gmail was never called (no handoff marker), or if it's given the definite 4xx refusal from the dispatch result.
+  - An empty Sent search is never proof: search can lag, so a handed-off attempt with an unknown outcome stays open ("uncertain") and blocks any resend.
 - **Reply sync:** `syncReplies()` records replies, opt-outs ("unsubscribe", "remove me", "not interested"…) and bounces once each. It never replies to anyone. A reply or opt-out holds any further contact.
+  - It skips our own messages: anything Gmail labels SENT, and any alias recorded on the contact.
+  - If an event isn't saved (a database refusal or an outage) or a thread can't be read, the run reports `incomplete` and lists each failure. An unsaved opt-out is never reported as healthy, and it's retried on the next run. An event already recorded counts as `already`, not as a failure.
 - **Not wired:** nothing in the app calls the dispatcher yet. No route, button or schedule. Wiring it is a separate, approved change.
+  - The owner page's "Approve revision N" button only records Josh's approval of that exact revision. It sends nothing.
 
 ## Rollback
 

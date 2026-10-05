@@ -28,7 +28,7 @@ export type PilotApproval = {
   approved_at: string;
   approver_user_id?: string | null; // message_approval: the owner's auth user id
 };
-export type PilotEventKind = "send_attempt" | "send_failed" | "contacted" | "replied" | "opted_out" | "suppressed" | "bounced";
+export type PilotEventKind = "send_attempt" | "send_handoff" | "send_failed" | "contacted" | "replied" | "opted_out" | "suppressed" | "bounced";
 export type PilotEvent = { company_id: string; kind: PilotEventKind; rfc822_message_id?: string | null };
 
 export type Hold =

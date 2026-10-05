@@ -180,3 +180,27 @@ superseded and must not be sent.
 Proven on the local stack (Postgres 16 + PostgREST; fixture data only). The
 hosted flow is unproven until the enquiry, pilot and sales migrations are
 approved and applied.
+
+## Revision 4 after Codex's primary check (5 October 2026, later still)
+
+Codex checked the businesses' own pages and found two problems. The private
+record is event `claude-code-three-cleaner-pilot-rev4-2026-10-05`; revisions
+1–3 stay unchanged in their records.
+
+- **The website prospect** already has a structured quote form (service, approximate area, frequency, comments).
+  - Revision 3's premise, that its site offered only phone and email, was false.
+  - Revision 4 asserts no gap.
+  - Its preview's owner note now says the concept doesn't replace or improve on the existing form.
+  - **Value reassessed as weak.** It's recommended not to be one of the first three unless a fresh check shows a specific gap.
+- **One form prospect:** revision 4 removes the untested claims that its existing form delivers enquiries and that it could price from the first message. The preview note says delivery wasn't tested.
+- **The other form prospect:** revision 3 is kept. Its evidence limits stay visible in the private record and in its preview note:
+  - a 5 October observation, not re-checked since;
+  - pages behind its client login weren't inspected.
+
+| Check | State |
+|---|---|
+| Current drafts | Revision 4 (two prospects), revision 3 (one). Hashes recomputed by the database and matched |
+| Approvals | 0 of 12 on current revisions. **Recording an approval sends nothing**: no route calls the dispatcher, and sending is switched off |
+| Sender adapter | Hardened. A handed-off message with an unknown outcome is never closed as "not sent" on an empty search. Reply sync reports any unsaved opt-out as incomplete and retries it |
+| GLM research | Adapter gap reported correctly (no crash, no false rejections). The real GLM mapping needs the return, exclusions and request/schema files in this session |
+| First contact | Held for all three |

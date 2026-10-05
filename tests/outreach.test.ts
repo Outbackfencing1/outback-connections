@@ -19,8 +19,10 @@ const ENV = {
 const SUBJECT = "A guided quote form for Fixture Cleaning";
 const BODY = "Hi,\n\nFixture body.\n\nJosh";
 
-function memoryStore(opts: { approvals?: boolean; refuseAttempt?: boolean; failOutcomeWrites?: number } = {}) {
+type Fail = { kind: NewEvent["kind"]; code: string; times: number };
+function memoryStore(opts: { approvals?: boolean; refuseAttempt?: boolean; failOutcomeWrites?: number; fail?: Fail[] } = {}) {
   let failOutcome = opts.failOutcomeWrites ?? 0;
+  const fails = (opts.fail ?? []).map((x) => ({ ...x }));
   const draft: PilotDraft = { id: "d1", company_id: "OC-901", revision: 1, subject: SUBJECT, body: BODY, sha256: draftHash(SUBJECT, BODY) };
   const approvals: PilotApproval[] =
     opts.approvals === false
@@ -48,6 +50,11 @@ function memoryStore(opts: { approvals?: boolean; refuseAttempt?: boolean; failO
     },
     async insertEvent(e) {
       if (e.kind === "send_attempt" && opts.refuseAttempt) return { error: { code: "OC403", message: "refused" } };
+      const f = fails.find((x) => x.kind === e.kind && x.times > 0);
+      if (f) {
+        f.times--;
+        return { error: { code: f.code, message: `fixture failure ${f.code}` } };
+      }
       if (e.kind === "send_failed" && failOutcome > 0) {
         failOutcome--;
         return { error: { code: "PGRST001", message: "database unreachable" } };
@@ -56,7 +63,7 @@ function memoryStore(opts: { approvals?: boolean; refuseAttempt?: boolean; failO
       const dup = events.some(
         (x) =>
           (e.kind === "send_attempt" && x.kind === "send_attempt" && x.draft_id === e.draft_id) ||
-          ((e.kind === "contacted" || e.kind === "send_failed") && x.kind === e.kind && x.rfc822_message_id === e.rfc822_message_id) ||
+          ((e.kind === "contacted" || e.kind === "send_failed" || e.kind === "send_handoff") && x.kind === e.kind && x.rfc822_message_id === e.rfc822_message_id) ||
           (e.provider_message_id && x.kind === e.kind && x.provider_message_id === e.provider_message_id)
       );
       if (dup) return { error: { code: "23505", message: "duplicate key" } };
@@ -125,8 +132,8 @@ describe("dispatchFirstContact", () => {
     const store = memoryStore();
     const r = await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f, messageId: () => MSGID });
     expect(r).toEqual({ status: "sent", messageId: MSGID, providerId: "gm-1", threadId: "th-1" });
-    expect(store.events.map((e) => e.kind)).toEqual(["send_attempt", "contacted"]);
-    expect(store.events[1]).toMatchObject({ rfc822_message_id: MSGID, provider_message_id: "gm-1", provider_thread_id: "th-1", sender: SENDER, lane: "cowork", draft_id: "d1" });
+    expect(store.events.map((e) => e.kind)).toEqual(["send_attempt", "send_handoff", "contacted"]);
+    expect(store.events[2]).toMatchObject({ rfc822_message_id: MSGID, provider_message_id: "gm-1", provider_thread_id: "th-1", sender: SENDER, lane: "cowork", draft_id: "d1" });
     const mime = Buffer.from(sentRaw, "base64url").toString("utf8");
     expect(mime).toContain(`From: ${SENDER}`);
     expect(mime).toContain("To: office@fixture.example");
@@ -158,30 +165,74 @@ describe("dispatchFirstContact", () => {
     expect(await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f, messageId: () => MSGID })).toMatchObject({ status: "failed" });
     expect(store.events.map((e) => [e.kind, e.rfc822_message_id])).toEqual([
       ["send_attempt", MSGID],
+      ["send_handoff", MSGID],
       ["send_failed", MSGID],
     ]);
   });
 
-  it("a refusal whose record can't be saved is reported as unrecorded, then closed only after a mailbox check", async () => {
+  it("a refusal whose record can't be saved is reported as unrecorded, then closed with that refusal after a mailbox check", async () => {
     const { f } = gmail({ ...base, "/messages/send": () => json({ error: { message: "Invalid To header" } }, 400) });
     const store = memoryStore({ failOutcomeWrites: 2 });
     const r = await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f, messageId: () => MSGID });
-    expect(r).toMatchObject({ status: "failed_unrecorded", messageId: MSGID });
-    expect(store.events.map((e) => e.kind)).toEqual(["send_attempt"]);
+    expect(r).toMatchObject({ status: "failed_unrecorded", messageId: MSGID, refusal: { status: 400 } });
+    expect(store.events.map((e) => e.kind)).toEqual(["send_attempt", "send_handoff"]);
     expect(await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f })).toMatchObject({ status: "held", holds: ["unresolved_attempt"] });
 
-    // The mailbox has nothing under our Message-ID or in Sent: closed as not sent.
     const empty = gmail({ ...base, "/messages": () => json({}) });
-    expect(await closeAttemptNotSent("OC-901", "Gmail refused: Invalid To header", { store, env: ENV, fetch: empty.f })).toEqual({ status: "closed" });
+    // Without the refusal, an empty search proves nothing: it stays open.
+    expect(await closeAttemptNotSent("OC-901", null, { store, env: ENV, fetch: empty.f })).toEqual({ status: "uncertain", messageId: MSGID });
+    expect(store.events).toHaveLength(2);
+    // With the definite refusal from the dispatch result, it closes.
+    const refusal = r.status === "failed_unrecorded" ? r.refusal : null;
+    expect(await closeAttemptNotSent("OC-901", refusal, { store, env: ENV, fetch: empty.f })).toEqual({ status: "closed" });
     expect(store.events.at(-1)).toMatchObject({ kind: "send_failed", rfc822_message_id: MSGID });
-    expect(await closeAttemptNotSent("OC-901", "again", { store, env: ENV, fetch: empty.f })).toEqual({ status: "nothing_unresolved" });
+    expect(await closeAttemptNotSent("OC-901", refusal, { store, env: ENV, fetch: empty.f })).toEqual({ status: "nothing_unresolved" });
+  });
+
+  it("accepted mail with a lost response and delayed search visibility is never closed as not sent", async () => {
+    // Gmail accepts the message, but the response is lost.
+    const send = vi.fn(() => {
+      throw new TypeError("socket hang up");
+    });
+    const store = memoryStore();
+    const first = gmail({ ...base, "/messages/send": send });
+    expect(await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: first.f, messageId: () => MSGID })).toEqual({ status: "unconfirmed", messageId: MSGID });
+
+    // Search hasn't indexed it yet: empty everywhere. Nothing is closed, and a
+    // 429/5xx "refusal" isn't definite either.
+    const notYet = gmail({ ...base, "/messages": () => json({}) });
+    expect(await closeAttemptNotSent("OC-901", null, { store, env: ENV, fetch: notYet.f })).toEqual({ status: "uncertain", messageId: MSGID });
+    expect(await closeAttemptNotSent("OC-901", { status: 503, message: "backend error" }, { store, env: ENV, fetch: notYet.f })).toEqual({ status: "uncertain", messageId: MSGID });
+    expect(await reconcileAttempt("OC-901", { store, env: ENV, fetch: notYet.f })).toEqual({ status: "not_found", messageId: MSGID });
+    expect(store.events.map((e) => e.kind)).toEqual(["send_attempt", "send_handoff"]);
+    // Resend stays blocked.
+    expect(await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: first.f })).toMatchObject({ status: "held", holds: ["unresolved_attempt"] });
+    expect(send).toHaveBeenCalledTimes(1);
+
+    // Later the search shows it: recorded as contacted.
+    const visible = gmail({ ...base, "/messages": (u) => (u.searchParams.get("q") === `rfc822msgid:${MSGID}` ? json({ messages: [{ id: "gm-7", threadId: "th-7" }] }) : json({})) });
+    expect(await closeAttemptNotSent("OC-901", null, { store, env: ENV, fetch: visible.f })).toEqual({ status: "found_sent", providerId: "gm-7" });
+    expect(store.events.at(-1)).toMatchObject({ kind: "contacted", provider_message_id: "gm-7" });
+  });
+
+  it("an attempt that never reached Gmail (no handoff marker) can be closed after a mailbox check", async () => {
+    const send = vi.fn(() => json({ id: "never", threadId: "never" }));
+    const { f } = gmail({ ...base, "/messages/send": send });
+    // The handoff marker is refused and the closing send_failed can't be saved either.
+    const store = memoryStore({ fail: [{ kind: "send_handoff", code: "42501", times: 1 }], failOutcomeWrites: 2 });
+    expect(await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f, messageId: () => MSGID })).toMatchObject({ status: "not_sent" });
+    expect(send).not.toHaveBeenCalled();
+    expect(store.events.map((e) => e.kind)).toEqual(["send_attempt"]);
+    const empty = gmail({ ...base, "/messages": () => json({}) });
+    expect(await closeAttemptNotSent("OC-901", null, { store, env: ENV, fetch: empty.f })).toEqual({ status: "closed" });
+    expect(store.events.at(-1)).toMatchObject({ kind: "send_failed", note: "not sent: never handed to Gmail" });
   });
 
   it("closing an attempt that actually went out records it as contacted instead", async () => {
     const store = memoryStore();
     await store.insertEvent({ company_id: "OC-901", kind: "send_attempt", lane: "cowork", draft_id: "d1", sender: SENDER, rfc822_message_id: MSGID, recorded_by: "t" });
     const found = gmail({ ...base, "/messages": (u) => (u.searchParams.get("q") === `rfc822msgid:${MSGID}` ? json({ messages: [{ id: "gm-5", threadId: "th-5" }] }) : json({})) });
-    expect(await closeAttemptNotSent("OC-901", "assumed not sent", { store, env: ENV, fetch: found.f })).toEqual({ status: "found_sent", providerId: "gm-5" });
+    expect(await closeAttemptNotSent("OC-901", null, { store, env: ENV, fetch: found.f })).toEqual({ status: "found_sent", providerId: "gm-5" });
     expect(store.events.at(-1)).toMatchObject({ kind: "contacted", provider_message_id: "gm-5" });
   });
 
@@ -192,7 +243,7 @@ describe("dispatchFirstContact", () => {
     const { f } = gmail({ ...base, "/messages/send": send });
     const store = memoryStore();
     expect(await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f, messageId: () => MSGID })).toEqual({ status: "unconfirmed", messageId: MSGID });
-    expect(store.events.map((e) => e.kind)).toEqual(["send_attempt"]);
+    expect(store.events.map((e) => e.kind)).toEqual(["send_attempt", "send_handoff"]);
     // A second dispatch is held by the guard, before any send.
     expect(await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f })).toMatchObject({ status: "held", holds: ["unresolved_attempt"] });
     expect(send).toHaveBeenCalledTimes(1);
@@ -234,15 +285,60 @@ describe("syncReplies", () => {
       ],
     };
     const { f } = gmail({ ...base, "/threads/th-1": () => json(thread) });
-    expect(await syncReplies({ store, env: ENV, fetch: f })).toEqual({ status: "ok", recorded: 3, checked: 1, errors: 0 });
+    expect(await syncReplies({ store, env: ENV, fetch: f })).toEqual({ status: "ok", recorded: 3, already: 0, checked: 1, threadErrors: 0, failures: [] });
     expect(store.events.slice(2).map((e) => [e.kind, e.provider_message_id])).toEqual([
       ["replied", "gm-2"],
       ["opted_out", "gm-2"],
       ["bounced", "gm-3"],
     ]);
-    expect(await syncReplies({ store, env: ENV, fetch: f })).toEqual({ status: "ok", recorded: 0, checked: 1, errors: 0 });
+    expect(await syncReplies({ store, env: ENV, fetch: f })).toEqual({ status: "ok", recorded: 0, already: 3, checked: 1, threadErrors: 0, failures: [] });
     // Once replied, the guard holds any further first contact.
     expect(await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f })).toMatchObject({ status: "held", holds: expect.arrayContaining(["replied", "suppressed"]) });
+  });
+});
+
+describe("syncReplies when the database doesn't save", () => {
+  async function contactedStore(fail: Fail[]) {
+    const store = memoryStore({ fail });
+    await store.insertEvent({ company_id: "OC-901", kind: "send_attempt", lane: "cowork", draft_id: "d1", sender: SENDER, rfc822_message_id: MSGID, recorded_by: "t" });
+    await store.insertEvent({ company_id: "OC-901", kind: "contacted", lane: "cowork", draft_id: "d1", sender: SENDER, rfc822_message_id: MSGID, provider_message_id: "gm-1", provider_thread_id: "th-1", recorded_by: "t" });
+    return store;
+  }
+  const unsubscribe = {
+    messages: [
+      { id: "gm-2", internalDate: String(Date.parse("2026-10-07T01:00:00Z")), snippet: "Please unsubscribe me", payload: { headers: [{ name: "From", value: "Owner <office@fixture.example>" }] } },
+    ],
+  };
+
+  it("an opt-out the database refuses is reported (not 'ok'), and is saved on the next run", async () => {
+    const store = await contactedStore([{ kind: "opted_out", code: "42501", times: 1 }]);
+    const { f } = gmail({ ...base, "/threads/th-1": () => json(unsubscribe) });
+    const first = await syncReplies({ store, env: ENV, fetch: f });
+    expect(first).toEqual({
+      status: "incomplete",
+      recorded: 1,
+      already: 0,
+      checked: 1,
+      threadErrors: 0,
+      failures: [{ company_id: "OC-901", kind: "opted_out", provider_message_id: "gm-2", reason: "refused" }],
+    });
+    expect(store.events.filter((e) => e.kind === "opted_out")).toHaveLength(0);
+    // Recovery: the next run saves it; the reply already saved is a genuine duplicate, not a failure.
+    expect(await syncReplies({ store, env: ENV, fetch: f })).toEqual({ status: "ok", recorded: 1, already: 1, checked: 1, threadErrors: 0, failures: [] });
+    expect(store.events.filter((e) => e.kind === "opted_out")).toHaveLength(1);
+  });
+
+  it("a transport failure on save is reported as unknown and retried next run", async () => {
+    const store = await contactedStore([{ kind: "opted_out", code: "PGRST001", times: 2 }]);
+    const { f } = gmail({ ...base, "/threads/th-1": () => json(unsubscribe) });
+    expect(await syncReplies({ store, env: ENV, fetch: f })).toMatchObject({ status: "incomplete", failures: [{ kind: "opted_out", reason: "unknown" }] });
+    expect(await syncReplies({ store, env: ENV, fetch: f })).toMatchObject({ status: "ok", recorded: 1, failures: [] });
+  });
+
+  it("an unreadable thread makes the run incomplete", async () => {
+    const store = await contactedStore([]);
+    const { f } = gmail({ ...base, "/threads/th-1": () => json({ error: "backend" }, 503) });
+    expect(await syncReplies({ store, env: ENV, fetch: f })).toMatchObject({ status: "incomplete", threadErrors: 1 });
   });
 });
 
@@ -260,7 +356,7 @@ describe("syncReplies after the alias changes", () => {
       ],
     };
     const { f } = gmail({ ...base, "/threads/th-1": () => json(thread) });
-    expect(await syncReplies({ store, env: ENV, fetch: f })).toEqual({ status: "ok", recorded: 0, checked: 1, errors: 0 });
+    expect(await syncReplies({ store, env: ENV, fetch: f })).toEqual({ status: "ok", recorded: 0, already: 0, checked: 1, threadErrors: 0, failures: [] });
   });
 });
 

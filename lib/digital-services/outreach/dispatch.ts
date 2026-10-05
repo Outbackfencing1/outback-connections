@@ -9,10 +9,12 @@
 // Order of operations, so a send is never duplicated or lost:
 //   1. guard → 2. record a 'send_attempt' with our own Message-ID (the
 //   database refuses it unless every rule holds and no earlier attempt is
-//   unresolved) → 3. send → 4. record 'contacted' with Gmail's ids, or
+//   unresolved) → 3. record a 'send_handoff' marker (from here on Gmail may
+//   have the message) → 4. send → 5. record 'contacted' with Gmail's ids, or
 //   'send_failed' on a definite refusal. An unknown outcome leaves the attempt
-//   unresolved; reconcileAttempt() looks for it in the mailbox. It is never
-//   resent blindly.
+//   unresolved; reconcileAttempt() looks for it in the mailbox. A handed-off
+//   attempt is never closed as "not sent" on an empty search (Gmail's search
+//   can lag), only on a definite refusal, and it is never resent blindly.
 import { firstContactHolds, type Hold, type Lane, type PilotApproval, type PilotCompany, type PilotDraft, type PilotEvent } from "../dispatch-guard";
 import { outreachSender } from "../pilot";
 import { isTransportCode } from "../queue";
@@ -34,7 +36,7 @@ export type CompanyState = {
 };
 export type NewEvent = {
   company_id: string;
-  kind: "send_attempt" | "send_failed" | "contacted" | "replied" | "opted_out" | "bounced";
+  kind: "send_attempt" | "send_handoff" | "send_failed" | "contacted" | "replied" | "opted_out" | "bounced";
   lane?: Lane;
   draft_id?: string | null;
   sender?: string;
@@ -63,19 +65,26 @@ export type DispatchResult =
   | { status: "sent"; messageId: string; providerId: string; threadId: string }
   | { status: "sent_unrecorded"; messageId: string } // sent, but recording it failed: reconcile
   | { status: "failed"; reason: string } // Gmail refused it: nothing sent
-  | { status: "failed_unrecorded"; messageId: string; reason: string } // refused, but the record failed: closeAttemptNotSent()
+  | { status: "failed_unrecorded"; messageId: string; reason: string; refusal: GmailRefusal } // refused, but the record failed: closeAttemptNotSent() with this refusal
   | { status: "unconfirmed"; messageId: string }; // may have been sent: reconcile, never resend
 
 const RECORDER = "outreach-dispatch";
 
-async function insert(store: OutreachStore, e: NewEvent): Promise<"ok" | "refused" | "unknown"> {
+type Insert = "ok" | "duplicate" | "refused" | "unknown";
+
+/**
+ * ok: saved. duplicate: the same event was already recorded (first try) —
+ * not a failure for idempotent events. refused: the database said no.
+ * unknown: transport failure after a retry.
+ */
+async function insert(store: OutreachStore, e: NewEvent): Promise<Insert> {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const { error } = await store.insertEvent(e);
       if (!error) return "ok";
       // A duplicate on the retry is our own first try having committed, except
-      // for a send attempt, where it could be a concurrent dispatcher's row.
-      if (error.code === "23505" && attempt > 0) return e.kind === "send_attempt" ? "unknown" : "ok";
+      // for a send attempt or handoff, where it could be another dispatcher's row.
+      if (error.code === "23505") return attempt > 0 ? (e.kind === "send_attempt" || e.kind === "send_handoff" ? "unknown" : "ok") : "duplicate";
       if (error.code && !isTransportCode(error.code)) return "refused";
     } catch {
       // transport failure: retry once (inserts here are unique, so a repeat can't double-record)
@@ -116,12 +125,19 @@ export async function dispatchFirstContact(companyId: string, lane: Lane, deps: 
   const messageId = (deps.messageId ?? newMessageId)();
   const base = { company_id: companyId, lane, draft_id: draft.id, sender: sender.address, rfc822_message_id: messageId, recorded_by: RECORDER };
   const intent = await insert(deps.store, { ...base, kind: "send_attempt" });
-  if (intent === "refused") return { status: "refused", reason: "the database refused the send attempt" };
+  if (intent === "refused" || intent === "duplicate") return { status: "refused", reason: "the database refused the send attempt" };
   if (intent === "unknown") {
     // We never send without a confirmed intent record. If the record did land,
     // close it as not sent so it doesn't block the company forever.
     await insert(deps.store, { ...base, kind: "send_failed", note: "not sent: intent record unconfirmed" });
     return { status: "not_sent", reason: "the send attempt couldn't be confirmed" };
+  }
+  // From the handoff marker on, Gmail may have the message. Without a
+  // confirmed marker we don't call Gmail, so the attempt can be closed safely.
+  const handoff = await insert(deps.store, { ...base, kind: "send_handoff" });
+  if (handoff !== "ok") {
+    await insert(deps.store, { ...base, kind: "send_failed", note: "not sent: handoff marker unconfirmed" });
+    return { status: "not_sent", reason: "the handoff marker couldn't be confirmed" };
   }
 
   let sent: { id: string; threadId: string };
@@ -133,13 +149,13 @@ export async function dispatchFirstContact(companyId: string, lane: Lane, deps: 
       const closed = await insert(deps.store, { ...base, kind: "send_failed", note: e.message.slice(0, 300) });
       // Until the refusal is recorded the attempt stays open (and blocks the
       // company), so say so rather than reporting a clean failure.
-      if (closed !== "ok") return { status: "failed_unrecorded", messageId, reason: e.message };
+      if (closed !== "ok" && closed !== "duplicate") return { status: "failed_unrecorded", messageId, reason: e.message, refusal: { status: e.status ?? 400, message: e.message } };
       return { status: "failed", reason: e.message };
     }
     return { status: "unconfirmed", messageId };
   }
   const recorded = await insert(deps.store, { ...base, kind: "contacted", provider_message_id: sent.id, provider_thread_id: sent.threadId });
-  if (recorded !== "ok") return { status: "sent_unrecorded", messageId };
+  if (recorded !== "ok" && recorded !== "duplicate") return { status: "sent_unrecorded", messageId };
   return { status: "sent", messageId, providerId: sent.id, threadId: sent.threadId };
 }
 
@@ -181,22 +197,29 @@ export async function reconcileAttempt(companyId: string, deps: Deps): Promise<R
     provider_thread_id: found.threadId,
     recorded_by: "outreach-reconcile",
   });
-  return ok === "ok" ? { status: "recorded", providerId: found.id } : { status: "record_failed", messageId: open.rfc822_message_id };
+  return ok === "ok" || ok === "duplicate" ? { status: "recorded", providerId: found.id } : { status: "record_failed", messageId: open.rfc822_message_id };
 }
+
+/** A definite Gmail refusal (4xx other than 429): Gmail did not accept the message. */
+export type GmailRefusal = { status: number; message: string };
 
 export type CloseResult =
   | { status: "nothing_unresolved" | "not_connected" | "unknown_company" }
   | { status: "found_sent"; providerId: string } // it did go out: recorded as contacted instead
   | { status: "closed" }
+  | { status: "uncertain"; messageId: string } // handed to Gmail, no refusal: may be delivered; stays open
   | { status: "ambiguous" | "record_failed"; messageId: string };
 
 /**
- * Close an unresolved attempt as NOT sent, e.g. after a definite Gmail refusal
- * whose record didn't save, or an intent record that couldn't be confirmed.
- * The mailbox is checked first: if the message is there, it's recorded as
- * contacted instead; if the search is ambiguous, nothing is closed.
+ * Close an unresolved attempt as NOT sent. The mailbox is checked first: if
+ * the message is there it's recorded as contacted instead; an ambiguous
+ * search closes nothing. An attempt that never reached Gmail (no handoff
+ * marker) can then be closed. One that was handed to Gmail is closed only
+ * with a definite refusal (from dispatch's failed_unrecorded result): an
+ * empty Sent search doesn't prove Gmail never accepted it, because search
+ * visibility can lag, so it stays open ("uncertain") and blocks any resend.
  */
-export async function closeAttemptNotSent(companyId: string, reason: string, deps: Deps): Promise<CloseResult> {
+export async function closeAttemptNotSent(companyId: string, refusal: GmailRefusal | null, deps: Deps): Promise<CloseResult> {
   const env = deps.env ?? process.env;
   const f = deps.fetch ?? fetch;
   const cfg = gmailConfig(env);
@@ -223,10 +246,14 @@ export async function closeAttemptNotSent(companyId: string, reason: string, dep
   };
   if (found) {
     const ok = await insert(deps.store, { ...common, kind: "contacted", provider_message_id: found.id, provider_thread_id: found.threadId, recorded_by: "outreach-close" });
-    return ok === "ok" ? { status: "found_sent", providerId: found.id } : { status: "record_failed", messageId: open.rfc822_message_id };
+    return ok === "ok" || ok === "duplicate" ? { status: "found_sent", providerId: found.id } : { status: "record_failed", messageId: open.rfc822_message_id };
   }
-  const ok = await insert(deps.store, { ...common, kind: "send_failed", note: `not sent (checked mailbox): ${reason}`.slice(0, 300), recorded_by: "outreach-close" });
-  return ok === "ok" ? { status: "closed" } : { status: "record_failed", messageId: open.rfc822_message_id };
+  const handedOff = state.events.some((e) => e.kind === "send_handoff" && e.rfc822_message_id === open.rfc822_message_id);
+  const definite = !!refusal && refusal.status >= 400 && refusal.status < 500 && refusal.status !== 429;
+  if (handedOff && !definite) return { status: "uncertain", messageId: open.rfc822_message_id };
+  const note = handedOff ? `not sent: Gmail refused (${refusal!.status}) ${refusal!.message}` : "not sent: never handed to Gmail";
+  const ok = await insert(deps.store, { ...common, kind: "send_failed", note: note.slice(0, 300), recorded_by: "outreach-close" });
+  return ok === "ok" || ok === "duplicate" ? { status: "closed" } : { status: "record_failed", messageId: open.rfc822_message_id };
 }
 
 const OPT_OUT = /\b(unsubscribe|remove me|take me off|stop emailing|do not contact|don't contact|not interested)\b/i;
@@ -237,7 +264,14 @@ const address = (from: string) => (from.match(/<([^>]+)>/)?.[1] ?? from).trim().
  * Record replies, opt-outs and bounces on contacted threads. Idempotent: each
  * provider message is recorded once per kind. Never replies to anyone.
  */
-export async function syncReplies(deps: Deps): Promise<{ status: "not_connected" } | { status: "ok"; recorded: number; checked: number; errors: number }> {
+export type SyncFailure = { company_id: string; kind: NewEvent["kind"]; provider_message_id: string; reason: "refused" | "unknown" };
+export type SyncResult =
+  | { status: "not_connected" }
+  // "incomplete": something wasn't saved (an opt-out may be missing). Failed
+  // events are retried on the next run, because sync re-reads the threads.
+  | { status: "ok" | "incomplete"; recorded: number; already: number; checked: number; threadErrors: number; failures: SyncFailure[] };
+
+export async function syncReplies(deps: Deps): Promise<SyncResult> {
   const env = deps.env ?? process.env;
   const f = deps.fetch ?? fetch;
   const cfg = gmailConfig(env);
@@ -245,8 +279,10 @@ export async function syncReplies(deps: Deps): Promise<{ status: "not_connected"
   if (!cfg || !sender) return { status: "not_connected" };
   const token = await accessToken(cfg, f);
   let recorded = 0;
+  let already = 0;
   let checked = 0;
-  let errors = 0;
+  let threadErrors = 0;
+  const failures: SyncFailure[] = [];
   for (const { company_id, events } of await deps.store.contacted()) {
     const ownAddresses = new Set([sender.address.toLowerCase(), ...events.map((e) => (e.sender ?? "").trim().toLowerCase()).filter(Boolean)]);
     for (const c of events.filter((e) => e.kind === "contacted" && e.provider_thread_id)) {
@@ -255,7 +291,7 @@ export async function syncReplies(deps: Deps): Promise<{ status: "not_connected"
       try {
         messages = await threadMessages(token, c.provider_thread_id!, f);
       } catch {
-        errors++;
+        threadErrors++;
         continue;
       }
       const since = new Date(c.occurred_at).getTime() - 5 * 60_000;
@@ -268,10 +304,11 @@ export async function syncReplies(deps: Deps): Promise<{ status: "not_connected"
         for (const kind of kinds) {
           const r = await insert(deps.store, { company_id, kind, provider_message_id: m.id, provider_thread_id: c.provider_thread_id, recorded_by: "outreach-sync" });
           if (r === "ok") recorded++;
-          else if (r === "unknown") errors++;
+          else if (r === "duplicate") already++; // recorded on an earlier run
+          else failures.push({ company_id, kind, provider_message_id: m.id, reason: r });
         }
       }
     }
   }
-  return { status: "ok", recorded, checked, errors };
+  return { status: failures.length || threadErrors ? "incomplete" : "ok", recorded, already, checked, threadErrors, failures };
 }

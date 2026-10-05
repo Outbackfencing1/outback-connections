@@ -100,6 +100,23 @@ Only one first contact per company is possible. `lib/digital-services/dispatch-g
   - Nothing imports it.
 - **Ten engine reviews (all HOLD):** their repair and re-review live in the private engine, which isn't in this repository. Not touched here.
 
+### Codex's validation of c3c5b37, fixed in this branch
+
+- **Sender:**
+  - A `send_handoff` marker is written before Gmail is called.
+  - `closeAttemptNotSent(company, refusal)` closes only never-handed-off attempts, or ones with a definite 4xx refusal. An empty Sent search on a handed-off, unknown-outcome attempt returns `uncertain` and keeps blocking resends.
+  - `syncReplies()` returns `incomplete` with each unsaved event. Genuine duplicates count as `already`, and failed events are retried next run.
+- **Research:**
+  - The checker no longer crashes on an object-shaped exclusions file (`--exclusions`).
+  - A different contract is an adapter gap (exit 3), not 23 rejections.
+  - Holds and exclusions are preserved.
+  - The real GLM adapter still needs the files attached to the session.
+- **Pilot:** revision 4 (private record `claude-code-three-cleaner-pilot-rev4-2026-10-05`).
+  - The website prospect's false premise is removed; its value is weak, so it's recommended not to be one of the first three.
+  - One form prospect's draft drops its untested claims.
+  - The other form prospect's evidence limits are kept visible.
+  - Approving a revision records the approval only; it sends nothing.
+
 ## 4 Oct 2026: the staff-post clean-up was failing; fixed (branch `ccr-a7a02618-x1gnjy`)
 
 Live check (read-only) before the fix: the 2 and 3 Oct runs of

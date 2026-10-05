@@ -33,14 +33,15 @@
 -- allows one first contact per company, so two concurrent dispatches can't
 -- both succeed.
 -- Sending (lib/digital-services/outreach/): a dispatch first records a
--- 'send_attempt' carrying our own Message-ID, under the same rules, and only
--- then calls the provider. Its outcome is recorded against that attempt:
--- 'contacted' (with the provider's message/thread ids) or 'send_failed' (a
--- definite provider refusal). An attempt with no outcome is unresolved and
--- blocks any further attempt for that company until it's reconciled from the
--- mailbox; it's never retried blindly. Replies, opt-outs and bounces are
--- recorded once per provider message. lib/digital-services/dispatch-guard.ts applies the same rules
--- in the server before any future dispatch.
+-- 'send_attempt' carrying our own Message-ID, under the same rules, then a
+-- 'send_handoff' marker, and only then calls the provider. The outcome is
+-- recorded against that attempt: 'contacted' (with the provider's
+-- message/thread ids) or 'send_failed' (never handed off, or a definite
+-- provider refusal). An attempt with no outcome is unresolved and blocks any
+-- further attempt for that company until it's reconciled from the mailbox;
+-- it's never retried blindly. Replies, opt-outs and bounces are recorded once
+-- per provider message. lib/digital-services/dispatch-guard.ts applies the
+-- same rules in the server before any dispatch.
 --
 -- Rollback: drop table if exists public.digital_services_pilot_events;
 --           drop table if exists public.digital_services_pilot_approvals;
@@ -227,7 +228,7 @@ grant execute on function public.approve_pilot_message(uuid, text) to authentica
 create table if not exists public.digital_services_pilot_events (
   id                   uuid primary key default gen_random_uuid(),
   company_id           text not null references public.digital_services_pilot(id),
-  kind                 text not null check (kind in ('send_attempt', 'send_failed', 'contacted', 'replied', 'opted_out', 'suppressed', 'bounced')),
+  kind                 text not null check (kind in ('send_attempt', 'send_handoff', 'send_failed', 'contacted', 'replied', 'opted_out', 'suppressed', 'bounced')),
   lane                 text check (lane is null or lane in ('cowork', 'engine')),
   draft_id             uuid references public.digital_services_pilot_drafts(id),
   sender               text,
@@ -249,6 +250,9 @@ create unique index if not exists uq_ds_pilot_attempt_per_draft
   on public.digital_services_pilot_events (company_id, draft_id) where kind = 'send_attempt';
 create unique index if not exists uq_ds_pilot_attempt_outcome
   on public.digital_services_pilot_events (rfc822_message_id) where kind in ('contacted', 'send_failed');
+-- One handoff marker per attempt: written just before the provider is called.
+create unique index if not exists uq_ds_pilot_attempt_handoff
+  on public.digital_services_pilot_events (rfc822_message_id) where kind = 'send_handoff';
 create unique index if not exists uq_ds_pilot_provider_message
   on public.digital_services_pilot_events (kind, provider_message_id) where provider_message_id is not null;
 
@@ -262,12 +266,12 @@ declare
   d public.digital_services_pilot_drafts%rowtype;
   missing int;
 begin
-  if new.kind not in ('send_attempt', 'send_failed', 'contacted') then return new; end if;
+  if new.kind not in ('send_attempt', 'send_handoff', 'send_failed', 'contacted') then return new; end if;
   select * into c from public.digital_services_pilot where id = new.company_id for update;
   -- The outcome of a recorded attempt is a fact about what the provider did:
   -- it must match that attempt, and isn't re-gated (a reply arriving after
   -- the send mustn't stop us recording that we sent).
-  if new.kind = 'send_failed' or (new.kind = 'contacted' and new.rfc822_message_id is not null) then
+  if new.kind in ('send_handoff', 'send_failed') or (new.kind = 'contacted' and new.rfc822_message_id is not null) then
     if not exists (select 1 from public.digital_services_pilot_events e
                    where e.company_id = new.company_id and e.kind = 'send_attempt'
                      and e.rfc822_message_id = new.rfc822_message_id

@@ -273,6 +273,10 @@ describe("pilot drafts, approvals and first-contact enforcement", { timeout: 30_
     await expect(ev("send_attempt", d1.id, null)).rejects.toThrow(/own Message-ID/);
     await ev("send_attempt", d1.id, "<a1@outbackconnections.com.au>");
     await expect(ev("send_attempt", d1.id, "<a2@outbackconnections.com.au>")).rejects.toThrow(/unresolved|unique|duplicate/i);
+    // A handoff marker must match the attempt, once.
+    await expect(ev("send_handoff", d1.id, "<nope@outbackconnections.com.au>")).rejects.toThrow(/no matching send attempt/);
+    await ev("send_handoff", d1.id, "<a1@outbackconnections.com.au>");
+    await expect(ev("send_handoff", d1.id, "<a1@outbackconnections.com.au>")).rejects.toThrow(/unique|duplicate/i);
     await expect(ev("contacted", d1.id, "<other@outbackconnections.com.au>")).rejects.toThrow(/no matching send attempt/);
     // A definite provider refusal resolves it; a new revision can then be attempted.
     await ev("send_failed", d1.id, "<a1@outbackconnections.com.au>");
