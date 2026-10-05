@@ -76,6 +76,7 @@ export async function submitDigitalServicesEnquiry(formData: FormData): Promise<
     {
       store: storeFor(),
       now: () => new Date(),
+      log: (m) => console.error(m),
       meta: await requestMeta(),
       // Reference and link only: the customer's details stay in the
       // owner-only queue, not in an inbox.

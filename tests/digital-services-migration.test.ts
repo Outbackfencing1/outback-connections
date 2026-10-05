@@ -67,6 +67,29 @@ describe("digital_services_enquiries migration", { timeout: 30_000 }, () => {
     expect(pol.rows.map((r) => r.roles)).toEqual(["{service_role}"]);
   });
 
+  it("the service role can actually use the table and the purge (explicit grants, not just a policy)", async () => {
+    const pg = await db();
+    await pg.exec(`set role service_role`);
+    const ins = await insert(pg, row("7f8fad5b-d9cb-469f-a165-70867728950e"));
+    const id = (ins.rows[0] as { id: string }).id;
+    await pg.query(`update digital_services_enquiries set status = 'replied' where id = $1`, [id]);
+    const sel = await pg.query<{ status: string }>(`select status from digital_services_enquiries where id = $1`, [id]);
+    expect(sel.rows[0].status).toBe("replied");
+    await pg.query(`select public.purge_old_digital_services_enquiries()`);
+    await pg.query(`delete from digital_services_enquiries where id = $1`, [id]);
+    await pg.exec(`reset role`);
+  });
+
+  it("anon and authenticated are refused outright", async () => {
+    const pg = await db();
+    for (const role of ["anon", "authenticated"]) {
+      await pg.exec(`set role ${role}`);
+      await expect(pg.query(`select * from digital_services_enquiries`)).rejects.toThrow(/permission denied/i);
+      await expect(pg.query(`select public.purge_old_digital_services_enquiries()`)).rejects.toThrow(/permission denied/i);
+      await pg.exec(`reset role`);
+    }
+  });
+
   it("purge removes rows older than 12 months only", async () => {
     const pg = await db();
     await insert(pg, row("5f8fad5b-d9cb-469f-a165-70867728950e"));

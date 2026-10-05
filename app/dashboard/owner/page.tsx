@@ -199,7 +199,11 @@ export default async function OwnerPage({
                 ) : null}
               </p>
               <p className="mt-2 whitespace-pre-wrap text-neutral-700">{r.message}</p>
-              {r.notify_error && <p className="mt-2 text-xs text-red-800">Owner alert failed: {r.notify_error}</p>}
+              {r.notify_error ? (
+                <p className="mt-2 text-xs text-red-800">Owner alert failed: {r.notify_error}</p>
+              ) : !r.notified_at ? (
+                <p className="mt-2 text-xs text-amber-800">Owner alert not confirmed (check the server log for {referenceFor(r.id)}).</p>
+              ) : null}
               <form action={setEnquiryStatus} className="mt-3 flex items-center gap-2">
                 <input type="hidden" name="id" value={r.id} />
                 <select name="status" defaultValue={r.status} className="rounded border border-neutral-300 px-2 py-1 text-xs">

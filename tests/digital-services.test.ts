@@ -94,7 +94,8 @@ describe("validateIntake", () => {
 });
 
 type Saved = Record<string, unknown> & { id: string };
-function fakeStore(opts: { missingTable?: boolean; raceOnInsert?: boolean; recentCount?: number } = {}) {
+function fakeStore(opts: { missingTable?: boolean; raceOnInsert?: boolean; recentCount?: number; markFailures?: number } = {}) {
+  let markFailuresLeft = opts.markFailures ?? 0;
   const rows: Saved[] = [];
   const marks: Array<{ id: string; notified_at: string | null; notify_error: string | null }> = [];
   let n = 0;
@@ -116,6 +117,10 @@ function fakeStore(opts: { missingTable?: boolean; raceOnInsert?: boolean; recen
     },
     markNotified: async (id, patch) => {
       marks.push({ id, ...patch });
+      if (markFailuresLeft > 0) {
+        markFailuresLeft--;
+        return { error: { message: "update failed" } };
+      }
       return { error: null };
     },
   };
@@ -171,6 +176,25 @@ describe("processIntake", () => {
     expect(res).toMatchObject({ ok: true, notified: false });
     expect(rows).toHaveLength(1);
     expect(marks[0].notify_error).toMatch(/network/);
+  });
+
+  it("a failed alert-state write is retried once", async () => {
+    const { store, marks } = fakeStore({ markFailures: 1 });
+    const log = vi.fn();
+    const res = await processIntake(good(), { ...deps(store), log });
+    expect(res).toMatchObject({ ok: true, notified: true });
+    expect(marks).toHaveLength(2);
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("an alert-state write that keeps failing is logged with the reference; the lead is still saved", async () => {
+    const { store, rows, marks } = fakeStore({ markFailures: 5 });
+    const log = vi.fn();
+    const res = await processIntake(good(), { ...deps(store, async () => ({ ok: false, error: "down" })), log });
+    expect(res).toMatchObject({ ok: true, notified: false });
+    expect(rows).toHaveLength(1);
+    expect(marks).toHaveLength(2);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining(referenceFor(rows[0].id)));
   });
 
   it("rate-limits a burst from one IP", async () => {

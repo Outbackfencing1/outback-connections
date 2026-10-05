@@ -29,5 +29,16 @@ export async function GET(req: NextRequest) {
   if (enqError) console.error("[cron] purge_old_enquiries failed:", enqError.message);
   else console.info("[cron] purged", enq, "listing_enquiries rows older than 12 months");
 
-  return NextResponse.json({ ok: true, deleted: data, enquiries_deleted: enqError ? null : enq });
+  // Digital-services enquiries: same 12-month rule. Until that migration is
+  // applied the function doesn't exist; report it without failing the run.
+  const { data: ds, error: dsError } = await admin.rpc("purge_old_digital_services_enquiries");
+  if (dsError) console.error("[cron] purge_old_digital_services_enquiries failed:", dsError.message);
+  else console.info("[cron] purged", ds, "digital_services_enquiries rows older than 12 months");
+
+  return NextResponse.json({
+    ok: true,
+    deleted: data,
+    enquiries_deleted: enqError ? null : enq,
+    digital_services_enquiries_deleted: dsError ? null : ds,
+  });
 }

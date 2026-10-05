@@ -120,6 +120,8 @@ export type IntakeDeps = {
   notifyOwner(reference: string): Promise<{ ok: boolean; error?: string }>;
   now(): Date;
   meta: { ip: string | null; ua: string | null; host: string | null };
+  /** Server-side log for failures that must not reach the customer. */
+  log?: (message: string) => void;
 };
 
 export const RATE_WINDOW_MS = 60 * 60 * 1000;
@@ -130,6 +132,22 @@ const NOT_READY =
 // Table missing (PostgREST / Postgres codes): a readiness failure the user
 // can see, not a silent drop.
 const isMissingTable = (e: DbError) => !!e && (e.code === "42P01" || e.code === "PGRST205" || e.code === "PGRST204");
+
+async function recordAlert(
+  store: IntakeStore,
+  id: string,
+  patch: { notified_at: string | null; notify_error: string | null }
+): Promise<boolean> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const { error } = await store.markNotified(id, patch);
+      if (!error) return true;
+    } catch {
+      // fall through to retry
+    }
+  }
+  return false;
+}
 
 export async function processIntake(input: IntakeInput, deps: IntakeDeps): Promise<IntakeResult> {
   const v = validateIntake(input);
@@ -173,17 +191,22 @@ export async function processIntake(input: IntakeInput, deps: IntakeDeps): Promi
 
   const reference = referenceFor(row.id);
   let notified = false;
+  let patch: { notified_at: string | null; notify_error: string | null };
   try {
     const sent = await deps.notifyOwner(reference);
     notified = sent.ok;
-    await store.markNotified(row.id, {
-      notified_at: sent.ok ? deps.now().toISOString() : null,
-      notify_error: sent.ok ? null : (sent.error ?? "unknown").slice(0, 300),
-    });
+    patch = sent.ok
+      ? { notified_at: deps.now().toISOString(), notify_error: null }
+      : { notified_at: null, notify_error: (sent.error ?? "unknown").slice(0, 300) };
   } catch (e) {
-    await store
-      .markNotified(row.id, { notified_at: null, notify_error: String(e).slice(0, 300) })
-      .catch(() => undefined);
+    patch = { notified_at: null, notify_error: String(e).slice(0, 300) };
+  }
+  // Record the alert outcome; retry once. If it still can't be written, the
+  // row keeps notified_at = null, which the owner queue shows as "alert not
+  // confirmed", and the server log carries the reference.
+  const recorded = await recordAlert(store, row.id, patch);
+  if (!recorded) {
+    deps.log?.(`[digital-services] alert state not recorded for ${reference} (notified=${notified})`);
   }
   return { ok: true, reference, duplicate: false, notified };
 }

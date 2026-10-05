@@ -16,8 +16,8 @@
 -- notified_at / notify_error: the owner alert is sent after the row is saved;
 -- an alert failure is recorded here and never loses the lead.
 --
--- Retention: personal details purged after 12 months, like listing_enquiries
--- (purge function below; schedule it with the existing purge cron).
+-- Retention: personal details purged after 12 months, like listing_enquiries.
+-- The daily /api/cron/purge-auth-events run calls the purge function below.
 --
 -- Rollback: drop function if exists public.purge_old_digital_services_enquiries();
 --           drop table if exists public.digital_services_enquiries;
@@ -66,6 +66,9 @@ create policy "Service role manages digital services enquiries"
   using (true) with check (true);
 
 revoke all on public.digital_services_enquiries from anon, authenticated;
+-- A policy only filters rows; it doesn't grant access. Grant explicitly so
+-- the server keeps working even where Supabase's default grants are tightened.
+grant select, insert, update, delete on public.digital_services_enquiries to service_role;
 
 create or replace function public.purge_old_digital_services_enquiries()
 returns integer
