@@ -13,6 +13,7 @@ research file itself is never committed.
   - Without the exclusions, all 23 rows failed the expected shape. That's now reported as an **adapter gap** (exit 3, no business judged), not as 23 rejections.
 - **Still needed:** the actual return, its exclusions and its request/schema file, attached to this session. Then the GLM adapter can map its fields, validate the schema, request and hash, and run a real dry run. Those files aren't in this cloud session.
 - Reconciliation uses a private export of the companies already held (`--known`). Without it, only within-batch duplicates are caught.
+- Each known or excluded entry must give a usable match key: a website/domain, an ABN, a phone, or a name with its locality. A name on its own is refused as an adapter gap rather than silently never matching.
 - After a person checks the evidence, any accepted candidate goes through the engine's own import (the existing application boundary), not through this script.
 
 ## Expected shape

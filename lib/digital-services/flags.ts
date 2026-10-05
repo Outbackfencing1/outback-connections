@@ -53,3 +53,19 @@ export function alertDestination(env: Record<string, string | undefined> = proce
 export function digitalServicesNoticeShown(env: Record<string, string | undefined> = process.env): boolean {
   return digitalServicesPublic(env) || /^\d{4}-\d{2}-\d{2}$/.test(env.DIGITAL_SERVICES_LAUNCHED_ON?.trim() ?? "");
 }
+
+/**
+ * The daily purge of digital-services enquiries. Before the feature has ever
+ * been switched on, its migration may not be applied, so a missing function
+ * is expected and fine. Any other error, or a missing function once the page
+ * has launched, is a failure the cron must report so it's retried and seen:
+ * enquiries must not outlive the promised 12 months silently.
+ */
+export function purgeOutcome(
+  error: { code?: string; message: string } | null,
+  env: Record<string, string | undefined> = process.env
+): "purged" | "not_installed" | "failed" {
+  if (!error) return "purged";
+  const missing = error.code === "PGRST202" || error.code === "42883";
+  return missing && !digitalServicesNoticeShown(env) ? "not_installed" : "failed";
+}

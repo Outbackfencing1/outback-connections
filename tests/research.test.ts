@@ -124,9 +124,15 @@ describe("reviewResearchBatch", () => {
 
 describe("loadIdentityList", () => {
   it("accepts an array or an object holding one, and names what it found otherwise (never a crash)", () => {
-    expect(loadIdentityList([{ id: "OC-002", business_name: "A" }], "known")).toEqual([{ id: "OC-002", business_name: "A", website: null, abn: null, phone: null, locality: null }]);
+    expect(loadIdentityList([{ id: "OC-002", business_name: "A", suburb: "Orange" }], "known")).toEqual([
+      { id: "OC-002", business_name: "A", website: null, abn: null, phone: null, locality: "Orange" },
+    ]);
     expect(loadIdentityList({ companies: [{ company_id: "OC-003", website: "https://b.example" }] }, "known")[0]).toMatchObject({ id: "OC-003", website: "https://b.example" });
     expect(() => loadIdentityList({ version: 1, generated_at: "x" }, "exclusions")).toThrow(/expected an array of companies .* found version, generated_at/);
-    expect(() => loadIdentityList([{ note: "x" }], "known")).toThrow(/no identity field/);
+    expect(() => loadIdentityList([{ note: "x" }], "known")).toThrow(/no usable identity/);
+    // A name alone (object or bare string) can never match, so it's refused rather than silently ignored.
+    expect(() => loadIdentityList([{ name: "Excluded Cleaning" }], "exclusions")).toThrow(/no usable identity/);
+    expect(() => loadIdentityList(["Excluded Cleaning"], "exclusions")).toThrow(/no usable identity/);
+    expect(() => loadIdentityList([{ name: "X", website: "not a url at all" }], "known")).toThrow(/no usable identity/);
   });
 });

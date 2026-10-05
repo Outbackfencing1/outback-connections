@@ -171,9 +171,10 @@ const LIST_KEYS = ["companies", "known", "existing", "exclusions", "excluded", "
 
 /**
  * A list of companies already held (or excluded): an array, or an object
- * holding one under a common key. Each entry needs at least one identity
- * field. Anything else is an adapter error that names what it found, never a
- * crash.
+ * holding one under a common key. Each entry must yield a usable match key:
+ * a website/domain, an ABN, a phone, or a name with its locality (a name
+ * alone can't be matched). Anything else is an adapter error that names what
+ * it found, never a crash and never a silently unmatchable entry.
  */
 export function loadIdentityList(raw: unknown, label: string): KnownCompany[] {
   let list: unknown[] | null = Array.isArray(raw) ? raw : null;
@@ -196,7 +197,12 @@ export function loadIdentityList(raw: unknown, label: string): KnownCompany[] {
       phone: pick("phone"),
       locality: pick("locality", "suburb", "town"),
     };
-    if (!item.business_name && !item.website && !item.abn && !item.phone) throw new Error(`${label}[${i}]: no identity field (name, website/domain, abn or phone)`);
+    // Every entry must produce at least one match key, or it could never
+    // match and a listed business would pass as new.
+    const k = keys(item);
+    if (!k.domain && !k.abn && !k.phone && !k.name_locality) {
+      throw new Error(`${label}[${i}]: no usable identity (a website/domain, an ABN, a phone, or a name with its locality)`);
+    }
     return item;
   });
 }
