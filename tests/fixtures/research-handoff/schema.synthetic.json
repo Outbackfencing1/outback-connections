@@ -1,0 +1,572 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:outback-connections:research-handoff:0.1-proposed:synthetic-test",
+  "title": "Synthetic test copy of the proposed research handoff schema (constants are placeholders the tests replace)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_id",
+    "request_id",
+    "exclusions_sha256",
+    "actual_model",
+    "started_at",
+    "finished_at",
+    "status",
+    "candidates",
+    "existing_refreshes",
+    "receipt"
+  ],
+  "properties": {
+    "contract_id": {
+      "const": "oc-research-handoff/0.1-proposed"
+    },
+    "request_id": {
+      "const": "synthetic-request-01"
+    },
+    "exclusions_sha256": {
+      "const": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "actual_model": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "partial",
+        "blocked"
+      ]
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "candidate_key",
+          "existing_prospect_id",
+          "business",
+          "locality",
+          "state",
+          "country",
+          "category",
+          "owned_domain",
+          "primary_url",
+          "contact_page_url",
+          "disposition",
+          "duplicate_of",
+          "cleaner_verified",
+          "australia_verified",
+          "offer_fit",
+          "proposal",
+          "evidence",
+          "observed_journey",
+          "actual_checks",
+          "contact_basis_status",
+          "contact_restrictions",
+          "uncertainties",
+          "identity_confidence",
+          "fit_confidence",
+          "sendable"
+        ],
+        "properties": {
+          "candidate_key": {
+            "type": "string",
+            "pattern": "^candidate-[0-9]{3}$"
+          },
+          "existing_prospect_id": {
+            "type": "null"
+          },
+          "business": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "locality": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1000
+          },
+          "state": {
+            "enum": [
+              "NSW",
+              null
+            ]
+          },
+          "country": {
+            "enum": [
+              "AU",
+              null
+            ]
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "owned_domain": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1000
+          },
+          "primary_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri",
+            "maxLength": 2000
+          },
+          "contact_page_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri",
+            "maxLength": 2000
+          },
+          "disposition": {
+            "enum": [
+              "qualified_research",
+              "research_hold",
+              "duplicate_existing",
+              "excluded"
+            ]
+          },
+          "duplicate_of": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^OC-[0-9]{3}$"
+            },
+            "maxItems": 5
+          },
+          "cleaner_verified": {
+            "type": "boolean"
+          },
+          "australia_verified": {
+            "type": "boolean"
+          },
+          "offer_fit": {
+            "enum": [
+              "website_1990",
+              "existing_site_form_490",
+              "no_clear_fit"
+            ]
+          },
+          "proposal": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "source_url",
+                "checked_at",
+                "source_type",
+                "fact_text",
+                "exact_excerpts",
+                "limitations"
+              ],
+              "properties": {
+                "source_url": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 2000
+                },
+                "checked_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "source_type": {
+                  "enum": [
+                    "primary_business_website",
+                    "official_business_social_page",
+                    "discovery_only_directory_or_search"
+                  ]
+                },
+                "fact_text": {
+                  "type": "string",
+                  "maxLength": 4000
+                },
+                "exact_excerpts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 250
+                  },
+                  "maxItems": 5
+                },
+                "limitations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "maxItems": 30
+                }
+              }
+            },
+            "maxItems": 8
+          },
+          "observed_journey": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "actual_checks": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "maxItems": 30
+          },
+          "contact_basis_status": {
+            "const": "not_established"
+          },
+          "contact_restrictions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "maxItems": 30
+          },
+          "uncertainties": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "maxItems": 30
+          },
+          "identity_confidence": {
+            "enum": [
+              "high",
+              "medium",
+              "low",
+              "unknown"
+            ]
+          },
+          "fit_confidence": {
+            "enum": [
+              "high",
+              "medium",
+              "low",
+              "unknown"
+            ]
+          },
+          "sendable": {
+            "const": false
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "disposition": {
+                  "const": "qualified_research"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "owned_domain": {
+                  "type": "string",
+                  "minLength": 3
+                },
+                "primary_url": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 2000
+                },
+                "country": {
+                  "const": "AU"
+                },
+                "state": {
+                  "const": "NSW"
+                },
+                "cleaner_verified": {
+                  "const": true
+                },
+                "australia_verified": {
+                  "const": true
+                },
+                "offer_fit": {
+                  "enum": [
+                    "website_1990",
+                    "existing_site_form_490"
+                  ]
+                },
+                "duplicate_of": {
+                  "maxItems": 0
+                },
+                "evidence": {
+                  "minItems": 1
+                },
+                "identity_confidence": {
+                  "enum": [
+                    "high",
+                    "medium"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "maxItems": 40
+    },
+    "existing_refreshes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "prospect_id",
+          "business",
+          "status",
+          "primary_url",
+          "evidence",
+          "observed_journey",
+          "proposed_offer_fit",
+          "proposal",
+          "actual_checks",
+          "contact_basis_status",
+          "limitations",
+          "sendable"
+        ],
+        "properties": {
+          "prospect_id": {
+            "enum": [
+              "OC-901"
+            ]
+          },
+          "business": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "status": {
+            "enum": [
+              "refreshed",
+              "research_hold",
+              "blocked"
+            ]
+          },
+          "primary_url": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2000
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "source_url",
+                "checked_at",
+                "source_type",
+                "fact_text",
+                "exact_excerpts",
+                "limitations"
+              ],
+              "properties": {
+                "source_url": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 2000
+                },
+                "checked_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "source_type": {
+                  "enum": [
+                    "primary_business_website",
+                    "official_business_social_page",
+                    "discovery_only_directory_or_search"
+                  ]
+                },
+                "fact_text": {
+                  "type": "string",
+                  "maxLength": 4000
+                },
+                "exact_excerpts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 250
+                  },
+                  "maxItems": 5
+                },
+                "limitations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "maxItems": 30
+                }
+              }
+            },
+            "maxItems": 8
+          },
+          "observed_journey": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "proposed_offer_fit": {
+            "enum": [
+              "website_1990",
+              "existing_site_form_490",
+              "no_clear_fit"
+            ]
+          },
+          "proposal": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "actual_checks": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "maxItems": 30
+          },
+          "contact_basis_status": {
+            "const": "not_established"
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "maxItems": 30
+          },
+          "sendable": {
+            "const": false
+          }
+        }
+      },
+      "maxItems": 3
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fresh_qualified_count",
+        "fresh_held_count",
+        "duplicate_count",
+        "excluded_count",
+        "fresh_candidates_inspected",
+        "primary_page_inspections",
+        "elapsed_seconds",
+        "stop_reason",
+        "usage",
+        "usage_exposure",
+        "outbound_sends",
+        "form_submissions",
+        "purchases",
+        "paid_api_activations",
+        "blocking_dependencies",
+        "coverage_limitations"
+      ],
+      "properties": {
+        "fresh_qualified_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "fresh_held_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 40
+        },
+        "duplicate_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 40
+        },
+        "excluded_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 40
+        },
+        "fresh_candidates_inspected": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 40
+        },
+        "primary_page_inspections": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60
+        },
+        "elapsed_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "stop_reason": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "usage": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "usage_exposure": {
+          "enum": [
+            "official_interface_reported",
+            "not_exposed"
+          ]
+        },
+        "outbound_sends": {
+          "const": 0
+        },
+        "form_submissions": {
+          "const": 0
+        },
+        "purchases": {
+          "const": 0
+        },
+        "paid_api_activations": {
+          "const": 0
+        },
+        "blocking_dependencies": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "maxItems": 30
+        },
+        "coverage_limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "maxItems": 30
+        }
+      }
+    }
+  }
+}
