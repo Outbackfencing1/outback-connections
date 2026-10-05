@@ -248,6 +248,7 @@ export async function syncReplies(deps: Deps): Promise<{ status: "not_connected"
   let checked = 0;
   let errors = 0;
   for (const { company_id, events } of await deps.store.contacted()) {
+    const ownAddresses = new Set([sender.address.toLowerCase(), ...events.map((e) => (e.sender ?? "").trim().toLowerCase()).filter(Boolean)]);
     for (const c of events.filter((e) => e.kind === "contacted" && e.provider_thread_id)) {
       checked++;
       let messages;
@@ -259,7 +260,10 @@ export async function syncReplies(deps: Deps): Promise<{ status: "not_connected"
       }
       const since = new Date(c.occurred_at).getTime() - 5 * 60_000;
       for (const m of messages) {
-        if (m.internalDate < since || address(m.from) === sender.address.toLowerCase()) continue;
+        // Our own messages are never replies: Gmail labels them SENT, and the
+        // From is the current alias or the one recorded on the contact (the
+        // alias may have changed since).
+        if (m.internalDate < since || m.labels.includes("SENT") || ownAddresses.has(address(m.from))) continue;
         const kinds: NewEvent["kind"][] = BOUNCE.test(m.from) ? ["bounced"] : OPT_OUT.test(`${m.subject} ${m.snippet}`) ? ["replied", "opted_out"] : ["replied"];
         for (const kind of kinds) {
           const r = await insert(deps.store, { company_id, kind, provider_message_id: m.id, provider_thread_id: c.provider_thread_id, recorded_by: "outreach-sync" });

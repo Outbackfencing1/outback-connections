@@ -234,3 +234,29 @@ test("Joshua's sales controls: draft quote, status, payment evidence, gated deli
     psql(`delete from digital_services_conversations where quote_id in ${q}; delete from digital_services_payments where quote_id in ${q}; delete from digital_services_quotes where customer_label = '${CUSTOMER}'`);
   }
 });
+
+test("the quote list is paged and filtered, so no quote is out of reach", async ({ page }) => {
+  const TAG = `Fixture Paging ${Date.now()}`;
+  psql(
+    `insert into digital_services_quotes (customer_label, offer, amount_cents, terms_version, scope_summary, created_at)
+     select '${TAG} #' || g, 'quote_form_490', 49000, 't', 's', now() - (g || ' minutes')::interval from generate_series(1, 55) g`
+  );
+  psql(`insert into digital_services_quotes (customer_label, offer, amount_cents, terms_version, scope_summary, status) values ('${TAG} withdrawn', 'quote_form_490', 49000, 't', 's', 'withdrawn')`);
+  try {
+    await as(page, "owner");
+    await page.goto("/dashboard/owner");
+    const sales = page.locator("#sales");
+    await expect(sales.getByText(/page 1 of 2/)).toBeVisible();
+    await expect(sales.locator("li", { hasText: `${TAG} #55` })).toHaveCount(0); // oldest is on page 2
+    await sales.getByRole("link", { name: "Older →" }).click();
+    await expect(page).toHaveURL(/qp=2/);
+    await expect(sales.locator("li", { hasText: `${TAG} #55` })).toBeVisible();
+    await expect(sales.locator("li", { hasText: `${TAG} withdrawn` })).toHaveCount(0); // open list hides withdrawn
+    await sales.getByRole("link", { name: /Show all/ }).click();
+    await expect(page).toHaveURL(/qs=all/);
+    await expect(sales.locator("li", { hasText: `${TAG} withdrawn` })).toBeVisible();
+    console.log("[flow] quotes: 56 fixture quotes reachable across pages; withdrawn shown under 'all'");
+  } finally {
+    psql(`delete from digital_services_quotes where customer_label like '${TAG}%'`);
+  }
+});

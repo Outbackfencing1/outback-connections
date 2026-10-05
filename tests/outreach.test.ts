@@ -246,6 +246,24 @@ describe("syncReplies", () => {
   });
 });
 
+describe("syncReplies after the alias changes", () => {
+  it("never counts our own earlier messages as replies", async () => {
+    const store = memoryStore();
+    const OLD = "websites@outbackconnections.com.au";
+    await store.insertEvent({ company_id: "OC-901", kind: "send_attempt", lane: "cowork", draft_id: "d1", sender: OLD, rfc822_message_id: MSGID, recorded_by: "t" });
+    await store.insertEvent({ company_id: "OC-901", kind: "contacted", lane: "cowork", draft_id: "d1", sender: OLD, rfc822_message_id: MSGID, provider_message_id: "gm-1", provider_thread_id: "th-1", recorded_by: "t" });
+    const t = Date.parse("2026-10-07T01:00:00Z");
+    const thread = {
+      messages: [
+        { id: "gm-1", internalDate: String(t), snippet: "Fixture body", payload: { headers: [{ name: "From", value: `Josh <${OLD}>` }] } },
+        { id: "gm-6", internalDate: String(t), snippet: "Follow-up", labelIds: ["SENT"], payload: { headers: [{ name: "From", value: "Josh <someone-else@outbackconnections.com.au>" }] } },
+      ],
+    };
+    const { f } = gmail({ ...base, "/threads/th-1": () => json(thread) });
+    expect(await syncReplies({ store, env: ENV, fetch: f })).toEqual({ status: "ok", recorded: 0, checked: 1, errors: 0 });
+  });
+});
+
 describe("gmail helpers", () => {
   it("reads config from env names only", () => {
     expect(gmailConfig({})).toBeNull();

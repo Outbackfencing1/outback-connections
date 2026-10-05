@@ -37,6 +37,7 @@ scripts/local-stack/stop.sh
   - duplicate evidence (spacing/case changed) is refused;
   - launch is refused until paid in full;
   - a conversation note is logged against the quote.
+- **Quote list:** paged and filtered (open by default, all on request), so 56 fixture quotes stay reachable and a withdrawn one shows under "all".
 
 `seed-pilot.mjs <pack.json>` loads a private pilot pack into the draft pilot
 tables and checks the database's draft hashes match the pack's. Pilot packs

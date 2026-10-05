@@ -6,6 +6,7 @@
 // is fixed, production and launch need evidenced payment).
 import { isTransportCode } from "./queue";
 import type { Offer } from "./pilot";
+import { isCalendarDate } from "./research";
 
 export const QUOTES_TABLE = "digital_services_quotes";
 export const PAYMENTS_TABLE = "digital_services_payments";
@@ -130,8 +131,7 @@ export function parsePayment(form: FormData, today: string): PaymentEvidence | n
   const evidence_ref = text(form.get("evidence_ref"), 200);
   if (typeof quote_id !== "string" || !UUID.test(quote_id)) return null;
   if (!isOneOf(["bank_statement", "provider_record"] as const, source)) return null;
-  if (typeof received_on !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(received_on) || received_on > today) return null;
-  if (Number.isNaN(Date.parse(`${received_on}T00:00:00Z`))) return null;
+  if (typeof received_on !== "string" || !isCalendarDate(received_on) || received_on > today) return null;
   if (!amount_cents || !evidence_ref || evidence_ref.length < 3) return null;
   return { quote_id, amount_cents, received_on, evidence_source: source, evidence_ref };
 }
@@ -158,7 +158,7 @@ export function parseConversation(form: FormData): ConversationEntry | null {
   if (enquiry_id && !UUID.test(enquiry_id)) return null;
   if (!quote_id && !pilot_company_id && !enquiry_id) return null;
   const when = optional(form.get("occurred_on"));
-  if (when && !/^\d{4}-\d{2}-\d{2}$/.test(when)) return null;
+  if (when && !isCalendarDate(when)) return null;
   return { kind, summary, occurred_at: when ? `${when}T12:00:00+10:00` : null, quote_id, pilot_company_id, enquiry_id };
 }
 
@@ -236,6 +236,16 @@ export const SALES_NOTICES: Record<SalesOutcome, { ok: boolean; text: string }> 
   invalid: { ok: false, text: "Not saved: check the fields (evidence reference, amount, date not in the future, a link for notes)." },
   unavailable: { ok: false, text: "Not saved: sales records aren't connected on this environment." },
 };
+
+export const SALES_PAGE_SIZE = 50;
+/** Still being worked: not withdrawn and not yet handed over. */
+export const OPEN_QUOTE_STATUSES: QuoteStatus[] = ["draft", "sent", "accepted"];
+
+/** The quote list's filter ("open" by default, or "all") and page, from the URL. */
+export function quoteListView(qs: unknown, qp: unknown): { filter: "open" | "all"; page: number } {
+  const n = typeof qp === "string" ? Number.parseInt(qp, 10) : 1;
+  return { filter: qs === "all" ? "all" : "open", page: Number.isFinite(n) && n >= 1 ? Math.min(n, 10_000) : 1 };
+}
 
 /** Cents to "A$1,094.50"; null shows as "—". */
 export function money(cents: number | null | undefined): string {

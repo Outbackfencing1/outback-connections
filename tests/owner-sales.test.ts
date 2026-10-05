@@ -57,6 +57,7 @@ describe("sales input", () => {
     expect(parsePayment(fd({ ...ok, evidence_ref: "  " }), "2026-10-05")).toBeNull();
     expect(parsePayment(fd({ ...ok, evidence_source: "screenshot" }), "2026-10-05")).toBeNull();
     expect(parsePayment(fd({ ...ok, amount: "" }), "2026-10-05")).toBeNull();
+    expect(parsePayment(fd({ ...ok, received_on: "2026-02-31" }), "2026-10-05")).toBeNull();
   });
   it("a conversation entry must be linked and of a known kind", () => {
     expect(parseConversation(fd({ kind: "call", summary: "Scope call", quote_id: ID }))).toMatchObject({ kind: "call", quote_id: ID, occurred_at: null });

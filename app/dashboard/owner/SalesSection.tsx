@@ -11,8 +11,10 @@ import {
   CONVERSATION_KINDS,
   DELIVERY_STAGES,
   OFFER_PRICES,
+  OPEN_QUOTE_STATUSES,
   QUOTES_TABLE,
   SALES_NOTICES,
+  SALES_PAGE_SIZE,
   money,
   type QuoteStatus,
   type SalesOutcome,
@@ -70,28 +72,51 @@ export async function SalesSection({
   admin,
   viewQuery,
   outcome,
+  view,
 }: {
   admin: SupabaseClient | null;
   viewQuery: string;
   outcome: SalesOutcome | null;
+  view: { filter: "open" | "all"; page: number };
 }) {
   let quotes: QuoteRow[] | null = null;
   let balances: Balance[] = [];
   let conversations: Conversation[] = [];
+  let total = 0;
   if (admin) {
-    const [q, b, c] = await Promise.all([
-      admin
-        .from(QUOTES_TABLE)
-        .select("id, created_at, customer_label, offer, gst_treatment, terms_version, scope_summary, status, delivery_stage, pilot_company_id, enquiry_id")
-        .order("created_at", { ascending: false })
-        .limit(100),
-      admin.from(BALANCE_VIEW).select("quote_id, total_due_cents, deposit_due_cents, paid_cents, outstanding_cents, deposit_received"),
-      admin.from(CONVERSATIONS_TABLE).select("id, occurred_at, kind, summary, quote_id, pilot_company_id, enquiry_id").order("occurred_at", { ascending: false }).limit(100),
-    ]);
-    if (!q.error) quotes = (q.data as QuoteRow[] | null) ?? [];
-    balances = (b.data as Balance[] | null) ?? [];
-    conversations = (c.data as Conversation[] | null) ?? [];
+    // Paged, so no quote is ever out of reach. "Open" (the default) is every
+    // quote still being worked: not withdrawn and not yet handed over.
+    let list = admin
+      .from(QUOTES_TABLE)
+      .select("id, created_at, customer_label, offer, gst_treatment, terms_version, scope_summary, status, delivery_stage, pilot_company_id, enquiry_id", {
+        count: "exact",
+      });
+    if (view.filter === "open") list = list.in("status", OPEN_QUOTE_STATUSES).neq("delivery_stage", "handed_over");
+    const from = (view.page - 1) * SALES_PAGE_SIZE;
+    const q = await list.order("created_at", { ascending: false }).range(from, from + SALES_PAGE_SIZE - 1);
+    if (!q.error) {
+      quotes = (q.data as QuoteRow[] | null) ?? [];
+      total = q.count ?? quotes.length;
+      const ids = quotes.map((x) => x.id);
+      const COLS = "id, occurred_at, kind, summary, quote_id, pilot_company_id, enquiry_id";
+      const [b, cq, cg] = await Promise.all([
+        ids.length
+          ? admin.from(BALANCE_VIEW).select("quote_id, total_due_cents, deposit_due_cents, paid_cents, outstanding_cents, deposit_received").in("quote_id", ids)
+          : Promise.resolve({ data: [] }),
+        ids.length ? admin.from(CONVERSATIONS_TABLE).select(COLS).in("quote_id", ids).order("occurred_at", { ascending: false }) : Promise.resolve({ data: [] }),
+        admin.from(CONVERSATIONS_TABLE).select(COLS).is("quote_id", null).order("occurred_at", { ascending: false }).limit(50),
+      ]);
+      balances = (b.data as Balance[] | null) ?? [];
+      conversations = [...((cq.data as Conversation[] | null) ?? []), ...((cg.data as Conversation[] | null) ?? [])];
+    }
   }
+  const pages = Math.max(1, Math.ceil(total / SALES_PAGE_SIZE));
+  const listLink = (filter: "open" | "all", page: number) => {
+    const p = new URLSearchParams(viewQuery);
+    p.set("qs", filter);
+    p.set("qp", String(page));
+    return `/dashboard/owner?${p.toString()}#sales`;
+  };
   const notice = outcome ? SALES_NOTICES[outcome] : null;
   const kindLabel = (k: string) => CONVERSATION_KINDS.find((x) => x.value === k)?.label ?? k;
 
@@ -166,8 +191,26 @@ export async function SalesSection({
             </form>
           </details>
 
+          <p className="mt-3 flex flex-wrap gap-3 text-xs text-neutral-700">
+            <span>
+              {total} {view.filter === "open" ? "open " : ""}quote{total === 1 ? "" : "s"} · page {view.page} of {pages}
+            </span>
+            <a className="underline" href={listLink(view.filter === "open" ? "all" : "open", 1)}>
+              {view.filter === "open" ? "Show all, including withdrawn and handed over" : "Show open only"}
+            </a>
+            {view.page > 1 && (
+              <a className="underline" href={listLink(view.filter, view.page - 1)}>
+                ← Newer
+              </a>
+            )}
+            {view.page < pages && (
+              <a className="underline" href={listLink(view.filter, view.page + 1)}>
+                Older →
+              </a>
+            )}
+          </p>
           {quotes.length === 0 ? (
-            <p className="mt-3 text-sm text-neutral-600">No quotes yet.</p>
+            <p className="mt-3 text-sm text-neutral-600">No quotes here.</p>
           ) : (
             <ul className="mt-3 space-y-3">
               {quotes.map((q) => {

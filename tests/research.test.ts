@@ -48,12 +48,16 @@ describe("validateCandidate", () => {
     expect(e).toContain("evidence[0]: claim and an https url with a hostname are required");
     expect(validateCandidate(ok({ website: "https://localhost", public_email: null }), TODAY).errors).toContain("website must be an https URL with a hostname");
   });
+  it("refuses impossible calendar dates", () => {
+    const e = validateCandidate(ok({ evidence: [{ claim: "c", url: "https://fixture-clean.example/x", observed_on: "2026-02-31" }] }), TODAY).errors;
+    expect(e).toContain("evidence[0]: observed_on must be a real past date");
+  });
   it("refuses future observations, bad ABNs, non-https sites and unknown categories", () => {
     const e = validateCandidate(
       ok({ abn: "11 111 111 111", website: "http://fixture.example", category: "plumbing", evidence: [{ claim: "c", url: "https://x.example", observed_on: "2026-12-01" }] }),
       TODAY
     ).errors;
-    expect(e).toEqual(expect.arrayContaining(["abn fails the checksum", "website must be an https URL with a hostname", "category must be cleaning or detailing", "evidence[0]: observed_on must be a past date"]));
+    expect(e).toEqual(expect.arrayContaining(["abn fails the checksum", "website must be an https URL with a hostname", "category must be cleaning or detailing", "evidence[0]: observed_on must be a real past date"]));
   });
 });
 

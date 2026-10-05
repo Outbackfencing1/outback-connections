@@ -22,7 +22,7 @@ import {
 import { HOLD_LABELS, firstContactHolds, type PilotApproval, type PilotDraft, type PilotEvent } from "@/lib/digital-services/dispatch-guard";
 import { PAGE_SIZE, SEARCH_CHUNK, SEARCH_MAX_ROWS, STATUSES, pageFrom, statusesFor, type StatusChange } from "@/lib/digital-services/queue";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { SALES_NOTICES, type SalesOutcome } from "@/lib/digital-services/sales";
+import { SALES_NOTICES, quoteListView, type SalesOutcome } from "@/lib/digital-services/sales";
 import { approvePilotMessage, setEnquiryStatus } from "./actions";
 import { SalesSection } from "./SalesSection";
 import { addConversation } from "./sales-actions";
@@ -102,7 +102,14 @@ export default async function OwnerPage({
   const page = pageFrom(typeof sp.page === "string" ? sp.page : undefined);
   const statuses = statusesFor(statusFilter);
 
-  const viewQuery = new URLSearchParams({ status: statusFilter, ...(q ? { q } : {}), page: String(page) }).toString();
+  const quoteView = quoteListView(sp.qs, sp.qp);
+  const viewQuery = new URLSearchParams({
+    status: statusFilter,
+    ...(q ? { q } : {}),
+    page: String(page),
+    qs: quoteView.filter,
+    qp: String(quoteView.page),
+  }).toString();
   const notice = typeof sp.notice === "string" ? NOTICES[sp.notice as StatusChange] : undefined;
   const pilotNotice = typeof sp.pilot === "string" ? PILOT_NOTICES[sp.pilot] : undefined;
   const salesOutcome = typeof sp.sales === "string" && sp.sales in SALES_NOTICES ? (sp.sales as SalesOutcome) : null;
@@ -323,7 +330,7 @@ export default async function OwnerPage({
         )}
       </section>
 
-      <SalesSection admin={admin} viewQuery={viewQuery} outcome={salesOutcome} />
+      <SalesSection admin={admin} viewQuery={viewQuery} outcome={salesOutcome} view={quoteView} />
 
       <section className="mt-10">
         <h2 className="text-lg font-semibold">Enquiries</h2>

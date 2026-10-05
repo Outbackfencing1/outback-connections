@@ -77,7 +77,7 @@ export function queueViewParams(raw: unknown): URLSearchParams {
   const keep = new URLSearchParams();
   if (typeof raw !== "string") return keep;
   const given = new URLSearchParams(raw.replace(/^\?/, ""));
-  for (const key of ["q", "status", "page"]) {
+  for (const key of ["q", "status", "page", "qs", "qp"]) {
     const v = given.get(key);
     if (v) keep.set(key, v.slice(0, 200));
   }

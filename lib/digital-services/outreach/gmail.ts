@@ -135,15 +135,15 @@ export async function findSent(
   return matches.length > 1 ? "ambiguous" : null;
 }
 
-export type ThreadMessage = { id: string; from: string; subject: string; snippet: string; internalDate: number };
+export type ThreadMessage = { id: string; from: string; subject: string; snippet: string; internalDate: number; labels: string[] };
 
 export async function threadMessages(token: string, threadId: string, f: Fetch = fetch): Promise<ThreadMessage[]> {
-  const t = await get<{ messages?: { id: string; snippet?: string; internalDate?: string; payload?: { headers?: { name: string; value: string }[] } }[] }>(
+  const t = await get<{ messages?: { id: string; snippet?: string; internalDate?: string; labelIds?: string[]; payload?: { headers?: { name: string; value: string }[] } }[] }>(
     token,
     `/threads/${encodeURIComponent(threadId)}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`,
     f
   );
   const h = (m: { payload?: { headers?: { name: string; value: string }[] } }, n: string) =>
     m.payload?.headers?.find((x) => x.name.toLowerCase() === n)?.value ?? "";
-  return (t.messages ?? []).map((m) => ({ id: m.id, from: h(m, "from"), subject: h(m, "subject"), snippet: m.snippet ?? "", internalDate: Number(m.internalDate ?? 0) }));
+  return (t.messages ?? []).map((m) => ({ id: m.id, from: h(m, "from"), subject: h(m, "subject"), snippet: m.snippet ?? "", internalDate: Number(m.internalDate ?? 0), labels: m.labelIds ?? [] }));
 }

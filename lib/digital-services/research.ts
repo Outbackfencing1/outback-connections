@@ -71,6 +71,14 @@ export function validAbn(raw: string): boolean {
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 
+/** YYYY-MM-DD that is a real calendar date (2026-02-31 isn't). */
+export function isCalendarDate(v: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (!m) return false;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return d.toISOString().slice(0, 10) === v;
+}
+
 /** A parsed https URL with a real hostname (a dot, no spaces), or null. */
 export function httpsUrl(raw: string | null): URL | null {
   if (!raw || !/^https:\/\//i.test(raw)) return null;
@@ -111,7 +119,7 @@ export function validateCandidate(raw: unknown, today: string): { candidate: Can
       const url = str(ev.url);
       const observed_on = str(ev.observed_on);
       if (!claim || !httpsUrl(url)) errors.push(`evidence[${i}]: claim and an https url with a hostname are required`);
-      else if (!observed_on || !/^\d{4}-\d{2}-\d{2}$/.test(observed_on) || observed_on > today) errors.push(`evidence[${i}]: observed_on must be a past date`);
+      else if (!observed_on || !isCalendarDate(observed_on) || observed_on > today) errors.push(`evidence[${i}]: observed_on must be a real past date`);
       else evidence.push({ claim, url: url!, observed_on });
     }
   }
