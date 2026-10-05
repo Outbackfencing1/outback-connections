@@ -197,6 +197,8 @@ describe("pilot drafts, approvals and first-contact enforcement", { timeout: 30_
     await pg.exec(PILOT_SQL);
     await pg.exec(`insert into digital_services_pilot (id, company, lane, reserved_for, contact_address, contact_basis, contact_basis_confirmed_at, contact_basis_confirmed_by, contact_basis_confirmed_for)
                    values ('OC-901', 'Fixture Cleaners', 'email', 'cowork', 'info@example.test', 'published on the business contact page', now(), 'Joshua', 'info@example.test')`);
+    // A complete reply-sync run in the last hour (dispatch requires one).
+    await pg.exec(`insert into digital_services_outreach_sync_runs (started_at, finished_at, status) values (now() - interval '61 minutes', now() - interval '1 hour', 'ok')`);
     const ins = async (rev: number, subject: string, body: string) =>
       (await pg.query<{ id: string; sha256: string }>(
         `insert into digital_services_pilot_drafts (company_id, revision, subject, body, sha256, author) values ('OC-901', $1, $2, $3, 'ignored', 'claude-code') returning id, sha256`,
@@ -262,11 +264,11 @@ describe("pilot drafts, approvals and first-contact enforcement", { timeout: 30_
   it("a send records its intent first; its outcome must match it; an unresolved attempt blocks another", async () => {
     const { pg, ins, approveAll } = await seeded();
     const d1 = await ins(1, "Subject", "Body");
-    const ev = (kind: string, draftId: string | null, msgId: string | null, extra: { provider?: string } = {}) =>
+    const ev = (kind: string, draftId: string | null, msgId: string | null, extra: { provider?: string; recipient?: string } = {}) =>
       pg.query(
-        `insert into digital_services_pilot_events (company_id, kind, lane, draft_id, sender, rfc822_message_id, provider_message_id, recorded_by)
-         values ('OC-901', $1, 'cowork', $2, 'josh@outbackconnections.com.au', $3, $4, 'test')`,
-        [kind, draftId, msgId, extra.provider ?? null]
+        `insert into digital_services_pilot_events (company_id, kind, lane, draft_id, sender, recipient, rfc822_message_id, provider_message_id, recorded_by)
+         values ('OC-901', $1, 'cowork', $2, 'josh@outbackconnections.com.au', $5, $3, $4, 'test')`,
+        [kind, draftId, msgId, extra.provider ?? null, extra.recipient ?? "INFO@example.test "]
       );
     await expect(ev("send_attempt", d1.id, "<a1@outbackconnections.com.au>")).rejects.toThrow(/lacks 4 approval/); // same gate as contact
     await approveAll(d1);
@@ -291,6 +293,39 @@ describe("pilot drafts, approvals and first-contact enforcement", { timeout: 30_
     await expect(
       pg.query(`insert into digital_services_pilot_events (company_id, kind, provider_message_id, recorded_by) values ('OC-901', 'replied', 'gm-reply-1', 'sync')`)
     ).rejects.toThrow(/unique|duplicate/i); // reply sync is idempotent
+  });
+
+  it("a send attempt must name the confirmed recipient; reply sync must be healthy and recent for any first contact", async () => {
+    const { pg, ins, approveAll, contact } = await seeded();
+    const d = await ins(1, "Subject", "Body");
+    await approveAll(d);
+    const attempt = (recipient: string | null) =>
+      pg.query(
+        `insert into digital_services_pilot_events (company_id, kind, lane, draft_id, sender, recipient, rfc822_message_id, recorded_by)
+         values ('OC-901', 'send_attempt', 'cowork', $1, 'josh@outbackconnections.com.au', $2, '<r1@outbackconnections.com.au>', 'test')`,
+        [d.id, recipient]
+      );
+    await expect(attempt(null)).rejects.toThrow(/confirmed recipient/);
+    await expect(attempt("someone-else@example.test")).rejects.toThrow(/confirmed recipient/);
+    // The latest run is what counts: an incomplete run after an ok one blocks.
+    await pg.exec(`insert into digital_services_outreach_sync_runs (started_at, finished_at, status, problems) values (now() - interval '2 minutes', now() - interval '1 minute', 'incomplete', 1)`);
+    await expect(attempt("info@example.test")).rejects.toMatchObject({ code: "OC409" });
+    await expect(contact(d.id)).rejects.toThrow(/reply sync is not healthy/);
+    // A stale ok run (over 6 hours) blocks too.
+    await pg.exec(`delete from digital_services_outreach_sync_runs; insert into digital_services_outreach_sync_runs (started_at, finished_at, status) values (now() - interval '7 hours', now() - interval '7 hours', 'ok')`);
+    await expect(attempt("info@example.test")).rejects.toThrow(/reply sync is not healthy/);
+    await pg.exec(`insert into digital_services_outreach_sync_runs (started_at, finished_at, status) values (now() - interval '2 minutes', now() - interval '1 minute', 'ok')`);
+    await attempt("info@example.test");
+    // Sync runs are a record: insert and read only for the service role.
+    await pg.exec(`set role service_role`);
+    await expect(pg.query(`update digital_services_outreach_sync_runs set status = 'ok'`)).rejects.toThrow(/permission denied/i);
+    await expect(pg.query(`delete from digital_services_outreach_sync_runs`)).rejects.toThrow(/permission denied/i);
+    await pg.exec(`reset role`);
+    for (const role of ["anon", "authenticated"]) {
+      await pg.exec(`set role ${role}`);
+      await expect(pg.query(`select * from digital_services_outreach_sync_runs`)).rejects.toThrow(/permission denied/i);
+      await pg.exec(`reset role`);
+    }
   });
 
   it("suppression and an unconfirmed contact basis block first contact", async () => {
@@ -357,6 +392,8 @@ describe("pilot evidence revisions and frozen approvals", { timeout: 30_000 }, (
     await pg.exec(PILOT_SQL);
     await pg.exec(`insert into digital_services_pilot (id, company, lane, reserved_for, contact_address, contact_basis, contact_basis_confirmed_at, contact_basis_confirmed_by, contact_basis_confirmed_for)
                    values ('OC-901', 'Fixture Cleaners', 'email', 'cowork', 'info@example.test', 'published on the business contact page', now(), 'Joshua', 'info@example.test')`);
+    // A complete reply-sync run in the last hour (dispatch requires one).
+    await pg.exec(`insert into digital_services_outreach_sync_runs (started_at, finished_at, status) values (now() - interval '61 minutes', now() - interval '1 hour', 'ok')`);
     const evidence = (url = "https://fixture.example/") =>
       pg.query(`insert into digital_services_pilot_evidence (company_id, source_url, source_type, checked_at, fact_text, limitations, recorded_by)
                 values ('OC-901', $1, 'primary_business_website', now(), 'Fixture fact', '{"Public page only"}', 'claude-code') returning id`, [url]);

@@ -183,3 +183,63 @@ The dashboard's pilot table links each latest draft to its review screen. Before
 Delete the five Vercel variables, delete the OAuth client (Cloud console →
 Credentials), and remove the alias in Admin console if it's no longer wanted.
 Revoke the token at <https://myaccount.google.com/permissions> as the mailbox user.
+
+## Failure and recovery (tested offline, Gmail mocked)
+
+`tests/outreach.test.ts` covers each case below. The database rules are in `tests/digital-services-migration.test.ts`.
+
+**Lost responses**
+- A lost intent, handoff or outcome write is reported as unrecorded, together with its Message-ID and proof. It is never reported as a clean "not sent".
+- A refused closure is treated the same way as a lost one.
+
+**Delayed indexing**
+- A message not found in Sent yet stays unresolved and blocks the company. It is recorded once it shows up.
+- A handed-off attempt is never closed as "not sent" on an empty search.
+
+**Frozen recipient and subject**
+- Every record of an attempt carries the recipient it was sent to.
+- Reconciliation searches for that recipient and the draft's subject (drafts are immutable), not the company's current address.
+- A legacy attempt with no recipient is searched by Message-ID only.
+- The database refuses an attempt whose recipient isn't the confirmed contact address.
+
+**Pagination**
+- Sent and reply searches follow Gmail's page tokens, up to 10 pages.
+- More pages than that is "ambiguous" or incomplete, never "not found".
+- The store reads contacted companies page by page.
+
+**Timeouts**
+- Every Gmail call stops after 20 seconds.
+- A send that times out is "unconfirmed": reconcile it, never resend.
+- A search or token refresh that times out is a sync error, never "nothing there".
+
+**Replies outside the thread**
+- Sync reads each contacted thread. It also reads mail from each contacted recipient outside that thread, and bounces matched to our Message-ID or failed recipient.
+- A sender shared by two contacted companies, or a bounce matching more than one, isn't guessed. It is listed in `unmatched` and the run is incomplete.
+- A bounce that matches nothing we sent is ignored.
+
+**Duplicate inbound mail**
+- Each provider message is recorded once per kind. A re-read counts as `already`.
+
+**Alias changes**
+- Messages from the current alias, or from any alias recorded on a send, are never counted as replies.
+
+**Failed persistence**
+- An unsaved reply, opt-out or bounce, an unreadable thread, a failed search or an unmatched item makes the run `incomplete`.
+- The next run re-reads the mail and saves it.
+
+**Sync health gates dispatch**
+- `runReplySync()` records every run's outcome in `digital_services_outreach_sync_runs`. That includes a run that throws, which is recorded as `failed`.
+- `dispatchFirstContact()` holds with `reply_sync_unhealthy` unless the latest run is `ok` and under 6 hours old.
+- The database's contact guard enforces the same rule for any first contact or attempt, so a background job can't bypass it.
+- An unsaved sync record shows up as `run_recorded: false`.
+
+**No bypass**
+- Dispatch re-checks every hold before touching Gmail:
+  - owner approval;
+  - latest revision with current evidence;
+  - suppression;
+  - an unresolved attempt;
+  - reply sync health.
+- The database checks them again on the intent record.
+
+Nothing here is wired to a route, button or schedule. Sending stays off.

@@ -53,7 +53,8 @@
 -- evidence revision are copied from the draft by the database (never taken
 -- from the caller). An approval never sends anything.
 --
--- Rollback: drop table if exists public.digital_services_pilot_evidence;
+-- Rollback: drop table if exists public.digital_services_outreach_sync_runs;
+--           drop table if exists public.digital_services_pilot_evidence;
 --           drop function if exists public.ds_pilot_evidence_bump();
 --           drop function if exists public.ds_pilot_company_guard();
 --           drop table if exists public.digital_services_pilot_events;
@@ -291,6 +292,30 @@ create unique index if not exists uq_ds_pilot_first_contact
 -- Columns added after the first draft (no-ops on a fresh apply).
 alter table public.digital_services_pilot_events add column if not exists provider_thread_id text;
 alter table public.digital_services_pilot_events add column if not exists rfc822_message_id text;
+-- The address an attempt was sent to, frozen on its records: reconciliation
+-- searches for what was actually sent even if the company's address changes.
+alter table public.digital_services_pilot_events add column if not exists recipient text check (recipient is null or char_length(recipient) <= 254);
+
+-- --------------------------------------------------------- reply sync runs
+-- Each reply-sync run's outcome. A dispatch needs a complete ('ok') run in the
+-- last 6 hours, so an opt-out or bounce a failed run missed can't be sent past.
+create table if not exists public.digital_services_outreach_sync_runs (
+  id           uuid primary key default gen_random_uuid(),
+  started_at   timestamptz not null,
+  finished_at  timestamptz not null,
+  status       text not null check (status in ('ok', 'incomplete', 'failed')),
+  checked      integer not null default 0 check (checked >= 0),
+  recorded     integer not null default 0 check (recorded >= 0),
+  problems     integer not null default 0 check (problems >= 0),
+  note         text check (note is null or char_length(note) <= 300)
+);
+create index if not exists ix_ds_outreach_sync_runs_finished on public.digital_services_outreach_sync_runs (finished_at desc);
+alter table public.digital_services_outreach_sync_runs enable row level security;
+drop policy if exists "Service role records outreach sync runs" on public.digital_services_outreach_sync_runs;
+create policy "Service role records outreach sync runs" on public.digital_services_outreach_sync_runs for all to service_role using (true) with check (true);
+revoke all on public.digital_services_outreach_sync_runs from anon, authenticated;
+-- A record of what happened: insert and read only.
+grant select, insert on public.digital_services_outreach_sync_runs to service_role;
 -- One attempt per draft revision, one outcome per attempt, and a provider
 -- message is recorded once per kind, so reply sync can run repeatedly.
 create unique index if not exists uq_ds_pilot_attempt_per_draft
@@ -341,6 +366,12 @@ begin
   if new.kind = 'send_attempt' and (new.rfc822_message_id is null or new.rfc822_message_id !~ '^<[^<>@\s]+@[^<>@\s]+>$') then
     raise exception 'a send attempt needs its own Message-ID' using errcode = 'OC403';
   end if;
+  -- No first contact while reply sync is unhealthy: it may have missed an opt-out or bounce.
+  if not exists (select 1 from public.digital_services_outreach_sync_runs r
+                 where r.finished_at = (select max(finished_at) from public.digital_services_outreach_sync_runs)
+                   and r.status = 'ok' and r.finished_at > now() - interval '6 hours') then
+    raise exception 'reply sync is not healthy (no complete run in the last 6 hours)' using errcode = 'OC409';
+  end if;
   if c.lane <> 'email' then raise exception 'not an email-lane company' using errcode = 'OC403'; end if;
   if new.lane is null or c.reserved_for is null or c.reserved_for <> new.lane then
     raise exception 'company is not reserved for this lane' using errcode = 'OC403';
@@ -352,6 +383,9 @@ begin
   if c.contact_address is null or c.contact_basis_confirmed_at is null
      or lower(btrim(coalesce(c.contact_basis_confirmed_for, ''))) <> lower(btrim(c.contact_address)) then
     raise exception 'contact basis not confirmed for the current address' using errcode = 'OC403';
+  end if;
+  if new.kind = 'send_attempt' and lower(btrim(coalesce(new.recipient, ''))) <> lower(btrim(c.contact_address)) then
+    raise exception 'a send attempt must name the confirmed recipient' using errcode = 'OC403';
   end if;
   select * into d from public.digital_services_pilot_drafts where id = new.draft_id;
   if d.id is null or d.company_id <> new.company_id

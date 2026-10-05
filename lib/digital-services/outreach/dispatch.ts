@@ -18,7 +18,7 @@
 import { firstContactHolds, type Hold, type Lane, type PilotApproval, type PilotCompany, type PilotDraft, type PilotEvent } from "../dispatch-guard";
 import { outreachSender } from "../pilot";
 import { isTransportCode } from "../queue";
-import { GmailError, accessToken, buildRaw, confirmSendAs, findSent, gmailConfig, newMessageId, sendRaw, threadMessages, type Fetch } from "./gmail";
+import { GmailError, accessToken, buildRaw, confirmSendAs, findSent, gmailConfig, messageMeta, newMessageId, searchMessages, sendRaw, threadMessages, type Fetch } from "./gmail";
 
 export type StoredEvent = PilotEvent & {
   occurred_at: string;
@@ -26,6 +26,8 @@ export type StoredEvent = PilotEvent & {
   draft_id?: string | null;
   provider_thread_id?: string | null;
   sender?: string | null;
+  /** The address the attempt was sent to, frozen on the attempt (the company's address may change later). */
+  recipient?: string | null;
 };
 export type CompanyState = {
   company: PilotCompany;
@@ -40,6 +42,7 @@ export type NewEvent = {
   lane?: Lane;
   draft_id?: string | null;
   sender?: string;
+  recipient?: string | null;
   rfc822_message_id?: string | null;
   provider_message_id?: string | null;
   provider_thread_id?: string | null;
@@ -47,11 +50,24 @@ export type NewEvent = {
   note?: string;
 };
 export type InsertResult = { error: { code?: string; message: string } | null };
+export type SyncRun = { status: "ok" | "incomplete" | "failed"; finished_at: string };
+export type NewSyncRun = SyncRun & { started_at: string; checked: number; recorded: number; problems: number; note: string | null };
 export interface OutreachStore {
   load(companyId: string): Promise<CompanyState | null>;
   insertEvent(e: NewEvent): Promise<InsertResult>;
   /** Every company with a recorded first contact, for reply sync. */
   contacted(): Promise<{ company_id: string; events: StoredEvent[] }[]>;
+  /** The latest recorded reply-sync run (null if none, or unreadable). */
+  lastSync(): Promise<SyncRun | null>;
+  recordSync(run: NewSyncRun): Promise<InsertResult>;
+}
+
+/** A dispatch needs a complete reply sync this recent, so a missed opt-out or bounce can't be sent past. */
+export const SYNC_MAX_AGE_HOURS = 6;
+export function replySyncHealthy(last: SyncRun | null, now: Date): boolean {
+  if (!last || last.status !== "ok") return false;
+  const t = Date.parse(last.finished_at);
+  return !Number.isNaN(t) && t <= now.getTime() + 60_000 && now.getTime() - t <= SYNC_MAX_AGE_HOURS * 3_600_000;
 }
 
 type Env = Record<string, string | undefined>;
@@ -59,7 +75,7 @@ type Deps = { store: OutreachStore; env?: Env; fetch?: Fetch; now?: () => Date; 
 
 export type DispatchResult =
   | { status: "disabled" | "not_connected" | "sender_not_send_as" | "unknown_company" }
-  | { status: "held"; holds: Hold[] }
+  | { status: "held"; holds: (Hold | "reply_sync_unhealthy")[] }
   | { status: "refused"; reason: string } // the database refused the intent record: nothing sent
   | { status: "not_sent"; reason: string } // intent couldn't be confirmed, so nothing was sent
   | { status: "not_sent_unrecorded"; messageId: string; reason: string; proof: NotSentProof } // nothing sent, but closing the attempt failed: closeAttemptNotSent() with this proof
@@ -118,13 +134,26 @@ export async function dispatchFirstContact(companyId: string, lane: Lane, deps: 
     sender,
     ownerUserId: state.ownerUserId,
   });
-  if (holds.length || !draft || !sender || !state.company.contact_address) return { status: "held", holds };
+  // A reply sync that failed, was incomplete or is stale may have missed an
+  // opt-out or bounce: nothing is dispatched until a complete one is recorded.
+  let lastSync: SyncRun | null = null;
+  try {
+    lastSync = await deps.store.lastSync();
+  } catch {
+    lastSync = null;
+  }
+  const allHolds: (Hold | "reply_sync_unhealthy")[] = [...holds];
+  if (!replySyncHealthy(lastSync, (deps.now ?? (() => new Date()))())) allHolds.push("reply_sync_unhealthy");
+  if (allHolds.length || !draft || !sender || !state.company.contact_address) return { status: "held", holds: allHolds };
 
   const token = await accessToken(cfg, f);
   if (!(await confirmSendAs(token, sender.address, f))) return { status: "sender_not_send_as" };
 
   const messageId = (deps.messageId ?? newMessageId)();
-  const base = { company_id: companyId, lane, draft_id: draft.id, sender: sender.address, rfc822_message_id: messageId, recorded_by: RECORDER };
+  // The recipient is frozen on every record of this attempt: reconciliation
+  // searches for what was actually sent, even if the company's address changes.
+  const recipient = state.company.contact_address;
+  const base = { company_id: companyId, lane, draft_id: draft.id, sender: sender.address, recipient, rfc822_message_id: messageId, recorded_by: RECORDER };
   const intent = await insert(deps.store, { ...base, kind: "send_attempt" });
   if (intent === "refused" || intent === "duplicate") return { status: "refused", reason: "the database refused the send attempt" };
   if (intent === "unknown") {
@@ -153,7 +182,7 @@ export async function dispatchFirstContact(companyId: string, lane: Lane, deps: 
 
   let sent: { id: string; threadId: string };
   try {
-    const raw = buildRaw({ from: sender.address, to: state.company.contact_address, subject: draft.subject, body: draft.body, messageId, date: (deps.now ?? (() => new Date()))() });
+    const raw = buildRaw({ from: sender.address, to: recipient, subject: draft.subject, body: draft.body, messageId, date: (deps.now ?? (() => new Date()))() });
     sent = await sendRaw(token, raw, f);
   } catch (e) {
     if (e instanceof GmailError && e.outcome === "definite") {
@@ -188,11 +217,8 @@ export async function reconcileAttempt(companyId: string, deps: Deps): Promise<R
   if (!open?.rfc822_message_id) return { status: "nothing_unresolved" };
   const draft = state.drafts.find((d) => d.id === open.draft_id);
   const token = await accessToken(cfg, f);
-  const found = await findSent(
-    token,
-    { messageId: open.rfc822_message_id, to: state.company.contact_address ?? "", subject: draft?.subject ?? "", since: new Date(open.occurred_at) },
-    f
-  );
+  // Search by what this attempt actually used: its frozen recipient and its draft's subject.
+  const found = await findSent(token, { messageId: open.rfc822_message_id, to: open.recipient ?? null, subject: draft?.subject ?? null, since: new Date(open.occurred_at) }, f);
   if (found === "ambiguous") return { status: "ambiguous", messageId: open.rfc822_message_id };
   // Not found stays unresolved: Gmail may still be processing it, or it went
   // out under another id. Josh decides after checking Sent; nothing resends.
@@ -203,6 +229,7 @@ export async function reconcileAttempt(companyId: string, deps: Deps): Promise<R
     lane: open.lane ?? undefined,
     draft_id: open.draft_id ?? null,
     sender: open.sender ?? undefined,
+    recipient: open.recipient ?? null,
     rfc822_message_id: open.rfc822_message_id,
     provider_message_id: found.id,
     provider_thread_id: found.threadId,
@@ -249,17 +276,14 @@ export async function closeAttemptNotSent(companyId: string, proof: NotSentProof
   if (!open?.rfc822_message_id) return { status: "nothing_unresolved" };
   const draft = state.drafts.find((d) => d.id === open.draft_id);
   const token = await accessToken(cfg, f);
-  const found = await findSent(
-    token,
-    { messageId: open.rfc822_message_id, to: state.company.contact_address ?? "", subject: draft?.subject ?? "", since: new Date(open.occurred_at) },
-    f
-  );
+  const found = await findSent(token, { messageId: open.rfc822_message_id, to: open.recipient ?? null, subject: draft?.subject ?? null, since: new Date(open.occurred_at) }, f);
   if (found === "ambiguous") return { status: "ambiguous", messageId: open.rfc822_message_id };
   const common = {
     company_id: companyId,
     lane: open.lane ?? undefined,
     draft_id: open.draft_id ?? null,
     sender: open.sender ?? undefined,
+    recipient: open.recipient ?? null,
     rfc822_message_id: open.rfc822_message_id,
   };
   if (found) {
@@ -283,15 +307,30 @@ const BOUNCE = /^(.*<)?(mailer-daemon|postmaster)@/i;
 const address = (from: string) => (from.match(/<([^>]+)>/)?.[1] ?? from).trim().toLowerCase();
 
 /**
- * Record replies, opt-outs and bounces on contacted threads. Idempotent: each
- * provider message is recorded once per kind. Never replies to anyone.
+ * Record replies, opt-outs and bounces for contacted companies. Idempotent:
+ * each provider message is recorded once per kind. Never replies to anyone.
+ * Reads (a) each contacted thread, (b) mail from each contacted recipient
+ * outside that thread (people often reply fresh), and (c) bounces matched to
+ * our Message-IDs or failed recipients. A sender address shared by more than
+ * one contacted company, or a bounce that matches more than one, isn't
+ * guessed: it's reported for a person and makes the run incomplete.
  */
 export type SyncFailure = { company_id: string; kind: NewEvent["kind"]; provider_message_id: string; reason: "refused" | "unknown" };
+export type Unmatched = { provider_message_id: string; reason: "ambiguous_sender" | "ambiguous_bounce"; companies: string[] };
 export type SyncResult =
   | { status: "not_connected" }
-  // "incomplete": something wasn't saved (an opt-out may be missing). Failed
-  // events are retried on the next run, because sync re-reads the threads.
-  | { status: "ok" | "incomplete"; recorded: number; already: number; checked: number; threadErrors: number; failures: SyncFailure[] };
+  // "incomplete": something wasn't read or saved (an opt-out may be missing).
+  // Failed events are retried on the next run, because sync re-reads the mail.
+  | {
+      status: "ok" | "incomplete";
+      recorded: number;
+      already: number;
+      checked: number;
+      threadErrors: number;
+      searchErrors: number;
+      failures: SyncFailure[];
+      unmatched: Unmatched[];
+    };
 
 export async function syncReplies(deps: Deps): Promise<SyncResult> {
   const env = deps.env ?? process.env;
@@ -304,9 +343,37 @@ export async function syncReplies(deps: Deps): Promise<SyncResult> {
   let already = 0;
   let checked = 0;
   let threadErrors = 0;
+  let searchErrors = 0;
   const failures: SyncFailure[] = [];
-  for (const { company_id, events } of await deps.store.contacted()) {
-    const ownAddresses = new Set([sender.address.toLowerCase(), ...events.map((e) => (e.sender ?? "").trim().toLowerCase()).filter(Boolean)]);
+  const unmatched: Unmatched[] = [];
+  const companies = await deps.store.contacted();
+  // Our own addresses: the current alias and every alias recorded on any send.
+  const own = new Set([sender.address.toLowerCase(), ...companies.flatMap(({ events }) => events.map((e) => (e.sender ?? "").trim().toLowerCase())).filter(Boolean)]);
+  const byRecipient = new Map<string, string[]>();
+  const byMessageId = new Map<string, string>();
+  const firstContact = new Map<string, number>();
+  for (const { company_id, events } of companies) {
+    for (const e of events.filter((x) => x.kind === "contacted")) {
+      const to = (e.recipient ?? "").trim().toLowerCase();
+      if (to && !(byRecipient.get(to) ?? []).includes(company_id)) byRecipient.set(to, [...(byRecipient.get(to) ?? []), company_id]);
+      if (e.rfc822_message_id) byMessageId.set(e.rfc822_message_id.toLowerCase(), company_id);
+      const t = new Date(e.occurred_at).getTime();
+      firstContact.set(company_id, Math.min(firstContact.get(company_id) ?? t, t));
+    }
+  }
+  const seen = new Set<string>();
+  const record = async (company_id: string, m: { id: string; from: string; subject: string; snippet: string }, threadId: string | null) => {
+    const kinds: NewEvent["kind"][] = BOUNCE.test(m.from) ? ["bounced"] : OPT_OUT.test(`${m.subject} ${m.snippet}`) ? ["replied", "opted_out"] : ["replied"];
+    for (const kind of kinds) {
+      const r = await insert(deps.store, { company_id, kind, provider_message_id: m.id, provider_thread_id: threadId, recorded_by: "outreach-sync" });
+      if (r === "ok") recorded++;
+      else if (r === "duplicate") already++; // recorded on an earlier run
+      else failures.push({ company_id, kind, provider_message_id: m.id, reason: r });
+    }
+  };
+
+  // (a) The contacted threads.
+  for (const { company_id, events } of companies) {
     for (const c of events.filter((e) => e.kind === "contacted" && e.provider_thread_id)) {
       checked++;
       let messages;
@@ -318,19 +385,104 @@ export async function syncReplies(deps: Deps): Promise<SyncResult> {
       }
       const since = new Date(c.occurred_at).getTime() - 5 * 60_000;
       for (const m of messages) {
+        seen.add(m.id);
         // Our own messages are never replies: Gmail labels them SENT, and the
-        // From is the current alias or the one recorded on the contact (the
-        // alias may have changed since).
-        if (m.internalDate < since || m.labels.includes("SENT") || ownAddresses.has(address(m.from))) continue;
-        const kinds: NewEvent["kind"][] = BOUNCE.test(m.from) ? ["bounced"] : OPT_OUT.test(`${m.subject} ${m.snippet}`) ? ["replied", "opted_out"] : ["replied"];
-        for (const kind of kinds) {
-          const r = await insert(deps.store, { company_id, kind, provider_message_id: m.id, provider_thread_id: c.provider_thread_id, recorded_by: "outreach-sync" });
-          if (r === "ok") recorded++;
-          else if (r === "duplicate") already++; // recorded on an earlier run
-          else failures.push({ company_id, kind, provider_message_id: m.id, reason: r });
-        }
+        // From is the current alias or one recorded on a send (it may change).
+        if (m.internalDate < since || m.labels.includes("SENT") || own.has(address(m.from))) continue;
+        await record(company_id, m, c.provider_thread_id!);
       }
     }
   }
-  return { status: failures.length || threadErrors ? "incomplete" : "ok", recorded, already, checked, threadErrors, failures };
+  const afterOf = (ids: string[]) => Math.floor((Math.min(...ids.map((id) => firstContact.get(id) ?? Date.now())) - 5 * 60_000) / 1000);
+  const read = async (q: string) => {
+    try {
+      const r = await searchMessages(token, q, f);
+      if (!r.complete) searchErrors++; // more pages than we read: not "nothing there"
+      return r.messages.filter((m) => !seen.has(m.id));
+    } catch {
+      searchErrors++;
+      return [];
+    }
+  };
+  const meta = async (id: string) => {
+    try {
+      return await messageMeta(token, id, f);
+    } catch {
+      searchErrors++;
+      return null;
+    }
+  };
+
+  // (b) Mail from a contacted recipient outside the original thread.
+  for (const [to, ids] of byRecipient) {
+    for (const listed of await read(`from:${to} after:${afterOf(ids)}`)) {
+      const m = await meta(listed.id);
+      if (!m) continue;
+      seen.add(m.id);
+      if (m.labels.includes("SENT") || own.has(address(m.from)) || address(m.from) !== to) continue;
+      if (ids.length > 1) unmatched.push({ provider_message_id: m.id, reason: "ambiguous_sender", companies: ids });
+      else await record(ids[0], m, m.threadId);
+    }
+  }
+
+  // (c) Bounces anywhere, matched to what we sent.
+  if (companies.length) {
+    for (const listed of await read(`from:(mailer-daemon OR postmaster) after:${afterOf([...firstContact.keys()])}`)) {
+      const m = await meta(listed.id);
+      if (!m) continue;
+      seen.add(m.id);
+      const refs = `${m.inReplyTo} ${m.references}`.toLowerCase();
+      const hits = new Set<string>();
+      for (const [mid, company] of byMessageId) if (refs.includes(mid)) hits.add(company);
+      if (!hits.size) {
+        for (const r of m.failedRecipients.toLowerCase().split(/[,\s]+/).filter(Boolean)) for (const c of byRecipient.get(r) ?? []) hits.add(c);
+      }
+      if (hits.size === 1) await record([...hits][0], { ...m, from: m.from || "mailer-daemon@" }, m.threadId);
+      else if (hits.size > 1) unmatched.push({ provider_message_id: m.id, reason: "ambiguous_bounce", companies: [...hits] });
+      // A bounce matching nothing we sent isn't ours (other mail from this mailbox).
+    }
+  }
+  const clean = !failures.length && !threadErrors && !searchErrors && !unmatched.length;
+  return { status: clean ? "ok" : "incomplete", recorded, already, checked, threadErrors, searchErrors, failures, unmatched };
+}
+
+export type ReplySyncRun =
+  | { status: "not_connected" }
+  | (Exclude<SyncResult, { status: "not_connected" }> & { run_recorded: boolean })
+  | { status: "failed"; reason: string; run_recorded: boolean };
+
+/**
+ * One reply-sync run, with its outcome recorded so dispatch can require a
+ * recent complete run. A run that throws (token refresh, timeouts) is
+ * recorded as failed; a run whose record can't be saved says so.
+ */
+export async function runReplySync(deps: Deps): Promise<ReplySyncRun> {
+  const now = deps.now ?? (() => new Date());
+  const started_at = now().toISOString();
+  let result: SyncResult | { status: "failed"; reason: string };
+  try {
+    result = await syncReplies(deps);
+  } catch (e) {
+    result = { status: "failed", reason: (e as Error).message.slice(0, 300) };
+  }
+  if (result.status === "not_connected") return result;
+  const run: NewSyncRun =
+    result.status === "failed"
+      ? { status: "failed", started_at, finished_at: now().toISOString(), checked: 0, recorded: 0, problems: 1, note: result.reason }
+      : {
+          status: result.status,
+          started_at,
+          finished_at: now().toISOString(),
+          checked: result.checked,
+          recorded: result.recorded,
+          problems: result.failures.length + result.threadErrors + result.searchErrors + result.unmatched.length,
+          note: null,
+        };
+  let run_recorded = false;
+  try {
+    run_recorded = !(await deps.store.recordSync(run)).error;
+  } catch {
+    run_recorded = false;
+  }
+  return { ...result, run_recorded };
 }

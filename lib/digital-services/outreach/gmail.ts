@@ -16,6 +16,11 @@ export type Fetch = typeof fetch;
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
 export const GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"];
+/** Every Gmail call gives up after this long; a timed-out send is an unknown outcome, never a refusal. */
+export const GMAIL_TIMEOUT_MS = 20_000;
+/** Searches follow Gmail's pages up to this many; past it the result is incomplete, never "not found". */
+export const GMAIL_MAX_PAGES = 10;
+const timeout = () => AbortSignal.timeout(GMAIL_TIMEOUT_MS);
 
 /** Env names only; values live in Vercel (server-only), never in the repository. */
 export function gmailConfig(env: Record<string, string | undefined> = process.env): GmailConfig | null {
@@ -37,20 +42,82 @@ export class GmailError extends Error {
 }
 
 export async function accessToken(cfg: GmailConfig, f: Fetch = fetch): Promise<string> {
-  const res = await f(TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: cfg.clientId, client_secret: cfg.clientSecret, refresh_token: cfg.refreshToken, grant_type: "refresh_token" }),
-  });
+  let res: Response;
+  try {
+    res = await f(TOKEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ client_id: cfg.clientId, client_secret: cfg.clientSecret, refresh_token: cfg.refreshToken, grant_type: "refresh_token" }),
+      signal: timeout(),
+    });
+  } catch (e) {
+    throw new GmailError(`token refresh: ${(e as Error).message}`, "unknown");
+  }
   const json = (await res.json().catch(() => ({}))) as { access_token?: string; error?: string };
   if (!res.ok || !json.access_token) throw new GmailError(`token refresh failed (${res.status} ${json.error ?? ""})`.trim(), "definite", res.status);
   return json.access_token;
 }
 
 async function get<T>(token: string, path: string, f: Fetch): Promise<T> {
-  const res = await f(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+  let res: Response;
+  try {
+    res = await f(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` }, signal: timeout() });
+  } catch (e) {
+    // Network failure or timeout: we don't know what Gmail holds.
+    throw new GmailError(`Gmail ${path.split("?")[0]}: ${(e as Error).message}`, "unknown");
+  }
   if (!res.ok) throw new GmailError(`Gmail ${path.split("?")[0]} ${res.status}`, res.status >= 500 || res.status === 429 ? "unknown" : "definite", res.status);
-  return (await res.json()) as T;
+  try {
+    return (await res.json()) as T;
+  } catch {
+    throw new GmailError(`Gmail ${path.split("?")[0]}: unreadable response`, "unknown", res.status);
+  }
+}
+
+type Listed = { id: string; threadId: string };
+/**
+ * Every message matching a search, following Gmail's page tokens. "complete"
+ * is false when there were more pages than we read: a caller must then not
+ * treat a missing message as absent.
+ */
+export async function searchMessages(token: string, q: string, f: Fetch = fetch, maxPages = GMAIL_MAX_PAGES): Promise<{ messages: Listed[]; complete: boolean }> {
+  const messages: Listed[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < maxPages; page++) {
+    const r = await get<{ messages?: Listed[]; nextPageToken?: string }>(
+      token,
+      `/messages?q=${encodeURIComponent(q)}&maxResults=100${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`,
+      f
+    );
+    messages.push(...(r.messages ?? []));
+    if (!r.nextPageToken) return { messages, complete: true };
+    pageToken = r.nextPageToken;
+  }
+  return { messages, complete: false };
+}
+
+export type MessageMeta = ThreadMessage & { threadId: string; inReplyTo: string; references: string; failedRecipients: string };
+/** Headers we need to match a reply or a bounce to what we sent. */
+export async function messageMeta(token: string, id: string, f: Fetch = fetch): Promise<MessageMeta> {
+  const names = ["From", "Subject", "In-Reply-To", "References", "X-Failed-Recipients"].map((n) => `metadataHeaders=${n}`).join("&");
+  const m = await get<{ id: string; threadId: string; snippet?: string; internalDate?: string; labelIds?: string[]; payload?: { headers?: { name: string; value: string }[] } }>(
+    token,
+    `/messages/${encodeURIComponent(id)}?format=metadata&${names}`,
+    f
+  );
+  const h = (n: string) => m.payload?.headers?.find((x) => x.name.toLowerCase() === n)?.value ?? "";
+  return {
+    id: m.id,
+    threadId: m.threadId,
+    from: h("from"),
+    subject: h("subject"),
+    snippet: m.snippet ?? "",
+    internalDate: Number(m.internalDate ?? 0),
+    labels: m.labelIds ?? [],
+    inReplyTo: h("in-reply-to"),
+    references: h("references"),
+    failedRecipients: h("x-failed-recipients"),
+  };
 }
 
 /** The sender must be this mailbox's address or an accepted send-as alias. */
@@ -98,6 +165,7 @@ export async function sendRaw(token: string, raw: string, f: Fetch = fetch): Pro
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ raw }),
+      signal: timeout(),
     });
   } catch (e) {
     throw new GmailError(`send: ${(e as Error).message}`, "unknown");
@@ -110,23 +178,27 @@ export async function sendRaw(token: string, raw: string, f: Fetch = fetch): Pro
 
 /**
  * Look for a message we may have sent: first by our Message-ID; if Gmail
- * rewrote it, by recipient and exact subject in Sent since the attempt. Only
- * a single unambiguous match counts.
+ * rewrote it, by the attempt's frozen recipient and exact subject in Sent
+ * since the attempt (every page). Only a single unambiguous match counts.
+ * Without a recipient or subject only the Message-ID search runs. A search
+ * with more pages than we read is "ambiguous", never "not found".
  */
 export async function findSent(
   token: string,
-  q: { messageId: string; to: string; subject: string; since: Date },
+  q: { messageId: string; to: string | null; subject: string | null; since: Date },
   f: Fetch = fetch
 ): Promise<{ id: string; threadId: string } | "ambiguous" | null> {
   type List = { messages?: { id: string; threadId: string }[] };
   const byId = await get<List>(token, `/messages?q=${encodeURIComponent(`rfc822msgid:${q.messageId}`)}&includeSpamTrash=true`, f);
   if (byId.messages?.length === 1) return byId.messages[0];
   if ((byId.messages?.length ?? 0) > 1) return "ambiguous";
+  if (!q.to?.trim() || !q.subject?.trim()) return null;
   const after = Math.floor(q.since.getTime() / 1000) - 60;
   const search = `in:sent to:${q.to} after:${after}`;
-  const list = await get<List>(token, `/messages?q=${encodeURIComponent(search)}`, f);
+  const list = await searchMessages(token, search, f);
+  if (!list.complete) return "ambiguous";
   const matches: { id: string; threadId: string }[] = [];
-  for (const m of list.messages ?? []) {
+  for (const m of list.messages) {
     const meta = await get<{ payload?: { headers?: { name: string; value: string }[] } }>(token, `/messages/${m.id}?format=metadata&metadataHeaders=Subject`, f);
     const subject = meta.payload?.headers?.find((h) => h.name.toLowerCase() === "subject")?.value ?? "";
     if (subject.trim() === q.subject.trim()) matches.push(m);
@@ -143,6 +215,7 @@ export async function threadMessages(token: string, threadId: string, f: Fetch =
     `/threads/${encodeURIComponent(threadId)}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`,
     f
   );
+  if (!Array.isArray(t.messages)) throw new GmailError(`thread ${threadId}: unreadable`, "unknown");
   const h = (m: { payload?: { headers?: { name: string; value: string }[] } }, n: string) =>
     m.payload?.headers?.find((x) => x.name.toLowerCase() === n)?.value ?? "";
   return (t.messages ?? []).map((m) => ({ id: m.id, from: h(m, "from"), subject: h(m, "subject"), snippet: m.snippet ?? "", internalDate: Number(m.internalDate ?? 0), labels: m.labelIds ?? [] }));

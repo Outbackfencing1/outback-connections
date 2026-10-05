@@ -3,7 +3,19 @@
 // reconciled, never resent; and that reply sync is idempotent. No network.
 import { describe, expect, it, vi } from "vitest";
 import { draftHash, type PilotApproval, type PilotDraft } from "@/lib/digital-services/dispatch-guard";
-import { closeAttemptNotSent, dispatchFirstContact, reconcileAttempt, syncReplies, type NewEvent, type OutreachStore, type StoredEvent } from "@/lib/digital-services/outreach/dispatch";
+import {
+  closeAttemptNotSent,
+  dispatchFirstContact,
+  reconcileAttempt,
+  replySyncHealthy,
+  runReplySync,
+  syncReplies,
+  type NewEvent,
+  type NewSyncRun,
+  type OutreachStore,
+  type StoredEvent,
+  type SyncRun,
+} from "@/lib/digital-services/outreach/dispatch";
 import { buildRaw, gmailConfig } from "@/lib/digital-services/outreach/gmail";
 
 const OWNER = "33333333-3333-4333-8333-333333333333";
@@ -21,7 +33,11 @@ const BODY = "Hi,\n\nFixture body.\n\nJosh";
 
 // commit: the row is saved but the response is lost (the caller sees an error).
 type Fail = { kind: NewEvent["kind"]; code: string; times: number; commit?: boolean };
-function memoryStore(opts: { approvals?: boolean; refuseAttempt?: boolean; failOutcomeWrites?: number; fail?: Fail[] } = {}) {
+function memoryStore(
+  opts: { approvals?: boolean; refuseAttempt?: boolean; failOutcomeWrites?: number; fail?: Fail[]; sync?: SyncRun | null; failSyncRecord?: boolean } = {}
+) {
+  // A complete reply sync a minute ago, unless a test says otherwise.
+  const syncRuns: SyncRun[] = opts.sync === null ? [] : [opts.sync ?? { status: "ok", finished_at: new Date(Date.now() - 60_000).toISOString() }];
   let failOutcome = opts.failOutcomeWrites ?? 0;
   const fails = (opts.fail ?? []).map((x) => ({ ...x }));
   const draft: PilotDraft = { id: "d1", company_id: "OC-901", revision: 1, subject: SUBJECT, body: BODY, sha256: draftHash(SUBJECT, BODY), evidence_revision: 0 };
@@ -37,7 +53,7 @@ function memoryStore(opts: { approvals?: boolean; refuseAttempt?: boolean; failO
           approver_user_id: kind === "message_approval" ? OWNER : null,
         }));
   const events: (StoredEvent & NewEvent)[] = [];
-  const store: OutreachStore & { events: typeof events } = {
+  const store: OutreachStore & { events: typeof events; syncRuns: SyncRun[] } = {
     events,
     async load(id) {
       if (id !== "OC-901") return null;
@@ -76,6 +92,15 @@ function memoryStore(opts: { approvals?: boolean; refuseAttempt?: boolean; failO
       const c = events.filter((e) => e.kind === "contacted");
       return c.length ? [{ company_id: "OC-901", events: c }] : [];
     },
+    syncRuns,
+    async lastSync() {
+      return syncRuns.at(-1) ?? null;
+    },
+    async recordSync(run: NewSyncRun) {
+      if (opts.failSyncRecord) return { error: { code: "PGRST001", message: "database unreachable" } };
+      syncRuns.push(run);
+      return { error: null };
+    },
   };
   return store;
 }
@@ -95,6 +120,8 @@ function gmail(routes: Record<string, Route>) {
 const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { "Content-Type": "application/json" } });
 const base: Record<string, Route> = {
   "oauth2.googleapis.com/token": () => json({ access_token: "at" }),
+  // Searches find nothing unless a test says otherwise.
+  "/messages": () => json({}),
   "/settings/sendAs": () => json({ sendAs: [{ sendAsEmail: "primary@outbackconnections.com.au", isPrimary: true }, { sendAsEmail: SENDER, verificationStatus: "accepted" }] }),
 };
 const MSGID = "<oc-fixed@outbackconnections.com.au>";
@@ -309,7 +336,7 @@ describe("dispatchFirstContact", () => {
 
   it("reconciliation falls back to Sent by recipient and exact subject; several matches stay unresolved", async () => {
     const store = memoryStore();
-    await store.insertEvent({ company_id: "OC-901", kind: "send_attempt", lane: "cowork", draft_id: "d1", sender: SENDER, rfc822_message_id: MSGID, recorded_by: "t" });
+    await store.insertEvent({ company_id: "OC-901", kind: "send_attempt", lane: "cowork", draft_id: "d1", sender: SENDER, recipient: "office@fixture.example", rfc822_message_id: MSGID, recorded_by: "t" });
     const subjects: Record<string, string> = { a: SUBJECT, b: "Something else", c: SUBJECT };
     const routes = (ids: string[]): Record<string, Route> => ({
       ...base,
@@ -337,13 +364,13 @@ describe("syncReplies", () => {
       ],
     };
     const { f } = gmail({ ...base, "/threads/th-1": () => json(thread) });
-    expect(await syncReplies({ store, env: ENV, fetch: f })).toEqual({ status: "ok", recorded: 3, already: 0, checked: 1, threadErrors: 0, failures: [] });
+    expect(await syncReplies({ store, env: ENV, fetch: f })).toEqual({ status: "ok", recorded: 3, already: 0, checked: 1, threadErrors: 0, searchErrors: 0, failures: [], unmatched: [] });
     expect(store.events.slice(2).map((e) => [e.kind, e.provider_message_id])).toEqual([
       ["replied", "gm-2"],
       ["opted_out", "gm-2"],
       ["bounced", "gm-3"],
     ]);
-    expect(await syncReplies({ store, env: ENV, fetch: f })).toEqual({ status: "ok", recorded: 0, already: 3, checked: 1, threadErrors: 0, failures: [] });
+    expect(await syncReplies({ store, env: ENV, fetch: f })).toEqual({ status: "ok", recorded: 0, already: 3, checked: 1, threadErrors: 0, searchErrors: 0, failures: [], unmatched: [] });
     // Once replied, the guard holds any further first contact.
     expect(await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f })).toMatchObject({ status: "held", holds: expect.arrayContaining(["replied", "suppressed"]) });
   });
@@ -372,11 +399,13 @@ describe("syncReplies when the database doesn't save", () => {
       already: 0,
       checked: 1,
       threadErrors: 0,
+      searchErrors: 0,
       failures: [{ company_id: "OC-901", kind: "opted_out", provider_message_id: "gm-2", reason: "refused" }],
+      unmatched: [],
     });
     expect(store.events.filter((e) => e.kind === "opted_out")).toHaveLength(0);
     // Recovery: the next run saves it; the reply already saved is a genuine duplicate, not a failure.
-    expect(await syncReplies({ store, env: ENV, fetch: f })).toEqual({ status: "ok", recorded: 1, already: 1, checked: 1, threadErrors: 0, failures: [] });
+    expect(await syncReplies({ store, env: ENV, fetch: f })).toEqual({ status: "ok", recorded: 1, already: 1, checked: 1, threadErrors: 0, searchErrors: 0, failures: [], unmatched: [] });
     expect(store.events.filter((e) => e.kind === "opted_out")).toHaveLength(1);
   });
 
@@ -408,9 +437,196 @@ describe("syncReplies after the alias changes", () => {
       ],
     };
     const { f } = gmail({ ...base, "/threads/th-1": () => json(thread) });
-    expect(await syncReplies({ store, env: ENV, fetch: f })).toEqual({ status: "ok", recorded: 0, already: 0, checked: 1, threadErrors: 0, failures: [] });
+    expect(await syncReplies({ store, env: ENV, fetch: f })).toEqual({ status: "ok", recorded: 0, already: 0, checked: 1, threadErrors: 0, searchErrors: 0, failures: [], unmatched: [] });
   });
 });
+
+describe("offline failure and recovery", () => {
+  const contactedTo = async (store: ReturnType<typeof memoryStore>, company = "OC-901", recipient = "office@fixture.example", msgId = MSGID) => {
+    await store.insertEvent({ company_id: company, kind: "send_attempt", lane: "cowork", draft_id: "d1", sender: SENDER, recipient, rfc822_message_id: msgId, recorded_by: "t" });
+    await store.insertEvent({ company_id: company, kind: "contacted", lane: "cowork", draft_id: "d1", sender: SENDER, recipient, rfc822_message_id: msgId, provider_message_id: `gm-${company}`, provider_thread_id: `th-${company}`, recorded_by: "t" });
+  };
+  const meta = (id: string, from: string, extra: Record<string, string> = {}, snippet = "") =>
+    json({
+      id,
+      threadId: `fresh-${id}`,
+      snippet,
+      internalDate: String(Date.parse("2026-10-07T02:00:00Z")),
+      payload: { headers: [{ name: "From", value: from }, ...Object.entries(extra).map(([name, value]) => ({ name, value }))] },
+    });
+  const emptyThread = () => json({ messages: [] });
+
+  it("a failed, incomplete or stale reply sync holds dispatch before any send; a fresh complete run releases it", async () => {
+    const send = vi.fn(() => json({ id: "gm-s", threadId: "th-s" }));
+    const { f } = gmail({ ...base, "/messages/send": send });
+    for (const sync of [null, { status: "failed" as const, finished_at: new Date().toISOString() }, { status: "incomplete" as const, finished_at: new Date().toISOString() }, { status: "ok" as const, finished_at: new Date(Date.now() - 7 * 3_600_000).toISOString() }]) {
+      const r = await dispatchFirstContact("OC-901", "cowork", { store: memoryStore({ sync }), env: ENV, fetch: f });
+      expect(r).toMatchObject({ status: "held", holds: ["reply_sync_unhealthy"] });
+    }
+    expect(send).not.toHaveBeenCalled();
+    expect(await dispatchFirstContact("OC-901", "cowork", { store: memoryStore(), env: ENV, fetch: f, messageId: () => MSGID })).toMatchObject({ status: "sent" });
+  });
+
+  it("background jobs can't bypass the owner, revision or suppression controls", async () => {
+    const send = vi.fn(() => json({ id: "gm-s", threadId: "th-s" }));
+    const { f } = gmail({ ...base, "/messages/send": send });
+    expect(await dispatchFirstContact("OC-901", "cowork", { store: memoryStore({ approvals: false }), env: ENV, fetch: f })).toMatchObject({ status: "held" });
+    const suppressed = memoryStore();
+    await suppressed.insertEvent({ company_id: "OC-901", kind: "opted_out", recorded_by: "outreach-sync" });
+    expect(await dispatchFirstContact("OC-901", "cowork", { store: suppressed, env: ENV, fetch: f })).toMatchObject({ status: "held", holds: ["suppressed"] });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("the recipient is frozen on the attempt: reconciliation searches what was sent, not the company's new address", async () => {
+    const store = memoryStore();
+    await store.insertEvent({ company_id: "OC-901", kind: "send_attempt", lane: "cowork", draft_id: "d1", sender: SENDER, recipient: "old@fixture.example", rfc822_message_id: MSGID, recorded_by: "t" });
+    const queries: string[] = [];
+    const { f } = gmail({ ...base, "/messages": (u) => (queries.push(u.searchParams.get("q") ?? ""), json({})) });
+    expect(await reconcileAttempt("OC-901", { store, env: ENV, fetch: f })).toEqual({ status: "not_found", messageId: MSGID });
+    expect(queries).toEqual([`rfc822msgid:${MSGID}`, expect.stringContaining("to:old@fixture.example")]);
+    // An attempt without a frozen recipient (legacy) only searches by Message-ID: never by a guess.
+    const legacy = memoryStore();
+    await legacy.insertEvent({ company_id: "OC-901", kind: "send_attempt", lane: "cowork", draft_id: "d1", sender: SENDER, rfc822_message_id: MSGID, recorded_by: "t" });
+    queries.length = 0;
+    expect(await reconcileAttempt("OC-901", { store: legacy, env: ENV, fetch: f })).toEqual({ status: "not_found", messageId: MSGID });
+    expect(queries).toEqual([`rfc822msgid:${MSGID}`]);
+  });
+
+  it("delayed indexing: not found now stays unresolved and blocks; found later is recorded", async () => {
+    const store = memoryStore();
+    await store.insertEvent({ company_id: "OC-901", kind: "send_attempt", lane: "cowork", draft_id: "d1", sender: SENDER, recipient: "office@fixture.example", rfc822_message_id: MSGID, recorded_by: "t" });
+    await store.insertEvent({ company_id: "OC-901", kind: "send_handoff", lane: "cowork", draft_id: "d1", sender: SENDER, recipient: "office@fixture.example", rfc822_message_id: MSGID, recorded_by: "t" });
+    expect(await reconcileAttempt("OC-901", { store, env: ENV, fetch: gmail(base).f })).toEqual({ status: "not_found", messageId: MSGID });
+    expect(await closeAttemptNotSent("OC-901", null, { store, env: ENV, fetch: gmail(base).f })).toEqual({ status: "uncertain", messageId: MSGID });
+    expect(await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: gmail(base).f })).toMatchObject({ status: "held", holds: ["unresolved_attempt"] });
+    const later = gmail({ ...base, "/messages": (u) => (u.searchParams.get("q") === `rfc822msgid:${MSGID}` ? json({ messages: [{ id: "gm-late", threadId: "th-late" }] }) : json({})) });
+    expect(await reconcileAttempt("OC-901", { store, env: ENV, fetch: later.f })).toEqual({ status: "recorded", providerId: "gm-late" });
+  });
+
+  it("Sent searches follow every page; more pages than we read is ambiguous, never 'not found'", async () => {
+    const store = memoryStore();
+    await store.insertEvent({ company_id: "OC-901", kind: "send_attempt", lane: "cowork", draft_id: "d1", sender: SENDER, recipient: "office@fixture.example", rfc822_message_id: MSGID, recorded_by: "t" });
+    const paged = (pages: number) =>
+      gmail({
+        ...base,
+        "/messages": (u) => {
+          if (!u.searchParams.get("q")?.startsWith("in:sent")) return json({});
+          const n = Number(u.searchParams.get("pageToken") ?? "0");
+          const last = n === pages - 1;
+          return json({ messages: last ? [{ id: "match", threadId: "t-m" }] : [{ id: `other-${n}`, threadId: "t-o" }], ...(last ? {} : { nextPageToken: String(n + 1) }) });
+        },
+        "/messages/match": () => json({ payload: { headers: [{ name: "Subject", value: SUBJECT }] } }),
+        ...Object.fromEntries(Array.from({ length: 12 }, (_, n) => [`/messages/other-${n}`, () => json({ payload: { headers: [{ name: "Subject", value: "Other" }] } })])),
+      });
+    expect(await reconcileAttempt("OC-901", { store, env: ENV, fetch: paged(12).f })).toEqual({ status: "ambiguous", messageId: MSGID });
+    expect(await reconcileAttempt("OC-901", { store, env: ENV, fetch: paged(3).f })).toEqual({ status: "recorded", providerId: "match" });
+  });
+
+  it("timeouts: a send that hangs is unknown (reconcile, never resend); a hung search is a sync error, not 'nothing there'", async () => {
+    const hang: Route = (_u, init) =>
+      new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" }))));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const realTimeout = AbortSignal.timeout;
+      AbortSignal.timeout = () => {
+        const c = new AbortController();
+        setTimeout(() => c.abort(new Error("timeout")), 5);
+        return c.signal;
+      };
+      try {
+        const sendStore = memoryStore();
+        const pending = dispatchFirstContact("OC-901", "cowork", { store: sendStore, env: ENV, fetch: gmail({ ...base, "/messages/send": hang }).f, messageId: () => MSGID });
+        await vi.advanceTimersByTimeAsync(10);
+        expect(await pending).toEqual({ status: "unconfirmed", messageId: MSGID });
+        expect(sendStore.events.map((e) => e.kind)).toEqual(["send_attempt", "send_handoff"]);
+        const syncStore = memoryStore();
+        await contactedTo(syncStore);
+        const sync = syncReplies({ store: syncStore, env: ENV, fetch: gmail({ ...base, "/threads/th-OC-901": emptyThread, "/messages": hang }).f });
+        await vi.advanceTimersByTimeAsync(10);
+        expect(await sync).toMatchObject({ status: "incomplete", searchErrors: 2 });
+      } finally {
+        AbortSignal.timeout = realTimeout;
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a reply sent fresh (outside the thread) is still found; an opt-out there suppresses", async () => {
+    const store = memoryStore();
+    await contactedTo(store);
+    const { f } = gmail({
+      ...base,
+      "/threads/th-OC-901": emptyThread,
+      "/messages": (u) => (u.searchParams.get("q")?.startsWith("from:office@fixture.example") ? json({ messages: [{ id: "fresh-1", threadId: "fresh-t" }] }) : json({})),
+      "/messages/fresh-1": () => meta("fresh-1", "Owner <office@fixture.example>", { Subject: "Please remove me from your list" }),
+    });
+    expect(await syncReplies({ store, env: ENV, fetch: f })).toMatchObject({ status: "ok", recorded: 2 });
+    expect(store.events.filter((e) => e.kind === "opted_out")).toHaveLength(1);
+    // Seen again on the next run: a duplicate inbound message is recorded once.
+    expect(await syncReplies({ store, env: ENV, fetch: f })).toMatchObject({ status: "ok", recorded: 0, already: 2 });
+  });
+
+  it("a sender shared by two contacted companies isn't guessed: reported as ambiguous, run incomplete", async () => {
+    const store = memoryStore();
+    await contactedTo(store, "OC-901", "shared@fixture.example", "<a@outbackconnections.com.au>");
+    await contactedTo(store, "OC-902", "shared@fixture.example", "<b@outbackconnections.com.au>");
+    store.contacted = async () => {
+      const by = new Map<string, StoredEvent[]>();
+      for (const e of store.events.filter((x) => x.kind === "contacted")) by.set(e.company_id, [...(by.get(e.company_id) ?? []), e]);
+      return [...by].map(([company_id, events]) => ({ company_id, events }));
+    };
+    const { f } = gmail({
+      ...base,
+      "/threads/th-OC-901": emptyThread,
+      "/threads/th-OC-902": emptyThread,
+      "/messages": (u) => (u.searchParams.get("q")?.startsWith("from:shared@") ? json({ messages: [{ id: "fresh-2", threadId: "x" }] }) : json({})),
+      "/messages/fresh-2": () => meta("fresh-2", "shared@fixture.example", { Subject: "Re: hello" }),
+    });
+    const r = await syncReplies({ store, env: ENV, fetch: f });
+    expect(r).toMatchObject({ status: "incomplete", recorded: 0, unmatched: [{ provider_message_id: "fresh-2", reason: "ambiguous_sender", companies: ["OC-901", "OC-902"] }] });
+  });
+
+  it("a bounce outside the thread is matched by our Message-ID (or failed recipient); one that isn't ours is ignored", async () => {
+    const store = memoryStore();
+    await contactedTo(store);
+    const { f } = gmail({
+      ...base,
+      "/threads/th-OC-901": emptyThread,
+      "/messages": (u) =>
+        u.searchParams.get("q")?.startsWith("from:(mailer-daemon") ? json({ messages: [{ id: "bn-1", threadId: "b1" }, { id: "bn-2", threadId: "b2" }] }) : json({}),
+      "/messages/bn-1": () => meta("bn-1", "Mail Delivery Subsystem <mailer-daemon@googlemail.com>", { References: MSGID }),
+      "/messages/bn-2": () => meta("bn-2", "Mail Delivery Subsystem <mailer-daemon@googlemail.com>", { References: "<someone-elses@example.test>" }),
+    });
+    expect(await syncReplies({ store, env: ENV, fetch: f })).toMatchObject({ status: "ok", recorded: 1, unmatched: [] });
+    expect(store.events.filter((e) => e.kind === "bounced").map((e) => e.provider_message_id)).toEqual(["bn-1"]);
+  });
+
+  it("a sync that throws is recorded as failed and holds dispatch; a run whose record can't be saved says so", async () => {
+    const store = memoryStore();
+    const down = gmail({ ...base, "oauth2.googleapis.com/token": () => json({ error: "server" }, 503) });
+    expect(await runReplySync({ store, env: ENV, fetch: down.f })).toMatchObject({ status: "failed", run_recorded: true });
+    expect(store.syncRuns.at(-1)).toMatchObject({ status: "failed" });
+    expect(await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: gmail(base).f })).toMatchObject({ status: "held", holds: ["reply_sync_unhealthy"] });
+    expect(await runReplySync({ store, env: ENV, fetch: gmail(base).f })).toMatchObject({ status: "ok", run_recorded: true });
+    expect(await runReplySync({ store: memoryStore({ failSyncRecord: true }), env: ENV, fetch: gmail(base).f })).toMatchObject({ status: "ok", run_recorded: false });
+  });
+
+  it("an opt-out that wasn't saved leaves the run incomplete, which holds dispatch until a later run saves it", async () => {
+    const store = memoryStore({ fail: [{ kind: "opted_out", code: "42501", times: 1 }] });
+    await contactedTo(store);
+    const { f } = gmail({
+      ...base,
+      "/threads/th-OC-901": () => json({ messages: [{ id: "u1", internalDate: String(Date.parse("2026-10-07T03:00:00Z")), snippet: "unsubscribe", payload: { headers: [{ name: "From", value: "office@fixture.example" }] } }] }),
+    });
+    expect(await runReplySync({ store, env: ENV, fetch: f })).toMatchObject({ status: "incomplete", run_recorded: true });
+    expect(replyHealthy(store)).toBe(false);
+    expect(await runReplySync({ store, env: ENV, fetch: f })).toMatchObject({ status: "ok", run_recorded: true });
+    expect(replyHealthy(store)).toBe(true);
+  });
+});
+
+const replyHealthy = (store: { syncRuns: SyncRun[] }) => replySyncHealthy(store.syncRuns.at(-1) ?? null, new Date());
 
 describe("gmail helpers", () => {
   it("reads config from env names only", () => {
