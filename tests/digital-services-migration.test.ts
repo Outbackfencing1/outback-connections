@@ -90,6 +90,21 @@ describe("digital_services_enquiries migration", { timeout: 30_000 }, () => {
     }
   });
 
+  it("the trigger caps one IP at 5 an hour (OC429); other IPs, older rows and no-IP rows aren't counted", async () => {
+    const pg = await db();
+    await pg.exec(`set role service_role`);
+    const key = (i: number) => `${i.toString(16).padStart(8, "0")}-d9cb-469f-a165-70867728950e`;
+    for (let i = 1; i <= 5; i++) await insert(pg, row(key(i), { consent_ip: "203.0.113.7" }));
+    await expect(insert(pg, row(key(6), { consent_ip: "203.0.113.7" }))).rejects.toMatchObject({ code: "OC429" });
+    await insert(pg, row(key(7), { consent_ip: "198.51.100.9" }));
+    await insert(pg, row(key(8)));
+    await pg.exec(`reset role`);
+    await pg.query(`update digital_services_enquiries set created_at = now() - interval '61 minutes' where idempotency_key = $1`, [key(1)]);
+    await pg.exec(`set role service_role`);
+    await insert(pg, row(key(9), { consent_ip: "203.0.113.7" }));
+    await pg.exec(`reset role`);
+  });
+
   it("purge removes rows older than 12 months only", async () => {
     const pg = await db();
     await insert(pg, row("5f8fad5b-d9cb-469f-a165-70867728950e"));

@@ -9,7 +9,7 @@
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEFAULT_FROM, NOTIFICATION_TO, sendEmail } from "@/lib/email";
-import { digitalServicesPublic } from "@/lib/digital-services/flags";
+import { alertDestination, digitalServicesPublic } from "@/lib/digital-services/flags";
 import { processIntake, type IntakeResult, type IntakeStore } from "@/lib/digital-services/intake";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
@@ -89,7 +89,7 @@ export async function submitDigitalServicesEnquiry(formData: FormData): Promise<
           `No customer details are included in this email.`,
         ].join("\n");
         const r = await sendEmail({
-          to: process.env.DIGITAL_SERVICES_ALERT_TO || NOTIFICATION_TO,
+          to: alertDestination(NOTIFICATION_TO),
           from: DEFAULT_FROM,
           subject: `[Digital services] New enquiry ${reference}`,
           text,

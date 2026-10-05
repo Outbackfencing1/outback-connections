@@ -32,3 +32,8 @@ export function alertReadiness(env: Record<string, string | undefined> = process
     detail: "Mail transport configured; alerts go to the dedicated owner address. Each enquiry shows whether its alert was confirmed.",
   };
 }
+
+/** The owner-alert recipient: the dedicated address (trimmed) or the fallback. */
+export function alertDestination(fallback: string, env: Record<string, string | undefined> = process.env): string {
+  return env.DIGITAL_SERVICES_ALERT_TO?.trim() || fallback.trim();
+}

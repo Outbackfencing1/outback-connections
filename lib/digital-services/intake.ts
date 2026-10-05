@@ -126,6 +126,10 @@ export type IntakeDeps = {
 
 export const RATE_WINDOW_MS = 60 * 60 * 1000;
 export const RATE_MAX = 5;
+/** SQLSTATE raised by the digital_services_enquiries rate-limit trigger. */
+export const RATE_LIMITED_CODE = "OC429";
+const RATE_LIMITED =
+  "That's a few enquiries in a short time. Try again in an hour, or email help@outbackconnections.com.au.";
 const NOT_READY =
   "Enquiries aren't open yet. Please email help@outbackconnections.com.au and we'll get back to you.";
 
@@ -161,12 +165,12 @@ export async function processIntake(input: IntakeInput, deps: IntakeDeps): Promi
   if (isMissingTable(existing.error)) return { ok: false, errors: { _: NOT_READY } };
   if (existing.data) return { ok: true, reference: referenceFor(existing.data.id), duplicate: true, notified: false };
 
+  // Early exit only: parallel submits can all pass this count. The database
+  // trigger enforces the cap atomically and answers RATE_LIMITED_CODE.
   if (deps.meta.ip) {
     const since = new Date(deps.now().getTime() - RATE_WINDOW_MS).toISOString();
     const { count, error } = await store.countRecentByIp(deps.meta.ip, since);
-    if (!error && (count ?? 0) >= RATE_MAX) {
-      return { ok: false, errors: { _: "That's a few enquiries in a short time. Try again in an hour, or email help@outbackconnections.com.au." } };
-    }
+    if (!error && (count ?? 0) >= RATE_MAX) return { ok: false, errors: { _: RATE_LIMITED } };
   }
 
   const inserted = await store.insert({
@@ -179,12 +183,14 @@ export async function processIntake(input: IntakeInput, deps: IntakeDeps): Promi
   const row = inserted.data;
   if (inserted.error) {
     if (isMissingTable(inserted.error)) return { ok: false, errors: { _: NOT_READY } };
-    // Two identical submits raced past findByKey: the unique index caught the
-    // second one. Return the row that won.
-    if (inserted.error.code === "23505") {
+    // Two identical submits raced past findByKey: the unique index (or, at
+    // the IP cap, the rate-limit trigger) caught the second one. Return the
+    // row that won rather than an error for an enquiry that was saved.
+    if (inserted.error.code === "23505" || inserted.error.code === RATE_LIMITED_CODE) {
       const again = await store.findByKey(v.value.idempotency_key);
       if (again.data) return { ok: true, reference: referenceFor(again.data.id), duplicate: true, notified: false };
     }
+    if (inserted.error.code === RATE_LIMITED_CODE) return { ok: false, errors: { _: RATE_LIMITED } };
     return { ok: false, errors: { _: "We couldn't save that just now. Please try again, or email help@outbackconnections.com.au." } };
   }
   if (!row) return { ok: false, errors: { _: "We couldn't save that just now. Please try again." } };

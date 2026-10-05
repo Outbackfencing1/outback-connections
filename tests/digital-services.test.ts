@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { decideOwnerAccess } from "@/lib/digital-services/owner-access";
-import { alertReadiness, digitalServicesPublic } from "@/lib/digital-services/flags";
+import { alertDestination, alertReadiness, digitalServicesPublic } from "@/lib/digital-services/flags";
 import {
   matchesSearch,
   processIntake,
   referenceFor,
   validateIntake,
   RATE_MAX,
+  RATE_LIMITED_CODE,
   type IntakeDeps,
   type IntakeInput,
   type IntakeStore,
@@ -42,6 +43,14 @@ describe("public page flag", () => {
     for (const v of [undefined, "", "true", "ON", "1", "on "]) {
       expect(digitalServicesPublic({ DIGITAL_SERVICES_PUBLIC: v })).toBe(false);
     }
+  });
+});
+
+describe("owner alert destination", () => {
+  it("trims the dedicated address and falls back when it's blank", () => {
+    expect(alertDestination("help@example.com", { DIGITAL_SERVICES_ALERT_TO: "  owner@example.com \n" })).toBe("owner@example.com");
+    expect(alertDestination("help@example.com", { DIGITAL_SERVICES_ALERT_TO: "   " })).toBe("help@example.com");
+    expect(alertDestination("help@example.com", {})).toBe("help@example.com");
   });
 });
 
@@ -109,7 +118,7 @@ describe("validateIntake", () => {
 });
 
 type Saved = Record<string, unknown> & { id: string };
-function fakeStore(opts: { missingTable?: boolean; raceOnInsert?: boolean; recentCount?: number; markFailures?: number } = {}) {
+function fakeStore(opts: { missingTable?: boolean; raceOnInsert?: boolean; recentCount?: number; markFailures?: number; dbRateLimited?: boolean; dbRateLimitedAfterTwin?: boolean } = {}) {
   let markFailuresLeft = opts.markFailures ?? 0;
   const rows: Saved[] = [];
   const marks: Array<{ id: string; notified_at: string | null; notify_error: string | null }> = [];
@@ -121,6 +130,13 @@ function fakeStore(opts: { missingTable?: boolean; raceOnInsert?: boolean; recen
     countRecentByIp: async () => ({ count: opts.recentCount ?? 0, error: null }),
     insert: async (row) => {
       if (opts.missingTable) return { data: null, error: missing };
+      // The database trigger refused: a parallel burst got past the count.
+      if (opts.dbRateLimited) return { data: null, error: { code: RATE_LIMITED_CODE, message: "rate limit reached" } };
+      if (opts.dbRateLimitedAfterTwin) {
+        // The same enquiry's twin submit took the IP's last slot first.
+        rows.push({ ...row, id: "cccccccc-0000-4000-8000-000000000003" });
+        return { data: null, error: { code: RATE_LIMITED_CODE, message: "rate limit reached" } };
+      }
       if (opts.raceOnInsert) {
         // Another request saved the same key between our check and insert.
         rows.push({ ...row, id: "bbbbbbbb-0000-4000-8000-000000000002" });
@@ -217,6 +233,22 @@ describe("processIntake", () => {
     const res = await processIntake(good(), deps(store));
     expect(res.ok).toBe(false);
     expect(rows).toHaveLength(0);
+  });
+
+  it("a burst that passes the early count is still refused by the database trigger", async () => {
+    const { store, rows } = fakeStore({ dbRateLimited: true });
+    const notify = vi.fn(async () => ({ ok: true }));
+    const res = await processIntake(good(), deps(store, notify));
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.errors._).toMatch(/few enquiries/);
+    expect(rows).toHaveLength(0);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it("a double submit at the IP cap returns the saved twin, not a rate-limit error", async () => {
+    const { store } = fakeStore({ dbRateLimitedAfterTwin: true });
+    const res = await processIntake(good(), deps(store));
+    expect(res).toEqual({ ok: true, reference: "DSE-CCCCCCCC", duplicate: true, notified: false });
   });
 
   it("missing table or missing service key is a visible readiness error, not a silent drop", async () => {

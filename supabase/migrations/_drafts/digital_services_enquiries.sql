@@ -19,7 +19,13 @@
 -- Retention: personal details purged after 12 months, like listing_enquiries.
 -- The daily /api/cron/purge-auth-events run calls the purge function below.
 --
--- Rollback: drop function if exists public.purge_old_digital_services_enquiries();
+-- Rate limit: at most 5 enquiries per IP per rolling hour, enforced by a
+-- BEFORE INSERT trigger under a per-IP advisory lock, so concurrent submits
+-- can't all slip past the app's early count check. Raises SQLSTATE OC429.
+--
+-- Rollback: drop trigger if exists trg_ds_enquiries_rate_limit on public.digital_services_enquiries;
+--           drop function if exists public.ds_enquiries_rate_limit();
+--           drop function if exists public.purge_old_digital_services_enquiries();
 --           drop table if exists public.digital_services_enquiries;
 -- ============================================================
 
@@ -69,6 +75,37 @@ revoke all on public.digital_services_enquiries from anon, authenticated;
 -- A policy only filters rows; it doesn't grant access. Grant explicitly so
 -- the server keeps working even where Supabase's default grants are tightened.
 grant select, insert, update, delete on public.digital_services_enquiries to service_role;
+
+-- Per-IP rate limit, atomic. The app counts first as a cheap early exit, but
+-- parallel submits can all pass that count before any of them inserts. Here
+-- inserts from one IP queue on a transaction-scoped advisory lock; each then
+-- counts with a fresh snapshot (plpgsql, READ COMMITTED), so it sees the rows
+-- the earlier ones committed. Rows without an IP aren't limited here.
+create or replace function public.ds_enquiries_rate_limit()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if new.consent_ip is null then
+    return new;
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('ds_enquiries_ip:' || host(new.consent_ip), 0));
+  if (select count(*) from public.digital_services_enquiries
+      where consent_ip = new.consent_ip
+        and created_at > now() - interval '1 hour') >= 5 then
+    raise exception 'digital services enquiry rate limit reached'
+      using errcode = 'OC429';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_ds_enquiries_rate_limit on public.digital_services_enquiries;
+create trigger trg_ds_enquiries_rate_limit
+  before insert on public.digital_services_enquiries
+  for each row execute function public.ds_enquiries_rate_limit();
 
 create or replace function public.purge_old_digital_services_enquiries()
 returns integer
