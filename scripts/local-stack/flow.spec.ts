@@ -136,9 +136,11 @@ test("Joshua's queue shows the lead, a status change saves, failures are visible
   await expect(page.locator("p[role=alert]")).toContainText("no longer exists");
 });
 
-test("Joshua's message approval goes through his own session; a member's session is refused", async ({ page }) => {
-  psql(`insert into digital_services_pilot (id, company, lane, reserved_for) values ('OC-980', 'Fixture Approval Co', 'email', 'cowork') on conflict do nothing`);
-  const draftId = psql(`insert into digital_services_pilot_drafts (company_id, revision, subject, body, sha256, author) values ('OC-980', 1, 'Fixture subject', 'Fixture body', 'x', 'test') returning id`).split("\n")[0];
+test("Joshua reviews the exact draft before approving; approval doesn't send; a member's session is refused", async ({ page }) => {
+  psql(`insert into digital_services_pilot (id, company, lane, reserved_for, uncertainties) values ('OC-980', 'Fixture Approval Co', 'email', 'cowork', '{"Form delivery untested"}') on conflict do nothing`);
+  psql(`insert into digital_services_pilot_evidence (company_id, source_url, source_type, checked_at, fact_text, limitations, recorded_by) values ('OC-980', 'https://fixture-approval.example/contact', 'primary_business_website', now() - interval '1 day', 'Fixture contact page with a five-field form', '{"Form submission not tested"}', 'test')`);
+  const draftId = psql(`insert into digital_services_pilot_drafts (company_id, revision, subject, body, sha256, author, offer) values ('OC-980', 1, 'Fixture subject', 'Fixture body line one.
+Fixture body line two.', 'x', 'test', 'quote_form_490') returning id`).split("\n")[0];
   psql(`insert into digital_services_pilot_approvals (draft_id, draft_sha256, kind, actor) select id, sha256, k, 'reviewer' from digital_services_pilot_drafts, unnest(array['evidence_refresh','preview_review','copy_review']) k where id = '${draftId}'`);
   const sha = psql(`select sha256 from digital_services_pilot_drafts where id = '${draftId}'`);
   try {
@@ -152,17 +154,39 @@ test("Joshua's message approval goes through his own session; a member's session
     });
     expect(r.status).toBeGreaterThanOrEqual(400);
     expect(await r.text()).toContain("only the owner");
+    // Nobody but Joshua can open the review screen.
+    await as(page, "member");
+    expect((await page.goto(`/dashboard/owner/review/${draftId}`))?.status()).toBe(404);
+    await page.context().clearCookies();
 
     await as(page, "owner");
     await page.goto("/dashboard/owner");
     const row = page.locator("tr", { hasText: "Fixture Approval Co" });
-    await row.getByRole("button", { name: "Approve revision 1" }).click();
+    await expect(row.getByRole("button", { name: /Approve/ })).toHaveCount(0); // no approval without the review screen
+    await row.getByRole("link", { name: "Review revision 1 to approve" }).click();
+    await expect(page.getByTestId("draft-subject")).toHaveText("Fixture subject");
+    await expect(page.getByTestId("draft-body")).toContainText("Fixture body line two.");
+    await expect(page.getByText(sha)).toBeVisible();
+    await expect(page.getByText("https://fixture-approval.example/contact")).toBeVisible();
+    await expect(page.getByText(/Business's own website · checked .* · 1 day old/)).toBeVisible();
+    await expect(page.getByText("Form delivery untested")).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: process.env.REVIEW_SCREENSHOT_PHONE ?? "/tmp/owner-review-phone.png", fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.screenshot({ path: process.env.REVIEW_SCREENSHOT ?? "/tmp/owner-review.png", fullPage: true });
+    await page.getByRole("button", { name: "Record approval of revision 1 (does not send)" }).click();
     await expect(page).toHaveURL(/pilot=approved/);
-    await expect(page.locator("p[role=status]", { hasText: "Message approval recorded" })).toBeVisible();
-    expect(psql(`select approver_user_id from digital_services_pilot_approvals where draft_id = '${draftId}' and kind = 'message_approval'`)).toBe(PERSONAS.owner.id);
-    console.log("[flow] message approval recorded with approver_user_id = owner via the owner's own session");
+    await expect(page.locator("p[role=status]")).toContainText("Nothing was sent");
+    expect(psql(`select approver_user_id || '/' || draft_revision || '/' || evidence_revision from digital_services_pilot_approvals where draft_id = '${draftId}' and kind = 'message_approval'`)).toBe(`${PERSONAS.owner.id}/1/1`);
+    expect(psql(`select count(*) from digital_services_pilot_events where company_id = 'OC-980'`)).toBe("0");
+
+    // New evidence makes the revision stale: the screen withholds approval.
+    psql(`insert into digital_services_pilot_evidence (company_id, source_url, source_type, checked_at, fact_text, recorded_by) values ('OC-980', 'https://fixture-approval.example/about', 'primary_business_website', now(), 'Fixture about page', 'test')`);
+    await page.reload();
+    await expect(page.getByTestId("approval-blockers")).toContainText("Evidence changed after this revision was written");
+    console.log("[flow] review screen showed exact copy/hash/evidence; approval recorded (owner, revision 1, evidence 1), no send event; new evidence made it stale");
   } finally {
-    psql(`delete from digital_services_pilot_approvals where draft_id = '${draftId}'; delete from digital_services_pilot_drafts where company_id = 'OC-980'; delete from digital_services_pilot where id = 'OC-980'`);
+    psql(`delete from digital_services_pilot_approvals where draft_id = '${draftId}'; delete from digital_services_pilot_drafts where company_id = 'OC-980'; delete from digital_services_pilot_evidence where company_id = 'OC-980'; delete from digital_services_pilot where id = 'OC-980'`);
   }
 });
 

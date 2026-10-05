@@ -30,7 +30,11 @@ scripts/local-stack/stop.sh
   - a status change says "saved" only once the database returns the updated row;
   - a refused write says "Not saved";
   - a deleted row says it no longer exists.
-- **Message approval:** goes through Joshua's own session; a member's session calling the function is refused.
+- **Message approval:**
+  - It is made only on the review screen, which shows the exact copy, hash, evidence (with age and method) and uncertainties.
+  - It goes through Joshua's own session and creates no send event.
+  - New evidence makes the revision stale.
+  - A member gets a 404 on the screen, and their session calling the function is refused.
 - **Sales controls:**
   - draft quote → sent → accepted;
   - production is refused until deposit evidence (with GST) is recorded;
@@ -39,6 +43,15 @@ scripts/local-stack/stop.sh
   - a conversation note is logged against the quote.
 - **Quote list:** paged and filtered (open by default, all on request), so 56 fixture quotes stay reachable and a withdrawn one shows under "all".
 - **Conversation log:** entries not tied to a quote are paged, so 55 fixture entries stay reachable.
+
+**Whole customer journey with restarts:** after `npm run build` with `app.env` sourced, run `scripts/local-stack/lifecycle.sh`. It runs `lifecycle.spec.ts` in three phases and restarts the app server between them. It checks the listener PID changed, so each unfinished state really survives a restart.
+
+The phases:
+1. Service page → one enquiry (alert fails, lead kept) → logged call → draft quote from the enquiry → sent (the price is then fixed).
+2. Written acceptance → an insufficient deposit is gated → a refused save is visible → the remaining deposit → intake → production.
+3. Client review → approved → launch gated on the balance → a duplicate balance is refused → launched → handed over. Then a care quote goes live without a payment gate.
+
+Each phase screenshots the phone and desktop widths and fails on sideways scroll. The operator steps are in `docs/digital-services/OPERATOR-WALKTHROUGH.md`.
 
 `seed-pilot.mjs <pack.json>` loads a private pilot pack into the draft pilot
 tables and checks the database's draft hashes match the pack's. Pilot packs

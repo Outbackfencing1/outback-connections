@@ -25,7 +25,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { SALES_NOTICES, quoteListView, type SalesOutcome } from "@/lib/digital-services/sales";
 import { setEnquiryStatus } from "./actions";
 import { SalesSection } from "./SalesSection";
-import { addConversation } from "./sales-actions";
+import { addConversation, createDraftQuote } from "./sales-actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Owner — digital services", robots: { index: false, follow: false } };
@@ -422,9 +422,50 @@ export default async function OwnerPage({
                   <option value="meeting">Meeting</option>
                   <option value="note">Note</option>
                 </select>
-                <input name="summary" required maxLength={2000} placeholder="Log what was said" className="w-72 rounded border border-neutral-300 px-2 py-1 text-xs" />
+                <input name="summary" required maxLength={2000} placeholder="Log what was said" className="w-full max-w-72 rounded border border-neutral-300 px-2 py-1 text-xs" />
                 <button className="rounded border border-neutral-300 px-2 py-1 text-xs">Log</button>
               </form>
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs underline">Draft a quote for this enquiry</summary>
+                <form action={createDraftQuote} className="mt-2 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+                  <input type="hidden" name="enquiry_id" value={r.id} />
+                  <input type="hidden" name="view" value={viewQuery} />
+                  <label className="grid gap-1 text-xs">
+                    Customer
+                    <input name="customer_label" required maxLength={120} defaultValue={r.business_name.slice(0, 120)} className="w-full min-w-0 rounded border border-neutral-300 px-2 py-1" />
+                  </label>
+                  <label className="grid gap-1 text-xs">
+                    Offer
+                    <select name="offer" defaultValue={r.interest === "quote_form" ? "quote_form_490" : r.interest === "care" ? "care_149" : "website_1990"} className="w-full min-w-0 rounded border border-neutral-300 px-2 py-1">
+                      {Object.entries(OFFER_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-xs">
+                    GST
+                    <select name="gst_treatment" defaultValue="exclusive" className="w-full min-w-0 rounded border border-neutral-300 px-2 py-1">
+                      <option value="exclusive">Plus GST (prices are before GST)</option>
+                      <option value="inclusive">Includes GST</option>
+                      <option value="not_registered">No GST</option>
+                      <option value="pending">Not decided (can&apos;t be sent)</option>
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-xs">
+                    Terms version
+                    <input name="terms_version" required maxLength={80} className="w-full min-w-0 rounded border border-neutral-300 px-2 py-1" />
+                  </label>
+                  <label className="grid gap-1 text-xs sm:col-span-2">
+                    Scope
+                    <textarea name="scope_summary" required maxLength={2000} rows={2} className="w-full min-w-0 rounded border border-neutral-300 px-2 py-1" />
+                  </label>
+                  <div>
+                    <button className="rounded border border-neutral-300 px-2 py-1 text-xs">Save draft quote</button>
+                  </div>
+                </form>
+              </details>
             </li>
           ))}
         </ul>

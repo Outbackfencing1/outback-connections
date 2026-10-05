@@ -54,6 +54,7 @@ type Conversation = {
 };
 
 const input = "rounded border border-neutral-300 px-2 py-1 text-xs";
+const field = `${input} w-full min-w-0`;
 const button = "rounded border border-neutral-300 px-2 py-1 text-xs";
 
 const NEXT_STATUS: Record<QuoteStatus, { to: "sent" | "accepted" | "withdrawn"; label: string }[]> = {
@@ -158,15 +159,15 @@ export async function SalesSection({
         <>
           <details className="mt-3 rounded-xl border border-neutral-200 bg-white p-4 text-sm">
             <summary className="cursor-pointer font-medium">New draft quote</summary>
-            <form action={createDraftQuote} className="mt-3 grid gap-2 sm:grid-cols-2">
+            <form action={createDraftQuote} className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
               <input type="hidden" name="view" value={viewQuery} />
-              <label className="grid gap-1 text-xs">
+              <label className="grid min-w-0 gap-1 text-xs">
                 Customer
-                <input name="customer_label" required maxLength={120} className={input} />
+                <input name="customer_label" required maxLength={120} className={field} />
               </label>
-              <label className="grid gap-1 text-xs">
+              <label className="grid min-w-0 gap-1 text-xs">
                 Offer
-                <select name="offer" className={input} defaultValue="website_1990">
+                <select name="offer" className={field} defaultValue="website_1990">
                   {(Object.keys(OFFER_PRICES) as Offer[]).map((o) => (
                     <option key={o} value={o}>
                       {OFFER_LABELS[o]} ({money(OFFER_PRICES[o].amount)}
@@ -175,30 +176,30 @@ export async function SalesSection({
                   ))}
                 </select>
               </label>
-              <label className="grid gap-1 text-xs">
+              <label className="grid min-w-0 gap-1 text-xs">
                 GST
-                <select name="gst_treatment" className={input} defaultValue="exclusive">
+                <select name="gst_treatment" className={field} defaultValue="exclusive">
                   <option value="exclusive">Plus GST (prices are before GST)</option>
                   <option value="inclusive">Includes GST</option>
                   <option value="not_registered">No GST</option>
                   <option value="pending">Not decided (can&apos;t be sent)</option>
                 </select>
               </label>
-              <label className="grid gap-1 text-xs">
+              <label className="grid min-w-0 gap-1 text-xs">
                 Terms version
-                <input name="terms_version" required maxLength={80} className={input} placeholder="the approved terms version" />
+                <input name="terms_version" required maxLength={80} className={field} placeholder="the approved terms version" />
               </label>
-              <label className="grid gap-1 text-xs">
+              <label className="grid min-w-0 gap-1 text-xs">
                 Pilot ID (optional)
-                <input name="pilot_company_id" pattern="OC-\d{3}" className={input} placeholder="OC-000" />
+                <input name="pilot_company_id" pattern="OC-\d{3}" className={field} placeholder="OC-000" />
               </label>
-              <label className="grid gap-1 text-xs">
+              <label className="grid min-w-0 gap-1 text-xs">
                 Enquiry ID (optional)
-                <input name="enquiry_id" className={input} />
+                <input name="enquiry_id" className={field} />
               </label>
-              <label className="grid gap-1 text-xs sm:col-span-2">
+              <label className="grid min-w-0 gap-1 text-xs sm:col-span-2">
                 Scope (pages, form flow, hosting, revision rounds)
-                <textarea name="scope_summary" required maxLength={2000} rows={3} className={input} />
+                <textarea name="scope_summary" required maxLength={2000} rows={3} className={field} />
               </label>
               <div className="sm:col-span-2">
                 <button className={button}>Save draft quote</button>
@@ -257,10 +258,10 @@ export async function SalesSection({
                           <button className={button}>{n.label}</button>
                         </form>
                       ))}
-                      <form action={setDeliveryStage} className="flex gap-1">
+                      <form action={setDeliveryStage} className="flex min-w-0 max-w-full flex-wrap gap-1">
                         <input type="hidden" name="view" value={viewQuery} />
                         <input type="hidden" name="quote_id" value={q.id} />
-                        <select name="stage" defaultValue={q.delivery_stage} className={input} aria-label="Delivery stage">
+                        <select name="stage" defaultValue={q.delivery_stage} className={`${input} min-w-0 max-w-full`} aria-label="Delivery stage">
                           {DELIVERY_STAGES.map((s) => (
                             <option key={s.value} value={s.value}>
                               {s.label}
@@ -301,16 +302,16 @@ export async function SalesSection({
 
           <div id="conversation-log" className="mt-4 scroll-mt-24 rounded-xl border border-neutral-200 bg-white p-4 text-sm">
             <h3 className="font-medium">Conversation log</h3>
-            <form action={addConversation} className="mt-2 grid gap-2 sm:grid-cols-4">
+            <form action={addConversation} className="mt-2 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-4">
               <input type="hidden" name="view" value={viewQuery} />
-              <select name="kind" className={input} aria-label="Kind">
+              <select name="kind" className={field} aria-label="Kind">
                 {CONVERSATION_KINDS.map((k) => (
                   <option key={k.value} value={k.value}>
                     {k.label}
                   </option>
                 ))}
               </select>
-              <select name="quote_id" className={input} aria-label="Quote" defaultValue="">
+              <select name="quote_id" className={field} aria-label="Quote" defaultValue="">
                 <option value="">No quote</option>
                 {quotes.map((q) => (
                   <option key={q.id} value={q.id}>
@@ -318,10 +319,10 @@ export async function SalesSection({
                   </option>
                 ))}
               </select>
-              <input name="pilot_company_id" pattern="OC-\d{3}" placeholder="Pilot ID (optional)" className={input} />
-              <input name="occurred_on" type="date" className={input} aria-label="Date (default today)" />
-              <input name="enquiry_id" placeholder="Enquiry ID (optional)" className={`${input} sm:col-span-2`} />
-              <textarea name="summary" required maxLength={2000} rows={2} placeholder="What was said or agreed" className={`${input} sm:col-span-4`} />
+              <input name="pilot_company_id" pattern="OC-\d{3}" placeholder="Pilot ID (optional)" className={field} />
+              <input name="occurred_on" type="date" className={field} aria-label="Date (default today)" />
+              <input name="enquiry_id" placeholder="Enquiry ID (optional)" className={`${field} sm:col-span-2`} />
+              <textarea name="summary" required maxLength={2000} rows={2} placeholder="What was said or agreed" className={`${field} sm:col-span-4`} />
               <div className="sm:col-span-4">
                 <button className={button}>Add to log</button>
               </div>
