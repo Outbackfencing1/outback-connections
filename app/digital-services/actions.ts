@@ -36,7 +36,7 @@ function storeFor(): IntakeStore | null {
   if (!admin) return null;
   return {
     findByKey: async (key) => {
-      const { data, error } = await admin.from(TABLE).select("id").eq("idempotency_key", key).maybeSingle();
+      const { data, error } = await admin.from(TABLE).select("id, notified_at").eq("idempotency_key", key).maybeSingle();
       return { data, error };
     },
     countRecentByIp: async (ip, sinceIso) => {

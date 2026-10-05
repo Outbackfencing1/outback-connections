@@ -106,10 +106,11 @@ export type IntakeResult =
 
 type DbError = { code?: string; message: string } | null;
 type Row = { id: string };
+type KeyedRow = Row & { notified_at?: string | null };
 
 /** The few database operations intake needs (service role). */
 export type IntakeStore = {
-  findByKey(key: string): Promise<{ data: Row | null; error: DbError }>;
+  findByKey(key: string): Promise<{ data: KeyedRow | null; error: DbError }>;
   countRecentByIp(ip: string, sinceIso: string): Promise<{ count: number | null; error: DbError }>;
   insert(row: Record<string, unknown>): Promise<{ data: Row | null; error: DbError }>;
   markNotified(id: string, patch: { notified_at: string | null; notify_error: string | null }): Promise<{ error: DbError }>;
@@ -163,7 +164,18 @@ export async function processIntake(input: IntakeInput, deps: IntakeDeps): Promi
 
   const existing = await store.findByKey(v.value.idempotency_key);
   if (isMissingTable(existing.error)) return { ok: false, errors: { _: NOT_READY } };
-  if (existing.data) return { ok: true, reference: referenceFor(existing.data.id), duplicate: true, notified: false };
+  if (existing.data) {
+    const reference = referenceFor(existing.data.id);
+    // Saved before, but the owner alert never landed (the first request died
+    // between insert and notify, or the send failed): this retry sends it.
+    // A double click mid-flight can at worst send a second reference-only
+    // alert; a lost lead is the worse failure.
+    if (existing.data.notified_at == null) {
+      const notified = await alertOwner(store, deps, existing.data.id, reference);
+      return { ok: true, reference, duplicate: true, notified };
+    }
+    return { ok: true, reference, duplicate: true, notified: false };
+  }
 
   // Early exit only: parallel submits can all pass this count. The database
   // trigger enforces the cap atomically and answers RATE_LIMITED_CODE.
@@ -196,6 +208,12 @@ export async function processIntake(input: IntakeInput, deps: IntakeDeps): Promi
   if (!row) return { ok: false, errors: { _: "We couldn't save that just now. Please try again." } };
 
   const reference = referenceFor(row.id);
+  const notified = await alertOwner(store, deps, row.id, reference);
+  return { ok: true, reference, duplicate: false, notified };
+}
+
+/** Send the owner alert for a saved row and record the outcome on it. */
+async function alertOwner(store: IntakeStore, deps: IntakeDeps, id: string, reference: string): Promise<boolean> {
   let notified = false;
   let patch: { notified_at: string | null; notify_error: string | null };
   try {
@@ -210,11 +228,11 @@ export async function processIntake(input: IntakeInput, deps: IntakeDeps): Promi
   // Record the alert outcome; retry once. If it still can't be written, the
   // row keeps notified_at = null, which the owner queue shows as "alert not
   // confirmed", and the server log carries the reference.
-  const recorded = await recordAlert(store, row.id, patch);
+  const recorded = await recordAlert(store, id, patch);
   if (!recorded) {
     deps.log?.(`[digital-services] alert state not recorded for ${reference} (notified=${notified})`);
   }
-  return { ok: true, reference, duplicate: false, notified };
+  return notified;
 }
 
 /**

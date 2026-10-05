@@ -153,6 +153,8 @@ function fakeStore(opts: { missingTable?: boolean; raceOnInsert?: boolean; recen
         markFailuresLeft--;
         return { error: { message: "update failed" } };
       }
+      const saved = rows.find((r) => r.id === id);
+      if (saved) Object.assign(saved, patch);
       return { error: null };
     },
   };
@@ -186,6 +188,30 @@ describe("processIntake", () => {
     expect(rows).toHaveLength(1);
     expect(again).toEqual({ ok: true, reference: first.ok ? first.reference : "", duplicate: true, notified: false });
     expect(notify).toHaveBeenCalledTimes(1);
+  });
+
+  it("a retry of a saved row whose alert never landed sends the alert now", async () => {
+    const { store, rows, marks } = fakeStore();
+    // The first request saved the row, then died before notifying.
+    rows.push({ ...good(), idempotency_key: good().idempotency_key.toLowerCase(), id: "dddddddd-0000-4000-8000-000000000004", notified_at: null });
+    const notify = vi.fn(async () => ({ ok: true }));
+    const res = await processIntake(good(), deps(store, notify));
+    expect(res).toEqual({ ok: true, reference: "DSE-DDDDDDDD", duplicate: true, notified: true });
+    expect(rows).toHaveLength(1);
+    expect(notify).toHaveBeenCalledWith("DSE-DDDDDDDD");
+    expect(marks[0]).toMatchObject({ id: "dddddddd-0000-4000-8000-000000000004", notify_error: null });
+  });
+
+  it("a retry after a failed alert tries again; once confirmed, further retries stay quiet", async () => {
+    const { store } = fakeStore();
+    const notify = vi.fn<IntakeDeps["notifyOwner"]>(async () => ({ ok: false, error: "down" }));
+    await processIntake(good(), deps(store, notify));
+    notify.mockImplementation(async () => ({ ok: true }));
+    const second = await processIntake(good(), deps(store, notify));
+    expect(second).toMatchObject({ duplicate: true, notified: true });
+    const third = await processIntake(good(), deps(store, notify));
+    expect(third).toMatchObject({ duplicate: true, notified: false });
+    expect(notify).toHaveBeenCalledTimes(2);
   });
 
   it("two simultaneous submits: the unique index loser returns the winner's row", async () => {
