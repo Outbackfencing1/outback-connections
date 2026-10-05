@@ -91,10 +91,31 @@ second address at the same company and two concurrent dispatch attempts. A
 confirmed Cowork send is reconciled from provider message IDs/timestamps; an
 uncertain send stays unresolved, never retried blindly.
 
+## Sender: the no-extra-cost path (DNS checked 5 Oct 2026)
+
+Public DNS for `outbackconnections.com.au`:
+- MX → Google Workspace (`aspmx.l.google.com` and alternates).
+- SPF → `include:_spf.google.com` (via `dc-aa8e722993._spfm…`), `~all`.
+- DKIM → `google._domainkey` published (and `resend._domainkey` for Resend).
+- DMARC → `p=quarantine`, relaxed alignment.
+- Resend sends from the separate `send.` subdomain (Amazon SES), so the
+  marketplace's transactional mail doesn't share the root domain's reputation.
+
+So the domain's mail already runs on Google Workspace, and Gmail-sent mail
+from a Workspace address passes SPF/DKIM/DMARC. A Workspace **user alias**
+(e.g. `josh@` on Josh's existing Workspace account) costs nothing extra: add
+it in Google Admin, set it as a "Send mail as" address, and it shares the
+inbox. A new Workspace **user** would add a monthly cost and needs approval.
+Not verified from here: which Workspace account holds help@, whether an alias
+already exists, and Gmail send-as setup. Those need Josh in Google Admin. Then
+connect that Workspace account (not the fencing Gmail) to the reply workflow
+and run one send/reply test between owned inboxes.
+
 ## What blocks the first real send
 
 1. Josh's approval of the eight drafts (Cowork workflow).
-2. A connected, verified Outback Connections sender with a tested reply route.
+2. A connected, verified Outback Connections sender with a tested reply route
+   (the free Workspace-alias path above).
 3. For OC-010: Cowork's call on the "Book a workplace visit" card.
 
 The previews themselves are not a blocker.
