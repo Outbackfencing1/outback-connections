@@ -25,6 +25,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { SALES_NOTICES, quoteListView, type SalesOutcome } from "@/lib/digital-services/sales";
 import { setEnquiryStatus } from "./actions";
 import { SalesSection } from "./SalesSection";
+import { PrepSection } from "./PrepSection";
+import { PREP_NOTICES, type PrepOutcome } from "@/lib/digital-services/prep-queue";
 import { addConversation, createDraftQuote } from "./sales-actions";
 
 export const dynamic = "force-dynamic";
@@ -114,6 +116,9 @@ export default async function OwnerPage({
   const notice = typeof sp.notice === "string" ? NOTICES[sp.notice as StatusChange] : undefined;
   const pilotNotice = typeof sp.pilot === "string" ? PILOT_NOTICES[sp.pilot] : undefined;
   const salesOutcome = typeof sp.sales === "string" && sp.sales in SALES_NOTICES ? (sp.sales as SalesOutcome) : null;
+  const prepOutcome = typeof sp.prep === "string" && sp.prep in PREP_NOTICES ? (sp.prep as PrepOutcome) : null;
+  const prepReason = typeof sp.reason === "string" ? sp.reason.slice(0, 300) : "";
+  const prepPage = pageFrom(typeof sp.pp === "string" ? sp.pp : undefined);
   const noticeRef = typeof sp.ref === "string" && /^DSE-[0-9A-F]{8}$/.test(sp.ref) ? sp.ref : "";
 
   const admin = createAdminClient();
@@ -329,6 +334,8 @@ export default async function OwnerPage({
       </section>
 
       <SalesSection admin={admin} viewQuery={viewQuery} outcome={salesOutcome} view={quoteView} />
+
+      <PrepSection admin={admin} outcome={prepOutcome} reason={prepReason} page={prepPage} />
 
       <section className="mt-10">
         <h2 className="text-lg font-semibold">Enquiries</h2>

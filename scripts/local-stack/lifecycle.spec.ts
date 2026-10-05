@@ -24,7 +24,7 @@ const psql = (sql: string) =>
   execFileSync("psql", ["-h", "127.0.0.1", "-p", process.env.PGPORT ?? "5499", "-U", "postgres", "-tAc", sql]).toString().trim();
 const q = (v: string) => v.replace(/'/g, "''");
 
-type State = { business: string; enquiryId?: string; reference?: string };
+type State = { business: string; enquiryId?: string; reference?: string; prepJob?: string; prepSha?: string };
 const load = (): State => JSON.parse(readFileSync(STATE_FILE, "utf8"));
 const save = (s: State) => writeFileSync(STATE_FILE, JSON.stringify(s));
 
@@ -127,6 +127,18 @@ test.describe("phase 1: enquiry to sent quote", () => {
     expect(() => psql(`update digital_services_quotes set amount_cents = 100 where customer_label = '${q(state.business)}'`)).toThrow(/sent quote is fixed/);
     expect(quoteState(state.business)).toBe("sent/not_started");
     await shots(page, "lifecycle-1-owner-quote-sent");
+
+    // A preparation job handed off before the restart.
+    psql(`insert into digital_services_pilot (id, company, lane) values ('OC-982', 'Lifecycle Prep Fixture', 'email') on conflict do nothing`);
+    await page.goto("/dashboard/owner#prep");
+    await page.locator("#prep summary", { hasText: "Queue a preparation job" }).click();
+    await page.fill("#prep input[name=company_id]", "OC-982");
+    await page.getByRole("button", { name: "Queue job" }).click();
+    await expect(page).toHaveURL(/prep=queued/);
+    await page.locator("#prep li", { hasText: "OC-982" }).getByRole("button", { name: "Hand off to me (24 h)" }).click();
+    await expect(page).toHaveURL(/prep=claimed/);
+    [state.prepJob, state.prepSha] = psql(`select id || '|' || packet_sha256 from digital_services_prep_jobs where company_id = 'OC-982'`).split("|");
+    save(state);
     console.log(`[lifecycle] phase 1: ${state.reference} saved (alert failed, lead kept); call logged; quote drafted from the enquiry and sent; price change refused`);
   });
 });
@@ -178,7 +190,24 @@ test.describe("phase 2: acceptance to production (after a restart)", () => {
     await outcome(page, "saved");
     expect(quoteState(business)).toBe("accepted/in_production");
     await shots(page, "lifecycle-2-in-production");
-    console.log("[lifecycle] phase 2: restart survived; accepted in writing; A$500 deposit gated; refused save visible; remaining deposit -> production");
+    // The hand-off survived the restart; its result is recorded once.
+    const { prepJob, prepSha } = load();
+    expect(psql(`select status || '/' || lease_owner from digital_services_prep_jobs where id = '${prepJob}'`)).toBe("leased/handoff:owner");
+    const result = JSON.stringify({ contract_id: "oc-prep-result/0.1", job_id: prepJob, packet_sha256: prepSha, job_kind: "copy_draft", produced_by: "fixture worker", produced_at: new Date().toISOString(), status: "completed", summary: "Fixture draft prepared" });
+    for (const expected of ["succeeded", null]) {
+      await page.goto("/dashboard/owner#prep");
+      const row = page.locator("#prep li", { hasText: "OC-982" });
+      if (expected) {
+        await row.locator("textarea[name=result]").fill(result);
+        await row.getByRole("button", { name: "Import result" }).click();
+        await expect(page).toHaveURL(/prep=succeeded/);
+      } else {
+        // Re-importing after success isn't offered, and the database answers 'already'.
+        await expect(row.locator("textarea[name=result]")).toHaveCount(0);
+        expect(psql(`select prep_complete('${prepJob}', 'handoff:owner', '${result.replace(/'/g, "''")}')`)).toBe("already");
+      }
+    }
+    console.log("[lifecycle] phase 2: restart survived; accepted in writing; A$500 deposit gated; refused save visible; remaining deposit -> production; prep hand-off survived and recorded once");
   });
 });
 
@@ -238,7 +267,8 @@ test.describe("phase 3: review to hand-over, and care from go-live (after anothe
       `delete from digital_services_conversations where quote_id in ${ids} or enquiry_id in (select id from digital_services_enquiries where business_name = '${q(business)}');` +
         ` delete from digital_services_payments where quote_id in ${ids};` +
         ` delete from digital_services_quotes where customer_label like '${q(business)}%';` +
-        ` delete from digital_services_enquiries where business_name = '${q(business)}'`
+        ` delete from digital_services_enquiries where business_name = '${q(business)}';` +
+        ` delete from digital_services_prep_jobs where company_id = 'OC-982'; delete from digital_services_pilot where id = 'OC-982'`
     );
   });
 });

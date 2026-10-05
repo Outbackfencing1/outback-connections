@@ -2,6 +2,7 @@
 // public page -> one persisted enquiry -> owner-only queue -> status change ->
 // alert result. Run: see README.md in this folder. Not a hosted test.
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { PERSONAS, sessionCookie } from "./personas.mjs";
 
@@ -303,5 +304,64 @@ test("the conversation log not tied to a quote is paged, so older entries stay r
     console.log("[flow] conversation log: 55 entries reachable across pages");
   } finally {
     psql(`delete from digital_services_conversations where summary like '${TAG}%'`);
+  }
+});
+
+test("preparation queue: queue a job, hand it off, download its exact packet, import a result; no worker runs by itself", async ({ page }) => {
+  psql(`insert into digital_services_pilot (id, company, lane) values ('OC-981', 'Fixture Prep Co', 'email') on conflict do nothing`);
+  try {
+    await as(page, "owner");
+    await page.goto("/dashboard/owner#prep");
+    await expect(page.locator("#prep")).toContainText("No worker runs automatically");
+    await page.locator("#prep summary", { hasText: "Queue a preparation job" }).click();
+    await page.fill("#prep input[name=company_id]", "OC-981");
+    await page.selectOption("#prep select[name=kind]", "copy_draft");
+    await page.getByRole("button", { name: "Queue job" }).click();
+    await expect(page).toHaveURL(/prep=queued/);
+    // Queuing the same facts again doesn't add a job.
+    await page.goto("/dashboard/owner#prep");
+    await page.locator("#prep summary", { hasText: "Queue a preparation job" }).click();
+    await page.fill("#prep input[name=company_id]", "OC-981");
+    await page.getByRole("button", { name: "Queue job" }).click();
+    await expect(page).toHaveURL(/prep=already_queued/);
+    expect(psql(`select count(*) from digital_services_prep_jobs where company_id = 'OC-981'`)).toBe("1");
+    const [jobId, packetSha] = psql(`select id || '|' || packet_sha256 from digital_services_prep_jobs where company_id = 'OC-981'`).split("|");
+    expect(psql(`select status from digital_services_prep_jobs where id = '${jobId}'`)).toBe("queued"); // nothing ran it
+
+    const job = page.locator("#prep li", { hasText: "OC-981" });
+    await job.getByRole("button", { name: "Hand off to me (24 h)" }).click();
+    await expect(page).toHaveURL(/prep=claimed/);
+    const packet = await page.request.get(`/dashboard/owner/prep/${jobId}/packet`);
+    expect(packet.status()).toBe(200);
+    const text = await packet.text();
+    expect(createHash("sha256").update(text, "utf8").digest("hex")).toBe(packetSha);
+    expect(packet.headers()["x-packet-sha256"]).toBe(packetSha);
+    expect(JSON.parse(text)).toMatchObject({ contract_id: "oc-prep-packet/0.1", company_id: "OC-981", constraints: { sendable: false } });
+
+    // A result for a different packet is rejected; the right one is recorded once.
+    const result = (sha: string) =>
+      JSON.stringify({ contract_id: "oc-prep-result/0.1", job_id: jobId, packet_sha256: sha, job_kind: "copy_draft", produced_by: "fixture worker", produced_at: new Date().toISOString(), status: "completed", summary: "Fixture draft prepared" });
+    await page.goto("/dashboard/owner#prep");
+    await page.locator("#prep li", { hasText: "OC-981" }).locator("textarea[name=result]").fill(result("f".repeat(64)));
+    await page.getByRole("button", { name: "Import result" }).click();
+    await expect(page).toHaveURL(/prep=rejected/);
+    await page.goto("/dashboard/owner#prep");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => document.querySelectorAll("details").forEach((d) => (d.open = true)));
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    await page.screenshot({ path: process.env.PREP_SCREENSHOT_PHONE ?? "/tmp/owner-prep-phone.png", fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.locator("#prep li", { hasText: "OC-981" }).locator("textarea[name=result]").fill(result(packetSha));
+    await page.getByRole("button", { name: "Import result" }).click();
+    await expect(page).toHaveURL(/prep=succeeded/);
+    await expect(page.locator("#prep p[role=status]")).toContainText("nothing was approved, sent or published");
+    expect(psql(`select status || '/' || (result_sha256 = encode(sha256(convert_to(result_text, 'UTF8')), 'hex')) from digital_services_prep_jobs where id = '${jobId}'`)).toBe("succeeded/true");
+    // A member can't download packets.
+    await page.context().clearCookies();
+    await as(page, "member");
+    expect((await page.request.get(`/dashboard/owner/prep/${jobId}/packet`)).status()).toBe(404);
+    console.log("[flow] prep queue: queued once (idempotent), handed off, packet hash matched the database, wrong-packet result rejected, result recorded");
+  } finally {
+    psql(`delete from digital_services_prep_jobs where company_id = 'OC-981'; delete from digital_services_pilot where id = 'OC-981'`);
   }
 });

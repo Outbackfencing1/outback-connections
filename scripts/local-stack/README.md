@@ -44,6 +44,13 @@ scripts/local-stack/stop.sh
 - **Quote list:** paged and filtered (open by default, all on request), so 56 fixture quotes stay reachable and a withdrawn one shows under "all".
 - **Conversation log:** entries not tied to a quote are paged, so 55 fixture entries stay reachable.
 
+- **Preparation queue:**
+  - A job is queued once (idempotent) and handed off to Joshua.
+  - The downloaded packet's SHA-256 equals the database's.
+  - A result for another packet is rejected; the right one is recorded and says nothing was approved, sent or published.
+  - Members get a 404 on the packet.
+  - No sideways scroll at phone width.
+
 **Whole customer journey with restarts:** after `npm run build` with `app.env` sourced, run `scripts/local-stack/lifecycle.sh`. It runs `lifecycle.spec.ts` in three phases and restarts the app server between them. It checks the listener PID changed, so each unfinished state really survives a restart.
 
 The phases:

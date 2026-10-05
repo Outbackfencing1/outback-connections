@@ -24,6 +24,7 @@ $PSQL -f "$ROOT/supabase/migrations/_drafts/digital_services_enquiries.sql" 2>/d
 # The pilot migration requires the owner id at apply time (as in production).
 PGOPTIONS="-c app.ds_owner_user_id=33333333-3333-4333-8333-333333333333" $PSQL -f "$ROOT/supabase/migrations/_drafts/digital_services_pilot.sql" 2>/dev/null
 $PSQL -f "$ROOT/supabase/migrations/_drafts/digital_services_sales.sql" 2>/dev/null
+$PSQL -f "$ROOT/supabase/migrations/_drafts/digital_services_prep_queue.sql" 2>/dev/null
 
 SECRET="$(head -c 48 /dev/urandom | base64 | tr -d '/+=' | head -c 48)"
 cat > "$STACK/postgrest.conf" <<CONF
