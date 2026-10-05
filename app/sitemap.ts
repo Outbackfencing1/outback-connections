@@ -6,6 +6,7 @@
 import type { MetadataRoute } from "next";
 import { createAnonClient } from "@/lib/supabase/anon";
 import { regionsForPostcodes, regionSlug } from "@/lib/regions";
+import { digitalServicesPublic } from "@/lib/digital-services/flags";
 
 export const revalidate = 3600; // regenerate hourly
 
@@ -31,7 +32,9 @@ type Row = { url: string; lastModified: Date; changeFrequency: "weekly" | "daily
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
-  const staticEntries: Row[] = STATIC.map(({ path, priority }) => ({
+  // The digital-services page is listed only once it's switched on.
+  const paths = digitalServicesPublic() ? [...STATIC, { path: "/digital-services", priority: 0.5 }] : STATIC;
+  const staticEntries: Row[] = paths.map(({ path, priority }) => ({
     url: `${BASE}${path}`,
     lastModified: now,
     changeFrequency: "weekly",

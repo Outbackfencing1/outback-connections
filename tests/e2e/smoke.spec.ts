@@ -90,6 +90,7 @@ test("guarded pages bounce anonymous visitors to sign-in", async ({ page }) => {
     "/dashboard/directory/add",
     "/post/sale",
     "/post/service/request",
+    "/dashboard/owner",
   ]) {
     await page.goto(path);
     await expect(page, path).toHaveURL(/\/signin\?next=/);
@@ -113,4 +114,14 @@ test("a migrated contractor URL redirects instead of 404", async ({ request }) =
   const res = await request.get(`/services/listing/${slug}`, { maxRedirects: 0 });
   expect([301, 302, 307, 308]).toContain(res.status());
   expect(res.headers()["location"] ?? "").toMatch(/\/services\/listing\//);
+});
+
+test("digital services page: off means 404; on means the three offers and an honest form", async ({ request, page }) => {
+  const res = await request.get("/digital-services", { maxRedirects: 0 });
+  expect([200, 404]).toContain(res.status());
+  if (res.status() === 404) return; // switched off (DIGITAL_SERVICES_PUBLIC != on)
+  await page.goto("/digital-services");
+  for (const price of ["A$1,990", "A$490", "A$149 a month"]) await expect(page.getByText(price)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send enquiry" })).toBeVisible();
+  // Never submits: read-only smoke.
 });

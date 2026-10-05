@@ -14,6 +14,16 @@ hidden from navigation while empty. For sale is first-party only: nothing is
 scraped into it, and the site never handles payment or takes a commission.
 Architecture source of truth: `SPINE-BUILD.md`. Current state: `HANDOFF.md`.
 
+**Digital services (Oct 2026, active):** websites, guided quote forms and
+managed care for small service businesses, sold by Josh. The shared plan is
+the latest `oc_planning.plan_versions` row for `digital-services-master-plan`
+(verify `content_sha256`); agents append to `oc_planning.agent_updates`. Its
+data (enquiries, prospects, drafts, payments) is owner-only: gate on
+`getOwnerAccess()` (`DIGITAL_SERVICES_OWNER_USER_ID`), never on marketplace
+admin. No prospect sending, new production publishing, production engine
+migration or spending without Josh's approval. Only events/ticketing are
+parked. See `docs/digital-services/`.
+
 ## Non-negotiable product rules
 
 1. **Honesty.** A row we found online is `data_source='scraped'`, shown with

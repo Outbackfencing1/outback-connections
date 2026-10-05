@@ -10,6 +10,32 @@ Pushing to `main` deploys production. All migrations in
 
 ---
 
+## 5 Oct 2026: digital services, marketplace side (branch `ccr-a7a02618-x1gnjy-digital-services`)
+
+Handover: `oc_planning.plan_versions` `claude-code-build-handover` rev 2 on
+master rev 12. Engine source, the ten review JSONs and the Cowork drafts are
+only on Josh's PC, so engine import/repairs/adapter are blocked on that
+handoff (`docs/digital-services/ENGINE-HANDOFF.md`). Done here, not merged,
+not published:
+
+- `/digital-services` ("Websites & digital tools"): the three launch offers at
+  the decided prices, honest terms wording, enquiry form. Off unless
+  `DIGITAL_SERVICES_PUBLIC=on`; nav/footer/sitemap entries follow the switch.
+- Intake (`lib/digital-services/intake.ts`): strict validation, honeypot,
+  idempotency key (retries save one row; a race is caught by the unique index),
+  per-IP limit, save first, then an owner alert with reference + link only; an
+  alert failure is recorded on the row and never loses the lead. Missing table
+  or key shows a visible "not open yet" message.
+- `/dashboard/owner`: Josh only (`DIGITAL_SERVICES_OWNER_USER_ID`; admin is not
+  enough; logged-out → sign in, others → 404). Readiness checks, the pilot
+  view, enquiry queue with Unicode/apostrophe/@ search and status updates.
+- Draft migration `supabase/migrations/_drafts/digital_services_enquiries.sql`
+  (not applied), tested on PGlite.
+- `docs/digital-services/`: `PILOT-READINESS.md`, `TERMS-PROPOSED.md`,
+  `ENGINE-HANDOFF.md`.
+
+Josh's decisions are bundled at the end of `TERMS-PROPOSED.md`.
+
 ## 4 Oct 2026: the staff-post clean-up was failing; fixed (branch `ccr-a7a02618-x1gnjy`)
 
 Live check (read-only) before the fix: the 2 and 3 Oct runs of

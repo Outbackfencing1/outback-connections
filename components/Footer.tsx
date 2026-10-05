@@ -1,6 +1,7 @@
 // components/Footer.tsx
 import Link from "next/link";
 import { getCountsByPillar } from "@/lib/category-counts";
+import { digitalServicesPublic } from "@/lib/digital-services/flags";
 
 export default async function Footer() {
   const counts = await getCountsByPillar();
@@ -33,6 +34,9 @@ export default async function Footer() {
                 <li><Link href="/sale" className="hover:text-neutral-900">For sale</Link></li>
               )}
               <li><Link href="/post" className="hover:text-neutral-900">Post a listing</Link></li>
+              {digitalServicesPublic() && (
+                <li><Link href="/digital-services" className="hover:text-neutral-900">Websites &amp; digital tools</Link></li>
+              )}
               <li><Link href="/about" className="hover:text-neutral-900">About</Link></li>
               <li><Link href="/faq" className="hover:text-neutral-900">FAQ</Link></li>
             </ul>
