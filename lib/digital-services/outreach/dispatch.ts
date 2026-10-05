@@ -131,8 +131,13 @@ export async function dispatchFirstContact(companyId: string, lane: Lane, deps: 
     // We never send without a confirmed intent record. If the record did land,
     // close it as not sent so it doesn't block the company forever.
     const closed = await insert(deps.store, { ...base, kind: "send_failed", note: "not sent: intent record unconfirmed" });
-    // "refused" here usually means no matching attempt exists (the intent never landed).
-    if (closed === "unknown") return { status: "not_sent_unrecorded", messageId, reason: "the send attempt couldn't be confirmed", proof: { neverCalled: true, messageId } };
+    // Only a confirmed closure is "not sent". A refusal can mean the intent
+    // never landed, but it can equally be a permission or policy refusal that
+    // leaves a landed attempt open (blocking the company), so it's reported as
+    // unrecorded with the never-called proof, like the handoff path below.
+    if (closed !== "ok" && closed !== "duplicate") {
+      return { status: "not_sent_unrecorded", messageId, reason: "the send attempt couldn't be confirmed", proof: { neverCalled: true, messageId } };
+    }
     return { status: "not_sent", reason: "the send attempt couldn't be confirmed" };
   }
   // From the handoff marker on, Gmail may have the message. Without a

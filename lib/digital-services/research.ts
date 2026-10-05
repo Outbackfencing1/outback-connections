@@ -167,6 +167,12 @@ function keys(c: { business_name: string; website?: string | null; abn?: string 
   };
 }
 
+/** The canonical host of an identity-list website/domain, only if a candidate's https URL could have it. */
+function identityDomain(raw: string | null | undefined): string | null {
+  const host = canonicalDomain(raw ?? null);
+  return host && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host) && !/^\d+(\.\d+){3}$/.test(host) ? host : null;
+}
+
 const LIST_KEYS = ["companies", "known", "existing", "exclusions", "excluded", "rows", "items", "entries", "candidates"];
 
 /**
@@ -197,11 +203,17 @@ export function loadIdentityList(raw: unknown, label: string): KnownCompany[] {
       phone: pick("phone"),
       locality: pick("locality", "suburb", "town"),
     };
-    // Every entry must produce at least one match key, or it could never
-    // match and a listed business would pass as new.
-    const k = keys(item);
-    if (!k.domain && !k.abn && !k.phone && !k.name_locality) {
-      throw new Error(`${label}[${i}]: no usable identity (a website/domain, an ABN, a phone, or a name with its locality)`);
+    // Keys are held to the same rules as candidates: a key a valid candidate
+    // can never produce (a bad-checksum ABN, a dotless host such as
+    // "localhost", a locality with no name) would never match, and a listed
+    // business would pass as new. A malformed key is an adapter error.
+    const where = `${label}[${i}]`;
+    if (item.website && !identityDomain(item.website)) throw new Error(`${where}: website/domain isn't a public hostname`);
+    if (item.abn && !validAbn(item.abn)) throw new Error(`${where}: abn fails the checksum`);
+    if (item.phone && !phoneDigits(item.phone)) throw new Error(`${where}: phone isn't an Australian number`);
+    const hasName = !!normName(item.business_name);
+    if (!identityDomain(item.website) && !abnDigits(item.abn) && !phoneDigits(item.phone) && !(hasName && item.locality)) {
+      throw new Error(`${where}: no usable identity (a website/domain, an ABN, a phone, or a name with its locality)`);
     }
     return item;
   });

@@ -244,6 +244,18 @@ describe("dispatchFirstContact", () => {
     expect(await closeAttemptNotSent("OC-901", r.status === "not_sent_unrecorded" ? r.proof : null, { store, env: ENV, fetch: empty.f })).toEqual({ status: "closed" });
   });
 
+  it("an intent that landed unconfirmed whose closure is refused (not just lost) is still unrecorded, never a clean not-sent", async () => {
+    const send = vi.fn(() => json({ id: "never", threadId: "never" }));
+    const { f } = gmail({ ...base, "/messages/send": send });
+    const store = memoryStore({ fail: [{ kind: "send_attempt", code: "PGRST001", times: 1, commit: true }, { kind: "send_failed", code: "42501", times: 1 }] });
+    const r = await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f, messageId: () => MSGID });
+    expect(r).toEqual({ status: "not_sent_unrecorded", messageId: MSGID, reason: "the send attempt couldn't be confirmed", proof: { neverCalled: true, messageId: MSGID } });
+    expect(send).not.toHaveBeenCalled();
+    expect(await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f })).toMatchObject({ status: "held", holds: ["unresolved_attempt"] });
+    const empty = gmail({ ...base, "/messages": () => json({}) });
+    expect(await closeAttemptNotSent("OC-901", r.status === "not_sent_unrecorded" ? r.proof : null, { store, env: ENV, fetch: empty.f })).toEqual({ status: "closed" });
+  });
+
   it("a handoff marker that landed unconfirmed: uncertain without proof, closed with the dispatcher's never-called proof", async () => {
     const send = vi.fn(() => json({ id: "never", threadId: "never" }));
     const { f } = gmail({ ...base, "/messages/send": send });

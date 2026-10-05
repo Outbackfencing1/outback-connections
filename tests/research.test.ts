@@ -133,6 +133,14 @@ describe("loadIdentityList", () => {
     // A name alone (object or bare string) can never match, so it's refused rather than silently ignored.
     expect(() => loadIdentityList([{ name: "Excluded Cleaning" }], "exclusions")).toThrow(/no usable identity/);
     expect(() => loadIdentityList(["Excluded Cleaning"], "exclusions")).toThrow(/no usable identity/);
-    expect(() => loadIdentityList([{ name: "X", website: "not a url at all" }], "known")).toThrow(/no usable identity/);
+    expect(() => loadIdentityList([{ name: "X", website: "not a url at all" }], "known")).toThrow(/public hostname/);
+  });
+  it("holds identity keys to the candidate rules, so every listed key can actually match", () => {
+    expect(() => loadIdentityList([{ name: "X", domain: "localhost" }], "exclusions")).toThrow(/public hostname/);
+    expect(() => loadIdentityList([{ name: "X", abn: "12345678901" }], "exclusions")).toThrow(/checksum/);
+    expect(() => loadIdentityList([{ name: "X", phone: "12" }], "exclusions")).toThrow(/Australian number/);
+    // A locality with no usable name (only stop words) can't match a candidate.
+    expect(() => loadIdentityList([{ name: "Pty Ltd", locality: "Orange" }], "exclusions")).toThrow(/no usable identity/);
+    expect(loadIdentityList([{ name: "X", abn: "51 824 753 556" }], "exclusions")[0].abn).toBe("51 824 753 556");
   });
 });
