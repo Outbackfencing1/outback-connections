@@ -22,10 +22,14 @@
 --                                     approval never carries over to new copy
 --   digital_services_pilot_events     contacted / replied / opted_out /
 --                                     suppressed / bounced, at company level
--- A 'contacted' event is refused unless the company is in the email lane, its
--- reservation matches the lane, it isn't suppressed or already contacted, its
--- contact basis is confirmed, the draft is the company's latest revision with
--- all four approvals, and the sender is named and isn't help@. A unique index
+-- A 'contacted' event is refused unless the company is in the email lane, it
+-- is reserved for exactly the dispatching lane, it isn't suppressed or already
+-- contacted, its contact basis is confirmed for its CURRENT address, the draft
+-- is the company's latest revision with all four approvals, and the sender is
+-- named and isn't help@. The message approval is Josh's: it can only be
+-- recorded through approve_pilot_message(), which checks the caller's own
+-- signed-in identity against digital_services_settings.owner_user_id; a
+-- service-role (or any direct) insert of a message approval is refused. A unique index
 -- allows one first contact per company, so two concurrent dispatches can't
 -- both succeed. lib/digital-services/dispatch-guard.ts applies the same rules
 -- in the server before any future dispatch.
@@ -35,6 +39,9 @@
 --           drop table if exists public.digital_services_pilot_drafts;
 --           drop function if exists public.ds_pilot_draft_guard();
 --           drop function if exists public.ds_pilot_contact_guard();
+--           drop function if exists public.approve_pilot_message(uuid, text);
+--           drop function if exists public.ds_pilot_approval_guard();
+--           drop table if exists public.digital_services_settings;
 --           drop table if exists public.digital_services_pilot;
 -- ============================================================
 
@@ -52,6 +59,7 @@ create table if not exists public.digital_services_pilot (
   contact_basis        text check (contact_basis is null or char_length(contact_basis) <= 500),
   contact_basis_confirmed_at timestamptz,
   contact_basis_confirmed_by text,
+  contact_basis_confirmed_for text,   -- the address the confirmation was for; a changed address is unconfirmed
   checked_at           date,
   updated_at           timestamptz not null default now()
 );
@@ -68,6 +76,17 @@ create policy "Service role manages digital services pilot"
 
 revoke all on public.digital_services_pilot from anon, authenticated;
 grant select, insert, update, delete on public.digital_services_pilot to service_role;
+
+-- -------------------------------------------------------------- settings
+-- One row: Josh's Supabase auth user id (the same value as the app's
+-- DIGITAL_SERVICES_OWNER_USER_ID), set when this migration is applied.
+create table if not exists public.digital_services_settings (
+  id             boolean primary key default true check (id),
+  owner_user_id  uuid not null
+);
+alter table public.digital_services_settings enable row level security;
+revoke all on public.digital_services_settings from anon, authenticated;
+grant select on public.digital_services_settings to service_role;
 
 -- ---------------------------------------------------------------- drafts
 create table if not exists public.digital_services_pilot_drafts (
@@ -114,11 +133,63 @@ create table if not exists public.digital_services_pilot_approvals (
   draft_sha256  text not null,
   kind          text not null check (kind in ('evidence_refresh', 'preview_review', 'copy_review', 'message_approval')),
   actor         text not null check (char_length(btrim(actor)) between 1 and 120),
+  approver_user_id uuid,          -- message_approval: Josh's auth user id, set by approve_pilot_message()
   approved_at   timestamptz not null default now(),
   note          text,
   foreign key (draft_id, draft_sha256) references public.digital_services_pilot_drafts (id, sha256),
   unique (draft_id, kind)
 );
+
+-- Josh's message approval: never a direct insert. Only approve_pilot_message()
+-- (security definer, running as the function owner) may insert one, after
+-- checking the caller's own JWT subject is the configured owner.
+create or replace function public.ds_pilot_approval_guard()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.kind = 'message_approval' and (current_user in ('service_role', 'authenticated', 'anon')
+      or new.approver_user_id is distinct from (select owner_user_id from public.digital_services_settings)) then
+    raise exception 'message approval must come from the owner via approve_pilot_message()' using errcode = 'OC403';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists trg_ds_pilot_approval_guard on public.digital_services_pilot_approvals;
+create trigger trg_ds_pilot_approval_guard
+  before insert or update on public.digital_services_pilot_approvals
+  for each row execute function public.ds_pilot_approval_guard();
+
+create or replace function public.approve_pilot_message(p_draft_id uuid, p_draft_sha256 text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller uuid := nullif(current_setting('request.jwt.claims', true)::json ->> 'sub', '')::uuid;
+  owner uuid := (select owner_user_id from public.digital_services_settings);
+  reviews int;
+  new_id uuid;
+begin
+  if caller is null or owner is null or caller <> owner then
+    raise exception 'only the owner can approve a message' using errcode = 'OC403';
+  end if;
+  select count(distinct kind) into reviews from public.digital_services_pilot_approvals
+    where draft_id = p_draft_id and draft_sha256 = p_draft_sha256
+      and kind in ('evidence_refresh', 'preview_review', 'copy_review');
+  if reviews < 3 then
+    raise exception 'evidence, preview and copy reviews come first' using errcode = 'OC403';
+  end if;
+  insert into public.digital_services_pilot_approvals (draft_id, draft_sha256, kind, actor, approver_user_id)
+  values (p_draft_id, p_draft_sha256, 'message_approval', 'owner', caller)
+  returning id into new_id;
+  return new_id;
+end;
+$$;
+revoke execute on function public.approve_pilot_message(uuid, text) from public, anon, service_role;
+grant execute on function public.approve_pilot_message(uuid, text) to authenticated;
 
 -- ---------------------------------------------------------------- events
 create table if not exists public.digital_services_pilot_events (
@@ -149,23 +220,26 @@ begin
   if new.kind <> 'contacted' then return new; end if;
   select * into c from public.digital_services_pilot where id = new.company_id for update;
   if c.lane <> 'email' then raise exception 'not an email-lane company' using errcode = 'OC403'; end if;
-  if new.lane is null or (c.reserved_for is not null and c.reserved_for <> new.lane) then
-    raise exception 'company is reserved for another lane' using errcode = 'OC403';
+  if new.lane is null or c.reserved_for is null or c.reserved_for <> new.lane then
+    raise exception 'company is not reserved for this lane' using errcode = 'OC403';
   end if;
   if exists (select 1 from public.digital_services_pilot_events e
              where e.company_id = new.company_id and e.kind in ('opted_out', 'suppressed', 'bounced', 'replied')) then
     raise exception 'company is suppressed or has replied' using errcode = 'OC403';
   end if;
-  if c.contact_address is null or c.contact_basis_confirmed_at is null then
-    raise exception 'contact basis not confirmed' using errcode = 'OC403';
+  if c.contact_address is null or c.contact_basis_confirmed_at is null
+     or lower(btrim(coalesce(c.contact_basis_confirmed_for, ''))) <> lower(btrim(c.contact_address)) then
+    raise exception 'contact basis not confirmed for the current address' using errcode = 'OC403';
   end if;
   select * into d from public.digital_services_pilot_drafts where id = new.draft_id;
   if d.id is null or d.company_id <> new.company_id
      or d.revision <> (select max(revision) from public.digital_services_pilot_drafts where company_id = new.company_id) then
     raise exception 'draft is not this company''s latest revision' using errcode = 'OC403';
   end if;
-  select 4 - count(distinct kind) into missing from public.digital_services_pilot_approvals
-    where draft_id = d.id and draft_sha256 = d.sha256;
+  select 4 - count(distinct a.kind) into missing from public.digital_services_pilot_approvals a
+    where a.draft_id = d.id and a.draft_sha256 = d.sha256
+      and (a.kind <> 'message_approval'
+           or a.approver_user_id = (select owner_user_id from public.digital_services_settings));
   if missing > 0 then raise exception 'draft lacks % approval(s)', missing using errcode = 'OC403'; end if;
   if new.sender is null or new.sender ~* '^help@' then
     raise exception 'a named outreach sender is required (never help@)' using errcode = 'OC403';

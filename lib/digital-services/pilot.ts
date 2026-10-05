@@ -16,6 +16,7 @@ export type PilotRow = {
   offer: Offer | null;
   contact_address: string | null;
   contact_basis_confirmed_at: string | null;
+  contact_basis_confirmed_for: string | null;
   checked_at: string | null;
 };
 

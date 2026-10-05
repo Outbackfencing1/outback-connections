@@ -22,7 +22,7 @@ import {
 import { HOLD_LABELS, firstContactHolds, type PilotApproval, type PilotDraft, type PilotEvent } from "@/lib/digital-services/dispatch-guard";
 import { PAGE_SIZE, SEARCH_CHUNK, SEARCH_MAX_ROWS, STATUSES, pageFrom, statusesFor, type StatusChange } from "@/lib/digital-services/queue";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { setEnquiryStatus } from "./actions";
+import { approvePilotMessage, setEnquiryStatus } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Owner — digital services", robots: { index: false, follow: false } };
@@ -44,6 +44,13 @@ type Enquiry = {
 };
 
 const SITE = "https://www.outbackconnections.com.au";
+
+const PILOT_NOTICES: Record<string, { ok: boolean; text: string }> = {
+  approved: { ok: true, text: "Message approval recorded for that exact revision." },
+  refused: { ok: false, text: "Not approved: the database refused it (only your own session can approve, after the three reviews)." },
+  failed: { ok: false, text: "Not approved: something went wrong. Nothing was recorded; try again." },
+  invalid: { ok: false, text: "Not approved: that draft reference isn't valid." },
+};
 
 const NOTICES: Record<StatusChange, { ok: boolean; text: string }> = {
   saved: { ok: true, text: "Status saved." },
@@ -93,6 +100,7 @@ export default async function OwnerPage({
 
   const viewQuery = new URLSearchParams({ status: statusFilter, ...(q ? { q } : {}), page: String(page) }).toString();
   const notice = typeof sp.notice === "string" ? NOTICES[sp.notice as StatusChange] : undefined;
+  const pilotNotice = typeof sp.pilot === "string" ? PILOT_NOTICES[sp.pilot] : undefined;
   const noticeRef = typeof sp.ref === "string" && /^DSE-[0-9A-F]{8}$/.test(sp.ref) ? sp.ref : "";
 
   const admin = createAdminClient();
@@ -138,7 +146,7 @@ export default async function OwnerPage({
     const [p, d, a, e] = await Promise.all([
       admin.from(PILOT_TABLE).select("*").order("id"),
       admin.from(PILOT_DRAFTS_TABLE).select("id, company_id, revision, subject, body, sha256"),
-      admin.from(PILOT_APPROVALS_TABLE).select("draft_id, draft_sha256, kind, actor, approved_at"),
+      admin.from(PILOT_APPROVALS_TABLE).select("draft_id, draft_sha256, kind, actor, approved_at, approver_user_id"),
       admin.from(PILOT_EVENTS_TABLE).select("company_id, kind, occurred_at"),
     ]);
     if (!p.error) pilot = (p.data as PilotRow[] | null) ?? [];
@@ -201,6 +209,14 @@ export default async function OwnerPage({
         <p className="mt-1 text-sm text-neutral-600">
           Every email row is blocked on: {PILOT_BLOCKERS.join("; ")}.
         </p>
+        {pilotNotice && (
+          <p
+            role={pilotNotice.ok ? "status" : "alert"}
+            className={`mt-3 rounded-xl border px-4 py-3 text-sm ${pilotNotice.ok ? "border-green-200 bg-green-50 text-green-900" : "border-red-200 bg-red-50 text-red-900"}`}
+          >
+            {pilotNotice.text}
+          </p>
+        )}
         {pilot === null ? (
           <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             Pilot records aren&apos;t connected. They stay in owner-only storage (the shared plan&apos;s private update
@@ -236,7 +252,16 @@ export default async function OwnerPage({
                     approvals,
                     events,
                     sender,
+                    ownerUserId: access.userId,
                   });
+                  const reviewsDone =
+                    !!draft &&
+                    ["evidence_refresh", "preview_review", "copy_review"].every((k) =>
+                      approvals.some((a) => a.draft_id === draft.id && a.draft_sha256 === draft.sha256 && a.kind === k)
+                    );
+                  const ownerApproved =
+                    !!draft &&
+                    approvals.some((a) => a.draft_id === draft.id && a.draft_sha256 === draft.sha256 && a.kind === "message_approval" && a.approver_user_id === access.userId);
                   const label = p.preview_check === "pass" ? "Pass" : p.preview_check === "pass-with-note" ? "Pass, see note" : "Not checked";
                   return (
                     <tr key={p.id} className="border-t border-neutral-100 align-top">
@@ -261,6 +286,14 @@ export default async function OwnerPage({
                           <span className="block text-xs text-neutral-500">
                             {approvals.filter((a) => a.draft_id === draft.id && a.draft_sha256 === draft.sha256).length}/4 approvals
                           </span>
+                        )}
+                        {draft && reviewsDone && !ownerApproved && (
+                          <form action={approvePilotMessage} className="mt-1">
+                            <input type="hidden" name="draft_id" value={draft.id} />
+                            <input type="hidden" name="draft_sha256" value={draft.sha256} />
+                            <input type="hidden" name="view" value={viewQuery} />
+                            <button className="rounded border border-neutral-300 px-2 py-0.5 text-xs">Approve revision {draft.revision}</button>
+                          </form>
                         )}
                       </td>
                       <td className="px-3 py-2">

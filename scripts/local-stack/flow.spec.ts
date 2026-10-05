@@ -135,3 +135,33 @@ test("Joshua's queue shows the lead, a status change saves, failures are visible
   await expect(page).toHaveURL(/notice=not_found/);
   await expect(page.locator("p[role=alert]")).toContainText("no longer exists");
 });
+
+test("Joshua's message approval goes through his own session; a member's session is refused", async ({ page }) => {
+  psql(`insert into digital_services_pilot (id, company, lane, reserved_for) values ('OC-980', 'Fixture Approval Co', 'email', 'cowork') on conflict do nothing`);
+  const draftId = psql(`insert into digital_services_pilot_drafts (company_id, revision, subject, body, sha256, author) values ('OC-980', 1, 'Fixture subject', 'Fixture body', 'x', 'test') returning id`).split("\n")[0];
+  psql(`insert into digital_services_pilot_approvals (draft_id, draft_sha256, kind, actor) select id, sha256, k, 'reviewer' from digital_services_pilot_drafts, unnest(array['evidence_refresh','preview_review','copy_review']) k where id = '${draftId}'`);
+  const sha = psql(`select sha256 from digital_services_pilot_drafts where id = '${draftId}'`);
+  try {
+    // A member's own session calling the function directly is refused.
+    const member = sessionCookie("member", SECRET, GATEWAY);
+    const memberToken = JSON.parse(Buffer.from(member.value.replace("base64-", ""), "base64url").toString()).access_token;
+    const r = await fetch(`${GATEWAY}/rest/v1/rpc/approve_pilot_message`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${memberToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ p_draft_id: draftId, p_draft_sha256: sha }),
+    });
+    expect(r.status).toBeGreaterThanOrEqual(400);
+    expect(await r.text()).toContain("only the owner");
+
+    await as(page, "owner");
+    await page.goto("/dashboard/owner");
+    const row = page.locator("tr", { hasText: "Fixture Approval Co" });
+    await row.getByRole("button", { name: "Approve revision 1" }).click();
+    await expect(page).toHaveURL(/pilot=approved/);
+    await expect(page.locator("p[role=status]", { hasText: "Message approval recorded" })).toBeVisible();
+    expect(psql(`select approver_user_id from digital_services_pilot_approvals where draft_id = '${draftId}' and kind = 'message_approval'`)).toBe(PERSONAS.owner.id);
+    console.log("[flow] message approval recorded with approver_user_id = owner via the owner's own session");
+  } finally {
+    psql(`delete from digital_services_pilot_approvals where draft_id = '${draftId}'; delete from digital_services_pilot_drafts where company_id = 'OC-980'; delete from digital_services_pilot where id = 'OC-980'`);
+  }
+});

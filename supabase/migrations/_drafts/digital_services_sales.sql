@@ -7,12 +7,17 @@
 -- draft/sent/accepted/withdrawn and deliberately has NO "paid" value:
 -- payment is derived only from digital_services_payments, each row of which
 -- carries genuine evidence (a bank-statement transaction reference or a
--- payment-provider id). The same evidence can't be recorded twice, so a
--- duplicate notification or double entry doesn't double-count.
--- digital_services_quote_balance (view): paid, outstanding, deposit received.
+-- payment-provider id). The same evidence can't be recorded twice, even with
+-- different spacing or letter case, so a duplicate notification or double
+-- entry doesn't double-count.
+-- digital_services_quote_balance (view): total due including any GST, paid,
+-- outstanding, deposit due and whether it's received.
 --
--- Amounts are integer cents, before applicable tax; gst_treatment stays
--- 'pending' until Josh confirms it, and a quote can't be sent while pending.
+-- Amounts are integer cents as quoted. gst_treatment says how GST applies:
+-- 'exclusive' adds 10% GST on top (to the total and the deposit), 'inclusive'
+-- means the amount already includes it, 'not_registered' means none. It stays
+-- 'pending' until Josh confirms it; a pending quote has no total due and
+-- can't be sent.
 --
 -- Rollback: drop view if exists public.digital_services_quote_balance;
 --           drop table if exists public.digital_services_payments;
@@ -47,24 +52,32 @@ create table if not exists public.digital_services_payments (
   evidence_source  text not null check (evidence_source in ('bank_statement', 'provider_record')),
   evidence_ref     text not null check (char_length(btrim(evidence_ref)) between 3 and 200),
   recorded_by      text not null check (char_length(btrim(recorded_by)) between 1 and 120),
-  recorded_at      timestamptz not null default now(),
-  unique (evidence_source, evidence_ref)
+  recorded_at      timestamptz not null default now()
 );
+-- One payment per piece of evidence, ignoring spacing and letter case.
+create unique index if not exists uq_ds_payments_evidence
+  on public.digital_services_payments (evidence_source, upper(regexp_replace(evidence_ref, '\s+', '', 'g')));
 
 create or replace view public.digital_services_quote_balance
 with (security_invoker = true) as
-select q.id as quote_id,
-       q.customer_label,
-       q.offer,
-       q.status,
-       q.amount_cents,
-       q.deposit_cents,
-       coalesce(sum(p.amount_cents), 0)::integer as paid_cents,
-       (q.amount_cents - coalesce(sum(p.amount_cents), 0))::integer as outstanding_cents,
-       coalesce(sum(p.amount_cents), 0) >= q.deposit_cents and q.deposit_cents > 0 as deposit_received
-from public.digital_services_quotes q
-left join public.digital_services_payments p on p.quote_id = q.id
-group by q.id;
+with t as (
+  select q.*,
+         case q.gst_treatment when 'pending' then null when 'exclusive' then 1.1 else 1.0 end as factor,
+         (select coalesce(sum(p.amount_cents), 0) from public.digital_services_payments p where p.quote_id = q.id)::integer as paid_cents
+  from public.digital_services_quotes q
+)
+select id as quote_id,
+       customer_label,
+       offer,
+       status,
+       gst_treatment,
+       amount_cents,
+       round(amount_cents * factor)::integer as total_due_cents,      -- null while GST is pending
+       round(deposit_cents * factor)::integer as deposit_due_cents,
+       paid_cents,
+       (round(amount_cents * factor) - paid_cents)::integer as outstanding_cents,
+       deposit_cents > 0 and factor is not null and paid_cents >= round(deposit_cents * factor) as deposit_received
+from t;
 
 alter table public.digital_services_quotes enable row level security;
 alter table public.digital_services_payments enable row level security;

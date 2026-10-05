@@ -159,21 +159,40 @@ describe("digital_services_pilot migration (owner-only prospect data)", { timeou
   });
 });
 
+const OWNER = "33333333-3333-4333-8333-333333333333";
+
 describe("pilot drafts, approvals and first-contact enforcement", { timeout: 30_000 }, () => {
   async function seeded() {
     const pg = new PGlite();
     await pg.exec(`create role anon; create role authenticated; create role service_role;`);
     await pg.exec(PILOT_SQL);
-    await pg.exec(`insert into digital_services_pilot (id, company, lane, reserved_for, contact_address, contact_basis, contact_basis_confirmed_at, contact_basis_confirmed_by)
-                   values ('OC-901', 'Fixture Cleaners', 'email', 'cowork', 'info@example.test', 'published on the business contact page', now(), 'Joshua')`);
+    await pg.exec(`insert into digital_services_settings (owner_user_id) values ('${OWNER}')`);
+    await pg.exec(`insert into digital_services_pilot (id, company, lane, reserved_for, contact_address, contact_basis, contact_basis_confirmed_at, contact_basis_confirmed_by, contact_basis_confirmed_for)
+                   values ('OC-901', 'Fixture Cleaners', 'email', 'cowork', 'info@example.test', 'published on the business contact page', now(), 'Joshua', 'info@example.test')`);
     const ins = async (rev: number, subject: string, body: string) =>
       (await pg.query<{ id: string; sha256: string }>(
         `insert into digital_services_pilot_drafts (company_id, revision, subject, body, sha256, author) values ('OC-901', $1, $2, $3, 'ignored', 'claude-code') returning id, sha256`,
         [rev, subject, body]
       )).rows[0];
+    const reviews = async (d: { id: string; sha256: string }) => {
+      await pg.exec(`set role service_role`);
+      for (const kind of ["evidence_refresh", "preview_review", "copy_review"])
+        await pg.query(`insert into digital_services_pilot_approvals (draft_id, draft_sha256, kind, actor) values ($1, $2, $3, 'reviewer')`, [d.id, d.sha256, kind]);
+      await pg.exec(`reset role`);
+    };
+    // Josh's approval: his own session (authenticated + JWT subject) via the function.
+    const ownerApproves = async (d: { id: string; sha256: string }, sub = OWNER) => {
+      await pg.exec(`set role authenticated`);
+      await pg.query(`select set_config('request.jwt.claims', $1, false)`, [JSON.stringify({ sub, role: "authenticated" })]);
+      try {
+        return await pg.query(`select public.approve_pilot_message($1, $2)`, [d.id, d.sha256]);
+      } finally {
+        await pg.exec(`reset role`);
+      }
+    };
     const approveAll = async (d: { id: string; sha256: string }) => {
-      for (const kind of ["evidence_refresh", "preview_review", "copy_review", "message_approval"])
-        await pg.query(`insert into digital_services_pilot_approvals (draft_id, draft_sha256, kind, actor) values ($1, $2, $3, 'Joshua')`, [d.id, d.sha256, kind]);
+      await reviews(d);
+      await ownerApproves(d);
     };
     const contact = (draftId: string, over: { lane?: string; sender?: string } = {}) =>
       pg.query(`insert into digital_services_pilot_events (company_id, kind, lane, draft_id, sender, recorded_by) values ('OC-901', 'contacted', $1, $2, $3, 'test')`, [
@@ -181,7 +200,7 @@ describe("pilot drafts, approvals and first-contact enforcement", { timeout: 30_
         draftId,
         over.sender ?? "josh@outbackconnections.com.au",
       ]);
-    return { pg, ins, approveAll, contact };
+    return { pg, ins, reviews, ownerApproves, approveAll, contact };
   }
 
   it("hashes drafts in the database exactly as the server guard does, and refuses edits", async () => {
@@ -204,7 +223,7 @@ describe("pilot drafts, approvals and first-contact enforcement", { timeout: 30_
     const { pg, ins, approveAll, contact } = await seeded();
     const d = await ins(1, "Subject", "Body");
     await approveAll(d);
-    await expect(contact(d.id, { lane: "engine" })).rejects.toThrow(/reserved for another lane/);
+    await expect(contact(d.id, { lane: "engine" })).rejects.toThrow(/not reserved for this lane/);
     await expect(contact(d.id, { sender: "help@outbackconnections.com.au" })).rejects.toThrow(/never help@/);
     await contact(d.id);
     await expect(contact(d.id)).rejects.toThrow(/duplicate key|unique/i);
@@ -217,10 +236,39 @@ describe("pilot drafts, approvals and first-contact enforcement", { timeout: 30_
     const d = await ins(1, "Subject", "Body");
     await approveAll(d);
     await pg.query(`update digital_services_pilot set contact_basis_confirmed_at = null where id = 'OC-901'`);
-    await expect(contact(d.id)).rejects.toThrow(/contact basis/);
+    await expect(contact(d.id)).rejects.toThrow(/contact basis not confirmed/);
     await pg.query(`update digital_services_pilot set contact_basis_confirmed_at = now() where id = 'OC-901'`);
     await pg.query(`insert into digital_services_pilot_events (company_id, kind, recorded_by) values ('OC-901', 'opted_out', 'test')`);
     await expect(contact(d.id)).rejects.toThrow(/suppressed/);
+  });
+  it("Josh's message approval: only his own session, only after the reviews; never a direct insert", async () => {
+    const { pg, ins, reviews, ownerApproves, contact } = await seeded();
+    const d = await ins(1, "Subject", "Body");
+    await expect(ownerApproves(d)).rejects.toThrow(/reviews come first/);
+    await reviews(d);
+    await expect(ownerApproves(d, "44444444-4444-4444-8444-444444444444")).rejects.toThrow(/only the owner/);
+    await pg.exec(`set role service_role`);
+    await expect(
+      pg.query(`insert into digital_services_pilot_approvals (draft_id, draft_sha256, kind, actor, approver_user_id) values ($1, $2, 'message_approval', 'Joshua', '${OWNER}')`, [d.id, d.sha256])
+    ).rejects.toMatchObject({ code: "OC403" });
+    await expect(pg.query(`select public.approve_pilot_message($1, $2)`, [d.id, d.sha256])).rejects.toThrow(/permission denied/i);
+    await pg.exec(`reset role`);
+    await expect(contact(d.id)).rejects.toThrow(/lacks 1 approval/);
+    await ownerApproves(d);
+    await contact(d.id);
+  });
+
+  it("an unreserved company can't be contacted by either lane; a changed address needs re-confirming", async () => {
+    const { pg, ins, approveAll, contact } = await seeded();
+    const d = await ins(1, "Subject", "Body");
+    await approveAll(d);
+    await pg.query(`update digital_services_pilot set reserved_for = null where id = 'OC-901'`);
+    await expect(contact(d.id)).rejects.toThrow(/not reserved for this lane/);
+    await expect(contact(d.id, { lane: "engine" })).rejects.toThrow(/not reserved for this lane/);
+    await pg.query(`update digital_services_pilot set reserved_for = 'cowork', contact_address = 'other@example.test' where id = 'OC-901'`);
+    await expect(contact(d.id)).rejects.toThrow(/current address/);
+    await pg.query(`update digital_services_pilot set contact_basis_confirmed_for = 'OTHER@example.test' where id = 'OC-901'`);
+    await contact(d.id);
   });
 });
 
@@ -260,10 +308,36 @@ describe("quotes and payment evidence (no manual 'paid')", { timeout: 30_000 }, 
       );
     await pay();
     await expect(pay()).rejects.toThrow(/duplicate key|unique/i);
+    expect(await balance()).toMatchObject({ paid_cents: 99500, deposit_received: false }); // GST still pending: no total due yet
+    await pg.query(`update digital_services_quotes set gst_treatment = 'not_registered' where id = $1`, [q.id]);
     expect(await balance()).toMatchObject({ paid_cents: 99500, deposit_received: true });
     await expect(
       pg.query(`insert into digital_services_payments (quote_id, amount_cents, received_on, evidence_source, evidence_ref, recorded_by) values ($1, 100, '2026-10-10', 'bank_statement', '  ', 'Joshua')`, [q.id])
     ).rejects.toThrow(/check/i);
+  });
+
+  it("exclusive GST is added to the total and deposit due; inclusive isn't", async () => {
+    const pg = await salesDb();
+    const q = (await quote(pg)).rows[0];
+    const bal = async () =>
+      (await pg.query<{ total_due_cents: number | null; deposit_due_cents: number | null; outstanding_cents: number | null }>(
+        `select total_due_cents, deposit_due_cents, outstanding_cents from digital_services_quote_balance where quote_id = $1`, [q.id])).rows[0];
+    expect(await bal()).toEqual({ total_due_cents: null, deposit_due_cents: null, outstanding_cents: null });
+    await pg.query(`update digital_services_quotes set gst_treatment = 'exclusive' where id = $1`, [q.id]);
+    await pg.query(`insert into digital_services_payments (quote_id, amount_cents, received_on, evidence_source, evidence_ref, recorded_by) values ($1, 199000, '2026-10-10', 'bank_statement', 'TXN-GST-1', 'Joshua')`, [q.id]);
+    expect(await bal()).toEqual({ total_due_cents: 218900, deposit_due_cents: 109450, outstanding_cents: 19900 });
+    await pg.query(`update digital_services_quotes set gst_treatment = 'inclusive' where id = $1`, [q.id]);
+    expect(await bal()).toEqual({ total_due_cents: 199000, deposit_due_cents: 99500, outstanding_cents: 0 });
+  });
+
+  it("the same evidence with different spacing or case is still a duplicate", async () => {
+    const pg = await salesDb();
+    const q = (await quote(pg)).rows[0];
+    const pay = (ref: string) =>
+      pg.query(`insert into digital_services_payments (quote_id, amount_cents, received_on, evidence_source, evidence_ref, recorded_by) values ($1, 100, '2026-10-10', 'bank_statement', $2, 'Joshua')`, [q.id, ref]);
+    await pay("TXN-123");
+    await expect(pay(" TXN-123 ")).rejects.toThrow(/duplicate key|unique/i);
+    await expect(pay("txn - 123")).rejects.toThrow(/duplicate key|unique/i);
   });
 
   it("is invisible to anon and authenticated", async () => {

@@ -17,13 +17,22 @@ export type PilotCompany = {
   reserved_for: Lane | null;
   contact_address: string | null;
   contact_basis_confirmed_at: string | null;
+  contact_basis_confirmed_for: string | null; // the address the confirmation was for
 };
 export type PilotDraft = { id: string; company_id: string; revision: number; subject: string; body: string; sha256: string };
-export type PilotApproval = { draft_id: string; draft_sha256: string; kind: ApprovalKind; actor: string; approved_at: string };
+export type PilotApproval = {
+  draft_id: string;
+  draft_sha256: string;
+  kind: ApprovalKind;
+  actor: string;
+  approved_at: string;
+  approver_user_id?: string | null; // message_approval: the owner's auth user id
+};
 export type PilotEvent = { company_id: string; kind: "contacted" | "replied" | "opted_out" | "suppressed" | "bounced" };
 
 export type Hold =
   | "not_email_lane"
+  | "no_lane_reservation"
   | "reserved_for_other_lane"
   | "suppressed"
   | "already_contacted"
@@ -49,17 +58,24 @@ export function firstContactHolds(input: {
   approvals: PilotApproval[];
   events: PilotEvent[];
   sender: { address: string; verified: boolean } | null;
+  ownerUserId: string | null; // Josh's auth id; only his message approval counts
 }): Hold[] {
   const { lane, company, drafts, approvals, events, sender } = input;
   const holds: Hold[] = [];
   const mine = events.filter((e) => e.company_id === company.id);
   if (company.lane !== "email") holds.push("not_email_lane");
-  if (company.reserved_for && company.reserved_for !== lane) holds.push("reserved_for_other_lane");
+  // A company must be reserved for exactly the dispatching lane; an
+  // unreserved company belongs to no lane, so neither can contact it.
+  if (!company.reserved_for) holds.push("no_lane_reservation");
+  else if (company.reserved_for !== lane) holds.push("reserved_for_other_lane");
   if (mine.some((e) => (STOP_EVENTS as readonly string[]).includes(e.kind))) holds.push("suppressed");
   if (mine.some((e) => e.kind === "contacted")) holds.push("already_contacted");
   if (mine.some((e) => e.kind === "replied")) holds.push("replied");
   if (!company.contact_address) holds.push("no_contact_address");
-  if (!company.contact_basis_confirmed_at) holds.push("no_contact_basis");
+  const norm = (v: string | null) => (v ?? "").trim().toLowerCase();
+  if (!company.contact_basis_confirmed_at || !company.contact_address || norm(company.contact_basis_confirmed_for) !== norm(company.contact_address)) {
+    holds.push("no_contact_basis");
+  }
 
   const ours = drafts.filter((d) => d.company_id === company.id);
   const draft = ours.find((d) => d.id === input.draftId);
@@ -69,7 +85,13 @@ export function firstContactHolds(input: {
     if (draft.revision !== Math.max(...ours.map((d) => d.revision))) holds.push("not_latest_revision");
     if (draftHash(draft.subject, draft.body) !== draft.sha256) holds.push("draft_hash_mismatch");
     for (const kind of APPROVAL_KINDS) {
-      if (!approvals.some((a) => a.draft_id === draft.id && a.draft_sha256 === draft.sha256 && a.kind === kind && a.actor.trim())) {
+      const counts = (a: PilotApproval) =>
+        a.draft_id === draft.id &&
+        a.draft_sha256 === draft.sha256 &&
+        a.kind === kind &&
+        !!a.actor.trim() &&
+        (kind !== "message_approval" || (!!input.ownerUserId && a.approver_user_id === input.ownerUserId));
+      if (!approvals.some(counts)) {
         holds.push(`missing_${kind}`);
       }
     }
@@ -81,12 +103,13 @@ export function firstContactHolds(input: {
 
 export const HOLD_LABELS: Record<string, string> = {
   not_email_lane: "not an email-lane company",
+  no_lane_reservation: "not reserved for a lane",
   reserved_for_other_lane: "reserved for another lane",
   suppressed: "suppressed or opted out",
   already_contacted: "already contacted",
   replied: "has replied (a person handles it)",
   no_contact_address: "no contact address",
-  no_contact_basis: "contact basis not confirmed",
+  no_contact_basis: "contact basis not confirmed for the current address",
   no_draft: "no draft",
   not_latest_revision: "not the latest draft revision",
   draft_hash_mismatch: "draft changed after hashing",

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getOwnerAccess } from "@/lib/digital-services/owner";
 import { referenceFor } from "@/lib/digital-services/intake";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { applyStatusChange, queueViewParams } from "@/lib/digital-services/queue";
 
 export async function setEnquiryStatus(formData: FormData): Promise<void> {
@@ -34,5 +35,33 @@ export async function setEnquiryStatus(formData: FormData): Promise<void> {
   const params = queueViewParams(formData.get("view"));
   params.set("notice", result);
   if (typeof id === "string" && result !== "invalid") params.set("ref", referenceFor(id));
+  redirect(`/dashboard/owner?${params.toString()}`);
+}
+
+/**
+ * Josh's message approval for one exact draft revision. It goes through the
+ * database function approve_pilot_message() with Josh's OWN session (not the
+ * service role); the database checks the session's user is the configured
+ * owner and that the three reviews exist, and refuses anything else.
+ */
+export async function approvePilotMessage(formData: FormData): Promise<void> {
+  const access = await getOwnerAccess();
+  if (!access.ok) redirect("/dashboard/owner");
+  const draftId = formData.get("draft_id");
+  const sha = formData.get("draft_sha256");
+  const params = queueViewParams(formData.get("view"));
+  if (typeof draftId !== "string" || !/^[0-9a-f-]{36}$/i.test(draftId) || typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha)) {
+    params.set("pilot", "invalid");
+    redirect(`/dashboard/owner?${params.toString()}`);
+  }
+  let outcome = "failed";
+  try {
+    const { error } = await createClient().rpc("approve_pilot_message", { p_draft_id: draftId, p_draft_sha256: sha });
+    outcome = error ? (error.code === "OC403" ? "refused" : "failed") : "approved";
+  } catch {
+    outcome = "failed";
+  }
+  if (outcome === "approved") revalidatePath("/dashboard/owner");
+  params.set("pilot", outcome);
   redirect(`/dashboard/owner?${params.toString()}`);
 }
