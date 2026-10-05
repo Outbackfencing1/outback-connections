@@ -3,8 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getOwnerAccess } from "@/lib/digital-services/owner";
 import { createAdminClient } from "@/lib/supabase/admin";
-
-const STATUSES = ["new", "replied", "qualified", "closed", "spam"] as const;
+import { STATUSES } from "@/lib/digital-services/queue";
 
 export async function setEnquiryStatus(formData: FormData): Promise<void> {
   // Owner check inside the action, not only on the page that renders it.

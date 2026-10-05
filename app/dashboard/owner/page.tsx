@@ -9,6 +9,7 @@ import { digitalServicesPublic } from "@/lib/digital-services/flags";
 import { matchesSearch, referenceFor } from "@/lib/digital-services/intake";
 import { INTERESTS } from "@/lib/digital-services/offer";
 import { PILOT, PILOT_BLOCKERS, PILOT_CHECKED_AT } from "@/lib/digital-services/pilot";
+import { PAGE_SIZE, SEARCH_CHUNK, SEARCH_MAX_ROWS, STATUSES, pageFrom, statusesFor } from "@/lib/digital-services/queue";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { setEnquiryStatus } from "./actions";
 
@@ -67,21 +68,47 @@ export default async function OwnerPage({
 
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.slice(0, 200) : "";
-  const statusFilter = typeof sp.status === "string" ? sp.status : "";
+  const statusFilter = typeof sp.status === "string" ? sp.status : "open";
+  const page = pageFrom(typeof sp.page === "string" ? sp.page : undefined);
+  const statuses = statusesFor(statusFilter);
 
   const admin = createAdminClient();
-  let rows: Enquiry[] = [];
+  let shown: Enquiry[] = [];
+  let total: number | null = null;
+  let scanCapped = false;
   let tableReady: boolean | null = null;
   if (admin) {
-    const { data, error } = await admin
-      .from("digital_services_enquiries")
-      .select("id, created_at, business_name, contact_name, email, phone, website, interest, message, status, is_test, notified_at, notify_error")
-      .order("created_at", { ascending: false })
-      .limit(300);
-    tableReady = !error;
-    rows = (data as Enquiry[] | null) ?? [];
+    const COLS =
+      "id, created_at, business_name, contact_name, email, phone, website, interest, message, status, is_test, notified_at, notify_error";
+    const base = () => {
+      const query = admin.from("digital_services_enquiries").select(COLS, { count: "exact" });
+      return statuses ? query.in("status", statuses) : query;
+    };
+    if (q.trim()) {
+      // Search every page of the filtered set, newest first.
+      tableReady = true;
+      for (let from = 0; from < SEARCH_MAX_ROWS; from += SEARCH_CHUNK) {
+        const { data, error } = await base().order("created_at", { ascending: false }).range(from, from + SEARCH_CHUNK - 1);
+        if (error) {
+          tableReady = false;
+          break;
+        }
+        const chunk = (data as Enquiry[] | null) ?? [];
+        shown.push(...chunk.filter((r) => matchesSearch(r, q)));
+        if (chunk.length < SEARCH_CHUNK) break;
+        if (from + SEARCH_CHUNK >= SEARCH_MAX_ROWS) scanCapped = true;
+      }
+    } else {
+      const from = (page - 1) * PAGE_SIZE;
+      const { data, error, count } = await base().order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1);
+      tableReady = !error;
+      shown = (data as Enquiry[] | null) ?? [];
+      total = count ?? null;
+    }
   }
-  const shown = rows.filter((r) => (!statusFilter || r.status === statusFilter) && matchesSearch(r, q));
+  const pages = total !== null ? Math.max(1, Math.ceil(total / PAGE_SIZE)) : 1;
+  const link = (p: number) =>
+    `/dashboard/owner?${new URLSearchParams({ status: statusFilter, ...(q ? { q } : {}), page: String(p) }).toString()}`;
   const interestLabel = (v: string) => INTERESTS.find((i) => i.value === v)?.label ?? v;
 
   return (
@@ -165,8 +192,9 @@ export default async function OwnerPage({
             className="w-72 rounded-lg border border-neutral-300 px-3 py-2 text-sm"
           />
           <select name="status" defaultValue={statusFilter} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm">
-            <option value="">All statuses</option>
-            {["new", "replied", "qualified", "closed", "spam"].map((s) => (
+            <option value="open">Open (new, replied, qualified)</option>
+            <option value="all">All statuses</option>
+            {STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
@@ -176,6 +204,17 @@ export default async function OwnerPage({
         </form>
         {tableReady === false && <p className="mt-3 text-sm text-red-800">Enquiry storage isn&apos;t ready (see Readiness).</p>}
         {tableReady && shown.length === 0 && <p className="mt-3 text-sm text-neutral-600">No enquiries match.</p>}
+        {q.trim() && tableReady && (
+          <p className="mt-3 text-xs text-neutral-600">
+            {shown.length} match{shown.length === 1 ? "" : "es"} across every page
+            {scanCapped ? ` (searched the newest ${SEARCH_MAX_ROWS.toLocaleString("en-AU")} rows only)` : ""}.
+          </p>
+        )}
+        {!q.trim() && total !== null && total > 0 && (
+          <p className="mt-3 text-xs text-neutral-600">
+            {total} enquir{total === 1 ? "y" : "ies"} · page {page} of {pages}
+          </p>
+        )}
         <ul className="mt-4 space-y-3">
           {shown.map((r) => (
             <li key={r.id} className="rounded-xl border border-neutral-200 bg-white p-4 text-sm">
@@ -207,7 +246,7 @@ export default async function OwnerPage({
               <form action={setEnquiryStatus} className="mt-3 flex items-center gap-2">
                 <input type="hidden" name="id" value={r.id} />
                 <select name="status" defaultValue={r.status} className="rounded border border-neutral-300 px-2 py-1 text-xs">
-                  {["new", "replied", "qualified", "closed", "spam"].map((s) => (
+                  {STATUSES.map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>
@@ -218,6 +257,20 @@ export default async function OwnerPage({
             </li>
           ))}
         </ul>
+        {!q.trim() && pages > 1 && (
+          <nav className="mt-4 flex gap-3 text-sm" aria-label="Enquiry pages">
+            {page > 1 && (
+              <Link className="underline" href={link(page - 1)}>
+                ← Newer
+              </Link>
+            )}
+            {page < pages && (
+              <Link className="underline" href={link(page + 1)}>
+                Older →
+              </Link>
+            )}
+          </nav>
+        )}
       </section>
     </div>
   );

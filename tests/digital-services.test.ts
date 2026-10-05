@@ -12,6 +12,7 @@ import {
   type IntakeStore,
 } from "@/lib/digital-services/intake";
 import { OFFERS } from "@/lib/digital-services/offer";
+import { OPEN_STATUSES, pageFrom, statusesFor } from "@/lib/digital-services/queue";
 
 const OWNER = "11111111-2222-4333-8444-555555555555";
 
@@ -240,4 +241,24 @@ describe("owner search", () => {
     ["empty", "   "],
   ])("matches %s", (_n, q) => expect(matchesSearch(row, q)).toBe(true));
   it("doesn't match an absent term", () => expect(matchesSearch(row, "brisbane")).toBe(false));
+});
+
+describe("owner queue paging and filters", () => {
+  it("defaults to open leads so closed/spam can't bury them", () => {
+    expect(statusesFor("")).toEqual(OPEN_STATUSES);
+    expect(statusesFor("open")).toEqual(["new", "replied", "qualified"]);
+    expect(statusesFor("garbage")).toEqual(OPEN_STATUSES);
+  });
+  it("'all' means no status filter; a single status filters to it", () => {
+    expect(statusesFor("all")).toBeNull();
+    expect(statusesFor("spam")).toEqual(["spam"]);
+  });
+  it("page numbers are sane", () => {
+    expect(pageFrom(undefined)).toBe(1);
+    expect(pageFrom("0")).toBe(1);
+    expect(pageFrom("-3")).toBe(1);
+    expect(pageFrom("abc")).toBe(1);
+    expect(pageFrom("7")).toBe(7);
+    expect(pageFrom("99999999")).toBe(10000);
+  });
 });
