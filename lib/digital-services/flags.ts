@@ -24,7 +24,7 @@ export function alertReadiness(env: Record<string, string | undefined> = process
   if (!env.DIGITAL_SERVICES_ALERT_TO?.trim()) {
     return {
       ok: null,
-      detail: "Mail transport configured. Alerts fall back to NOTIFICATION_EMAIL (default help@); set DIGITAL_SERVICES_ALERT_TO for a dedicated address.",
+      detail: `Mail transport configured. Alerts fall back to ${alertDestination(env)}; set DIGITAL_SERVICES_ALERT_TO for a dedicated address.`,
     };
   }
   return {
@@ -33,7 +33,13 @@ export function alertReadiness(env: Record<string, string | undefined> = process
   };
 }
 
-/** The owner-alert recipient: the dedicated address (trimmed) or the fallback. */
-export function alertDestination(fallback: string, env: Record<string, string | undefined> = process.env): string {
-  return env.DIGITAL_SERVICES_ALERT_TO?.trim() || fallback.trim();
+const DEFAULT_ALERT_TO = "help@outbackconnections.com.au";
+
+/**
+ * The owner-alert recipient: DIGITAL_SERVICES_ALERT_TO, else
+ * NOTIFICATION_EMAIL, else help@. Each is trimmed, so a blank or padded
+ * value falls through instead of becoming a bad Resend recipient.
+ */
+export function alertDestination(env: Record<string, string | undefined> = process.env): string {
+  return env.DIGITAL_SERVICES_ALERT_TO?.trim() || env.NOTIFICATION_EMAIL?.trim() || DEFAULT_ALERT_TO;
 }

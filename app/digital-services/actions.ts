@@ -8,7 +8,7 @@
 // own form and nothing else.
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { DEFAULT_FROM, NOTIFICATION_TO, sendEmail } from "@/lib/email";
+import { DEFAULT_FROM, sendEmail } from "@/lib/email";
 import { alertDestination, digitalServicesPublic } from "@/lib/digital-services/flags";
 import { processIntake, type IntakeResult, type IntakeStore } from "@/lib/digital-services/intake";
 
@@ -89,7 +89,7 @@ export async function submitDigitalServicesEnquiry(formData: FormData): Promise<
           `No customer details are included in this email.`,
         ].join("\n");
         const r = await sendEmail({
-          to: alertDestination(NOTIFICATION_TO),
+          to: alertDestination(),
           from: DEFAULT_FROM,
           subject: `[Digital services] New enquiry ${reference}`,
           text,

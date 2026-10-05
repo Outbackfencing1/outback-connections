@@ -47,10 +47,11 @@ describe("public page flag", () => {
 });
 
 describe("owner alert destination", () => {
-  it("trims the dedicated address and falls back when it's blank", () => {
-    expect(alertDestination("help@example.com", { DIGITAL_SERVICES_ALERT_TO: "  owner@example.com \n" })).toBe("owner@example.com");
-    expect(alertDestination("help@example.com", { DIGITAL_SERVICES_ALERT_TO: "   " })).toBe("help@example.com");
-    expect(alertDestination("help@example.com", {})).toBe("help@example.com");
+  it("trims each address and falls through blank ones to help@", () => {
+    expect(alertDestination({ DIGITAL_SERVICES_ALERT_TO: "  owner@example.com \n" })).toBe("owner@example.com");
+    expect(alertDestination({ DIGITAL_SERVICES_ALERT_TO: "   ", NOTIFICATION_EMAIL: " ops@example.com " })).toBe("ops@example.com");
+    expect(alertDestination({ DIGITAL_SERVICES_ALERT_TO: "   ", NOTIFICATION_EMAIL: "  " })).toBe("help@outbackconnections.com.au");
+    expect(alertDestination({})).toBe("help@outbackconnections.com.au");
   });
 });
 
