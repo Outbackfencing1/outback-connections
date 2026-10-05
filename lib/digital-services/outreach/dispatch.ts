@@ -62,6 +62,7 @@ export type DispatchResult =
   | { status: "held"; holds: Hold[] }
   | { status: "refused"; reason: string } // the database refused the intent record: nothing sent
   | { status: "not_sent"; reason: string } // intent couldn't be confirmed, so nothing was sent
+  | { status: "not_sent_unrecorded"; messageId: string; reason: string; proof: NotSentProof } // nothing sent, but closing the attempt failed: closeAttemptNotSent() with this proof
   | { status: "sent"; messageId: string; providerId: string; threadId: string }
   | { status: "sent_unrecorded"; messageId: string } // sent, but recording it failed: reconcile
   | { status: "failed"; reason: string } // Gmail refused it: nothing sent
@@ -129,14 +130,19 @@ export async function dispatchFirstContact(companyId: string, lane: Lane, deps: 
   if (intent === "unknown") {
     // We never send without a confirmed intent record. If the record did land,
     // close it as not sent so it doesn't block the company forever.
-    await insert(deps.store, { ...base, kind: "send_failed", note: "not sent: intent record unconfirmed" });
+    const closed = await insert(deps.store, { ...base, kind: "send_failed", note: "not sent: intent record unconfirmed" });
+    // "refused" here usually means no matching attempt exists (the intent never landed).
+    if (closed === "unknown") return { status: "not_sent_unrecorded", messageId, reason: "the send attempt couldn't be confirmed", proof: { neverCalled: true } };
     return { status: "not_sent", reason: "the send attempt couldn't be confirmed" };
   }
   // From the handoff marker on, Gmail may have the message. Without a
   // confirmed marker we don't call Gmail, so the attempt can be closed safely.
   const handoff = await insert(deps.store, { ...base, kind: "send_handoff" });
   if (handoff !== "ok") {
-    await insert(deps.store, { ...base, kind: "send_failed", note: "not sent: handoff marker unconfirmed" });
+    const closed = await insert(deps.store, { ...base, kind: "send_failed", note: "not sent: handoff marker unconfirmed" });
+    if (closed !== "ok" && closed !== "duplicate") {
+      return { status: "not_sent_unrecorded", messageId, reason: "the handoff marker couldn't be confirmed", proof: { neverCalled: true } };
+    }
     return { status: "not_sent", reason: "the handoff marker couldn't be confirmed" };
   }
 
@@ -202,6 +208,12 @@ export async function reconcileAttempt(companyId: string, deps: Deps): Promise<R
 
 /** A definite Gmail refusal (4xx other than 429): Gmail did not accept the message. */
 export type GmailRefusal = { status: number; message: string };
+/**
+ * What lets an attempt be closed as not sent although a handoff marker may
+ * exist: a definite refusal, or the dispatcher's own knowledge that it never
+ * called Gmail (the marker's write was unconfirmed, so it may have landed).
+ */
+export type NotSentProof = GmailRefusal | { neverCalled: true };
 
 export type CloseResult =
   | { status: "nothing_unresolved" | "not_connected" | "unknown_company" }
@@ -219,7 +231,7 @@ export type CloseResult =
  * empty Sent search doesn't prove Gmail never accepted it, because search
  * visibility can lag, so it stays open ("uncertain") and blocks any resend.
  */
-export async function closeAttemptNotSent(companyId: string, refusal: GmailRefusal | null, deps: Deps): Promise<CloseResult> {
+export async function closeAttemptNotSent(companyId: string, proof: NotSentProof | null, deps: Deps): Promise<CloseResult> {
   const env = deps.env ?? process.env;
   const f = deps.fetch ?? fetch;
   const cfg = gmailConfig(env);
@@ -249,9 +261,11 @@ export async function closeAttemptNotSent(companyId: string, refusal: GmailRefus
     return ok === "ok" || ok === "duplicate" ? { status: "found_sent", providerId: found.id } : { status: "record_failed", messageId: open.rfc822_message_id };
   }
   const handedOff = state.events.some((e) => e.kind === "send_handoff" && e.rfc822_message_id === open.rfc822_message_id);
+  const neverCalled = !!proof && "neverCalled" in proof;
+  const refusal = proof && "status" in proof ? proof : null;
   const definite = !!refusal && refusal.status >= 400 && refusal.status < 500 && refusal.status !== 429;
-  if (handedOff && !definite) return { status: "uncertain", messageId: open.rfc822_message_id };
-  const note = handedOff ? `not sent: Gmail refused (${refusal!.status}) ${refusal!.message}` : "not sent: never handed to Gmail";
+  if (handedOff && !definite && !neverCalled) return { status: "uncertain", messageId: open.rfc822_message_id };
+  const note = refusal && definite ? `not sent: Gmail refused (${refusal.status}) ${refusal.message}` : "not sent: never handed to Gmail";
   const ok = await insert(deps.store, { ...common, kind: "send_failed", note: note.slice(0, 300), recorded_by: "outreach-close" });
   return ok === "ok" || ok === "duplicate" ? { status: "closed" } : { status: "record_failed", messageId: open.rfc822_message_id };
 }

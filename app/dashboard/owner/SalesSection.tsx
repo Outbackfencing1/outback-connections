@@ -4,6 +4,7 @@
 // There is no "mark paid" control anywhere: paid amounts come only from
 // evidence rows, and the database gates production and launch on them.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { referenceFor } from "@/lib/digital-services/intake";
 import { OFFER_LABELS, type Offer } from "@/lib/digital-services/pilot";
 import {
   BALANCE_VIEW,
@@ -77,12 +78,13 @@ export async function SalesSection({
   admin: SupabaseClient | null;
   viewQuery: string;
   outcome: SalesOutcome | null;
-  view: { filter: "open" | "all"; page: number };
+  view: { filter: "open" | "all"; page: number; logPage: number };
 }) {
   let quotes: QuoteRow[] | null = null;
   let balances: Balance[] = [];
   let conversations: Conversation[] = [];
   let total = 0;
+  let logTotal = 0;
   if (admin) {
     // Paged, so no quote is ever out of reach. "Open" (the default) is every
     // quote still being worked: not withdrawn and not yet handed over.
@@ -104,8 +106,15 @@ export async function SalesSection({
           ? admin.from(BALANCE_VIEW).select("quote_id, total_due_cents, deposit_due_cents, paid_cents, outstanding_cents, deposit_received").in("quote_id", ids)
           : Promise.resolve({ data: [] }),
         ids.length ? admin.from(CONVERSATIONS_TABLE).select(COLS).in("quote_id", ids).order("occurred_at", { ascending: false }) : Promise.resolve({ data: [] }),
-        admin.from(CONVERSATIONS_TABLE).select(COLS).is("quote_id", null).order("occurred_at", { ascending: false }).limit(50),
+        // Conversations tied to an enquiry or a pilot company, paged so none is out of reach.
+        admin
+          .from(CONVERSATIONS_TABLE)
+          .select(COLS, { count: "exact" })
+          .is("quote_id", null)
+          .order("occurred_at", { ascending: false })
+          .range((view.logPage - 1) * SALES_PAGE_SIZE, view.logPage * SALES_PAGE_SIZE - 1),
       ]);
+      logTotal = (cg as { count?: number | null }).count ?? 0;
       balances = (b.data as Balance[] | null) ?? [];
       conversations = [...((cq.data as Conversation[] | null) ?? []), ...((cg.data as Conversation[] | null) ?? [])];
     }
@@ -116,6 +125,12 @@ export async function SalesSection({
     p.set("qs", filter);
     p.set("qp", String(page));
     return `/dashboard/owner?${p.toString()}#sales`;
+  };
+  const logPages = Math.max(1, Math.ceil(logTotal / SALES_PAGE_SIZE));
+  const logLink = (page: number) => {
+    const p = new URLSearchParams(viewQuery);
+    p.set("cp", String(page));
+    return `/dashboard/owner?${p.toString()}#conversation-log`;
   };
   const notice = outcome ? SALES_NOTICES[outcome] : null;
   const kindLabel = (k: string) => CONVERSATION_KINDS.find((x) => x.value === k)?.label ?? k;
@@ -284,7 +299,7 @@ export async function SalesSection({
             </ul>
           )}
 
-          <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-4 text-sm">
+          <div id="conversation-log" className="mt-4 scroll-mt-24 rounded-xl border border-neutral-200 bg-white p-4 text-sm">
             <h3 className="font-medium">Conversation log</h3>
             <form action={addConversation} className="mt-2 grid gap-2 sm:grid-cols-4">
               <input type="hidden" name="view" value={viewQuery} />
@@ -318,10 +333,28 @@ export async function SalesSection({
                   .map((c) => (
                     <li key={c.id}>
                       {new Date(c.occurred_at).toLocaleDateString("en-AU", { timeZone: "Australia/Sydney" })} · {kindLabel(c.kind)}
-                      {c.pilot_company_id ? ` · ${c.pilot_company_id}` : ""}: {c.summary}
+                      {c.pilot_company_id ? ` · ${c.pilot_company_id}` : ""}
+                      {c.enquiry_id ? ` · ${referenceFor(c.enquiry_id)}` : ""}: {c.summary}
                     </li>
                   ))}
               </ul>
+            )}
+            {logTotal > 0 && (
+              <p className="mt-2 flex flex-wrap gap-3 text-xs text-neutral-700">
+                <span>
+                  {logTotal} entr{logTotal === 1 ? "y" : "ies"} not tied to a quote · page {view.logPage} of {logPages}
+                </span>
+                {view.logPage > 1 && (
+                  <a className="underline" href={logLink(view.logPage - 1)}>
+                    ← Newer
+                  </a>
+                )}
+                {view.logPage < logPages && (
+                  <a className="underline" href={logLink(view.logPage + 1)}>
+                    Older →
+                  </a>
+                )}
+              </p>
             )}
           </div>
         </>

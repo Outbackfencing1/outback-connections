@@ -19,7 +19,8 @@ const ENV = {
 const SUBJECT = "A guided quote form for Fixture Cleaning";
 const BODY = "Hi,\n\nFixture body.\n\nJosh";
 
-type Fail = { kind: NewEvent["kind"]; code: string; times: number };
+// commit: the row is saved but the response is lost (the caller sees an error).
+type Fail = { kind: NewEvent["kind"]; code: string; times: number; commit?: boolean };
 function memoryStore(opts: { approvals?: boolean; refuseAttempt?: boolean; failOutcomeWrites?: number; fail?: Fail[] } = {}) {
   let failOutcome = opts.failOutcomeWrites ?? 0;
   const fails = (opts.fail ?? []).map((x) => ({ ...x }));
@@ -53,6 +54,7 @@ function memoryStore(opts: { approvals?: boolean; refuseAttempt?: boolean; failO
       const f = fails.find((x) => x.kind === e.kind && x.times > 0);
       if (f) {
         f.times--;
+        if (f.commit) events.push({ ...e, occurred_at: new Date("2026-10-07T00:00:00Z").toISOString() } as StoredEvent & NewEvent);
         return { error: { code: f.code, message: `fixture failure ${f.code}` } };
       }
       if (e.kind === "send_failed" && failOutcome > 0) {
@@ -220,12 +222,39 @@ describe("dispatchFirstContact", () => {
     const { f } = gmail({ ...base, "/messages/send": send });
     // The handoff marker is refused and the closing send_failed can't be saved either.
     const store = memoryStore({ fail: [{ kind: "send_handoff", code: "42501", times: 1 }], failOutcomeWrites: 2 });
-    expect(await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f, messageId: () => MSGID })).toMatchObject({ status: "not_sent" });
+    // The closing write failed too, so the result says so and carries the Message-ID.
+    expect(await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f, messageId: () => MSGID })).toMatchObject({ status: "not_sent_unrecorded", messageId: MSGID });
     expect(send).not.toHaveBeenCalled();
     expect(store.events.map((e) => e.kind)).toEqual(["send_attempt"]);
     const empty = gmail({ ...base, "/messages": () => json({}) });
     expect(await closeAttemptNotSent("OC-901", null, { store, env: ENV, fetch: empty.f })).toEqual({ status: "closed" });
     expect(store.events.at(-1)).toMatchObject({ kind: "send_failed", note: "not sent: never handed to Gmail" });
+  });
+
+  it("an intent that landed but whose closure can't be saved is reported with its Message-ID, and closes with the proof", async () => {
+    const send = vi.fn(() => json({ id: "never", threadId: "never" }));
+    const { f } = gmail({ ...base, "/messages/send": send });
+    // The attempt commits but both responses are lost; both closing writes hit an outage.
+    const store = memoryStore({ fail: [{ kind: "send_attempt", code: "PGRST001", times: 1, commit: true }], failOutcomeWrites: 2 });
+    const r = await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f, messageId: () => MSGID });
+    expect(r).toEqual({ status: "not_sent_unrecorded", messageId: MSGID, reason: "the send attempt couldn't be confirmed", proof: { neverCalled: true } });
+    expect(send).not.toHaveBeenCalled();
+    expect(await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f })).toMatchObject({ status: "held", holds: ["unresolved_attempt"] });
+    const empty = gmail({ ...base, "/messages": () => json({}) });
+    expect(await closeAttemptNotSent("OC-901", r.status === "not_sent_unrecorded" ? r.proof : null, { store, env: ENV, fetch: empty.f })).toEqual({ status: "closed" });
+  });
+
+  it("a handoff marker that landed unconfirmed: uncertain without proof, closed with the dispatcher's never-called proof", async () => {
+    const send = vi.fn(() => json({ id: "never", threadId: "never" }));
+    const { f } = gmail({ ...base, "/messages/send": send });
+    const store = memoryStore({ fail: [{ kind: "send_handoff", code: "PGRST002", times: 1, commit: true }], failOutcomeWrites: 2 });
+    const r = await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f, messageId: () => MSGID });
+    expect(r).toMatchObject({ status: "not_sent_unrecorded", messageId: MSGID, proof: { neverCalled: true } });
+    expect(send).not.toHaveBeenCalled();
+    expect(store.events.map((e) => e.kind)).toEqual(["send_attempt", "send_handoff"]);
+    const empty = gmail({ ...base, "/messages": () => json({}) });
+    expect(await closeAttemptNotSent("OC-901", null, { store, env: ENV, fetch: empty.f })).toEqual({ status: "uncertain", messageId: MSGID });
+    expect(await closeAttemptNotSent("OC-901", { neverCalled: true }, { store, env: ENV, fetch: empty.f })).toEqual({ status: "closed" });
   });
 
   it("closing an attempt that actually went out records it as contacted instead", async () => {

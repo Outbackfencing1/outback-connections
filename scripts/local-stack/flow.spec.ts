@@ -260,3 +260,24 @@ test("the quote list is paged and filtered, so no quote is out of reach", async 
     psql(`delete from digital_services_quotes where customer_label like '${TAG}%'`);
   }
 });
+
+test("the conversation log not tied to a quote is paged, so older entries stay reachable", async ({ page }) => {
+  const TAG = `Fixture log ${Date.now()}`;
+  psql(
+    `insert into digital_services_conversations (kind, summary, pilot_company_id, recorded_by, occurred_at)
+     select 'note', '${TAG} #' || g, 'OC-977', 'fixture', now() - (g || ' minutes')::interval from generate_series(1, 55) g`
+  );
+  try {
+    await as(page, "owner");
+    await page.goto("/dashboard/owner");
+    const log = page.locator("#conversation-log");
+    await expect(log.getByText(/not tied to a quote · page 1 of 2/)).toBeVisible();
+    await expect(log.getByText(`${TAG} #55`, { exact: false })).toHaveCount(0);
+    await log.getByRole("link", { name: "Older →" }).click();
+    await expect(page).toHaveURL(/cp=2/);
+    await expect(page.locator("#conversation-log").getByText(`${TAG} #55`, { exact: false })).toBeVisible();
+    console.log("[flow] conversation log: 55 entries reachable across pages");
+  } finally {
+    psql(`delete from digital_services_conversations where summary like '${TAG}%'`);
+  }
+});

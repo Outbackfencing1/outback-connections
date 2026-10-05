@@ -121,7 +121,7 @@ messages and a release that calls the dispatcher.
   - `contacted` with Gmail's message and thread IDs;
   - `send_failed` on a definite Gmail refusal;
   - an unknown outcome (timeout, 5xx) stays unresolved. `reconcileAttempt()` finds it in the mailbox (by Message-ID, then recipient + exact subject in Sent). It never resends.
-  - If a refusal or an unconfirmed intent can't be recorded, the attempt stays open and the result says so. `closeAttemptNotSent()` checks the mailbox first and records `contacted` if the message did go out.
+  - If a refusal or an unconfirmed intent can't be recorded, the attempt stays open and the result says so (`failed_unrecorded` or `not_sent_unrecorded`). Either way it carries the Message-ID and the proof to pass to `closeAttemptNotSent()`. `closeAttemptNotSent()` checks the mailbox first and records `contacted` if the message did go out.
   - It closes an attempt as not sent only if Gmail was never called (no handoff marker), or if it's given the definite 4xx refusal from the dispatch result.
   - An empty Sent search is never proof: search can lag, so a handed-off attempt with an unknown outcome stays open ("uncertain") and blocks any resend.
 - **Reply sync:** `syncReplies()` records replies, opt-outs ("unsubscribe", "remove me", "not interested"…) and bounces once each. It never replies to anyone. A reply or opt-out holds any further contact.

@@ -102,13 +102,14 @@ export default async function OwnerPage({
   const page = pageFrom(typeof sp.page === "string" ? sp.page : undefined);
   const statuses = statusesFor(statusFilter);
 
-  const quoteView = quoteListView(sp.qs, sp.qp);
+  const quoteView = quoteListView(sp.qs, sp.qp, sp.cp);
   const viewQuery = new URLSearchParams({
     status: statusFilter,
     ...(q ? { q } : {}),
     page: String(page),
     qs: quoteView.filter,
     qp: String(quoteView.page),
+    cp: String(quoteView.logPage),
   }).toString();
   const notice = typeof sp.notice === "string" ? NOTICES[sp.notice as StatusChange] : undefined;
   const pilotNotice = typeof sp.pilot === "string" ? PILOT_NOTICES[sp.pilot] : undefined;

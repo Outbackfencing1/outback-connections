@@ -75,7 +75,7 @@ describe("applyStatusChange", () => {
 describe("queueViewParams", () => {
   it("keeps only the queue's and the quote list's view from the posted view", () => {
     expect(queueViewParams("status=all&q=pat&page=2&notice=saved&next=https://evil.example").toString()).toBe("q=pat&status=all&page=2");
-    expect(queueViewParams("qs=all&qp=3&sales=saved").toString()).toBe("qs=all&qp=3");
+    expect(queueViewParams("qs=all&qp=3&cp=2&sales=saved").toString()).toBe("qs=all&qp=3&cp=2");
     expect(queueViewParams(undefined).toString()).toBe("");
   });
 });

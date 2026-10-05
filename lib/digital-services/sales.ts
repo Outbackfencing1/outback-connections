@@ -241,10 +241,17 @@ export const SALES_PAGE_SIZE = 50;
 /** Still being worked: not withdrawn and not yet handed over. */
 export const OPEN_QUOTE_STATUSES: QuoteStatus[] = ["draft", "sent", "accepted"];
 
-/** The quote list's filter ("open" by default, or "all") and page, from the URL. */
-export function quoteListView(qs: unknown, qp: unknown): { filter: "open" | "all"; page: number } {
-  const n = typeof qp === "string" ? Number.parseInt(qp, 10) : 1;
-  return { filter: qs === "all" ? "all" : "open", page: Number.isFinite(n) && n >= 1 ? Math.min(n, 10_000) : 1 };
+const pageNumber = (raw: unknown) => {
+  const n = typeof raw === "string" ? Number.parseInt(raw, 10) : 1;
+  return Number.isFinite(n) && n >= 1 ? Math.min(n, 10_000) : 1;
+};
+
+/**
+ * The quote list's filter ("open" by default, or "all") and page, and the
+ * page of the log of conversations not tied to a quote, from the URL.
+ */
+export function quoteListView(qs: unknown, qp: unknown, cp?: unknown): { filter: "open" | "all"; page: number; logPage: number } {
+  return { filter: qs === "all" ? "all" : "open", page: pageNumber(qp), logPage: pageNumber(cp) };
 }
 
 /** Cents to "A$1,094.50"; null shows as "—". */
