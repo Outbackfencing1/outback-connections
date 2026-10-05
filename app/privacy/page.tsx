@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { digitalServicesPublic } from "@/lib/digital-services/flags";
 
 export const metadata = {
   title: "Privacy notice — Outback Connections",
@@ -276,6 +277,37 @@ export default function PrivacyPage() {
         </p>
       </section>
 
+      {/* Shown only while the Websites & digital tools page is switched on
+          (DIGITAL_SERVICES_PUBLIC=on), so the notice describes that form
+          exactly when it can be used. Wording proposed; Josh approves it
+          before the page is switched on (docs/digital-services/TERMS-PROPOSED.md). */}
+      {digitalServicesPublic() && (
+        <section id="digital-services" className="mt-8 space-y-3">
+          <h2 className="text-xl font-bold">Websites and digital tools enquiries</h2>
+          <p className="text-neutral-800">
+            If you use the enquiry form on our{" "}
+            <Link href="/digital-services" className="underline">
+              Websites &amp; digital tools
+            </Link>{" "}
+            page, Outback Fencing &amp; Steel Supplies Pty Ltd collects the business name, your name, email, phone
+            and website (both optional), what you&apos;re interested in and your message. We also record when you
+            agreed, your IP address and your browser type.
+          </p>
+          <ul className="list-disc space-y-2 pl-6 text-neutral-800">
+            <li>We use it only to reply to your enquiry about our website and quote-form services. The IP address is also used to limit spam.</li>
+            <li>Only the owner, Josh, can see it. It isn&apos;t shown to other users, passed to any listed business or used for marketing.</li>
+            <li>The email that tells Josh about a new enquiry contains a reference number only, not your details.</li>
+            <li>
+              We delete it 12 months after you send it. To have it deleted sooner, email{" "}
+              <a href="mailto:help@outbackconnections.com.au" className="underline">
+                help@outbackconnections.com.au
+              </a>
+              .
+            </li>
+          </ul>
+        </section>
+      )}
+
       <section className="mt-8 space-y-3">
         <h2 className="text-xl font-bold">How long we keep data</h2>
         <ul className="list-disc space-y-2 pl-6 text-neutral-800">
@@ -291,6 +323,7 @@ export default function PrivacyPage() {
             with the listing or the flagger&apos;s account.
           </li>
           <li>Quote requests: deleted 12 months after you send them.</li>
+          {digitalServicesPublic() && <li>Websites and digital tools enquiries: deleted 12 months after you send them.</li>}
           <li>
             Defamation complaints: kept for 7 years (limitation period
             under the Defamation Act 2005).

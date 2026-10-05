@@ -141,8 +141,18 @@ test("digital services page: off means 404; on means the three offers and an hon
   // Never submits: read-only smoke.
 });
 
-test("digital services form can't leak details without JavaScript", async ({ browser }) => {
-  const ctx = await browser.newContext({ javaScriptEnabled: false });
+test("digital services: the consent links to a privacy section that describes the form", async ({ page }) => {
+  const res = await page.goto("/digital-services");
+  if (res?.status() === 404) return; // switched off
+  await expect(page.locator('a[href="/privacy#digital-services"]')).toBeVisible();
+  await page.goto("/privacy#digital-services");
+  await expect(page.getByRole("heading", { name: "Websites and digital tools enquiries" })).toBeVisible();
+});
+
+test("digital services form can't leak details without JavaScript", async ({ browser, baseURL, extraHTTPHeaders, storageState, userAgent }) => {
+  // Pass the configured options explicitly so this context reaches the same
+  // deployment (and gets through its protection) as the default page.
+  const ctx = await browser.newContext({ javaScriptEnabled: false, baseURL, extraHTTPHeaders, storageState, userAgent });
   const page = await ctx.newPage();
   const res = await page.goto("/digital-services");
   if (res?.status() === 404) return ctx.close(); // switched off

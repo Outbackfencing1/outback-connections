@@ -126,6 +126,7 @@ describe("digital_services_pilot migration (owner-only prospect data)", { timeou
   async function pilotDb() {
     const pg = new PGlite();
     await pg.exec(`create role anon; create role authenticated; create role service_role;`);
+    await pg.query(`select set_config('app.ds_owner_user_id', $1, false)`, ["33333333-3333-4333-8333-333333333333"]);
     await pg.exec(PILOT_SQL);
     await pg.exec(PILOT_SQL); // idempotent DDL
     return pg;
@@ -149,6 +150,16 @@ describe("digital_services_pilot migration (owner-only prospect data)", { timeou
     await pg.exec(`reset role`);
   });
 
+  it("can't be applied without the owner id, and seeds it when given", async () => {
+    const pg = new PGlite();
+    await pg.exec(`create role anon; create role authenticated; create role service_role;`);
+    await expect(pg.exec(PILOT_SQL)).rejects.toThrow(/null value|not-null/i);
+    await pg.query(`select set_config('app.ds_owner_user_id', $1, false)`, ["33333333-3333-4333-8333-333333333333"]);
+    await pg.exec(PILOT_SQL);
+    const r = await pg.query<{ owner_user_id: string }>(`select owner_user_id from digital_services_settings`);
+    expect(r.rows).toEqual([{ owner_user_id: "33333333-3333-4333-8333-333333333333" }]);
+  });
+
   it("rejects malformed ids, lanes and preview tokens", async () => {
     const pg = await pilotDb();
     await expect(pg.query(`insert into digital_services_pilot (id, company, lane) values ('X-1', 'Co', 'email')`)).rejects.toThrow(/check/i);
@@ -165,8 +176,8 @@ describe("pilot drafts, approvals and first-contact enforcement", { timeout: 30_
   async function seeded() {
     const pg = new PGlite();
     await pg.exec(`create role anon; create role authenticated; create role service_role;`);
+    await pg.query(`select set_config('app.ds_owner_user_id', $1, false)`, [OWNER]);
     await pg.exec(PILOT_SQL);
-    await pg.exec(`insert into digital_services_settings (owner_user_id) values ('${OWNER}')`);
     await pg.exec(`insert into digital_services_pilot (id, company, lane, reserved_for, contact_address, contact_basis, contact_basis_confirmed_at, contact_basis_confirmed_by, contact_basis_confirmed_for)
                    values ('OC-901', 'Fixture Cleaners', 'email', 'cowork', 'info@example.test', 'published on the business contact page', now(), 'Joshua', 'info@example.test')`);
     const ins = async (rev: number, subject: string, body: string) =>

@@ -137,7 +137,7 @@ export default function DigitalServicesEnquiryForm() {
         <input type="checkbox" name="consent" className="mt-1" />
         <span>
           I agree to Outback Connections keeping these details to reply about this enquiry. See the{" "}
-          <a href="/privacy" className="underline">
+          <a href="/privacy#digital-services" className="underline">
             privacy notice
           </a>
           .

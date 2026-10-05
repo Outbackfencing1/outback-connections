@@ -88,6 +88,16 @@ alter table public.digital_services_settings enable row level security;
 revoke all on public.digital_services_settings from anon, authenticated;
 grant select on public.digital_services_settings to service_role;
 
+-- REQUIRED AT APPLY TIME (the owner id is not committed to this public repo).
+-- In the same session, immediately before this file, run:
+--   select set_config('app.ds_owner_user_id', '<DIGITAL_SERVICES_OWNER_USER_ID>', false);
+-- Without it this insert fails (owner_user_id is NOT NULL) and the migration
+-- stops here, rather than leaving every message approval impossible. Re-running
+-- with a value updates the one row.
+insert into public.digital_services_settings (owner_user_id)
+values (nullif(current_setting('app.ds_owner_user_id', true), '')::uuid)
+on conflict (id) do update set owner_user_id = excluded.owner_user_id;
+
 -- ---------------------------------------------------------------- drafts
 create table if not exists public.digital_services_pilot_drafts (
   id             uuid primary key default gen_random_uuid(),

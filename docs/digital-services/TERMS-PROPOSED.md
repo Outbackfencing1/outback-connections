@@ -60,12 +60,21 @@ parked until a sale makes them relevant.
    any client-paid fees sit on top.
 4. **Terms above.** Approve, edit or reject the payment, cancellation and
    hand-over wording.
-5. **Privacy notice.** Add one paragraph covering digital-services enquiries
-   (what is collected, owner-only access, 12-month retention) before the page
-   is switched on.
-6. **Release.** Apply the `digital_services_enquiries` migration, set
-   `DIGITAL_SERVICES_OWNER_USER_ID` (and optionally `DIGITAL_SERVICES_ALERT_TO`),
-   then set `DIGITAL_SERVICES_PUBLIC=on`.
+5. **Privacy notice.** Proposed wording for a "Websites and digital tools
+   enquiries" section is in `app/privacy/page.tsx`. It covers what is
+   collected, the purpose, owner-only access, the reference-only alert and
+   12-month deletion. It appears only while `DIGITAL_SERVICES_PUBLIC=on`, and
+   the form's consent links straight to it. Approve or edit it before the page
+   is switched on, and bump the notice version when it goes live.
+6. **Release** (in order):
+   1. Apply the `digital_services_enquiries` migration.
+   2. Apply the pilot migration in the same session as
+      `select set_config('app.ds_owner_user_id', '<your auth user id>', false);`.
+      It refuses to apply without that id, so every message approval stays tied to you.
+   3. Optionally apply the sales migration.
+   4. Set `DIGITAL_SERVICES_OWNER_USER_ID` (the same id), `RESEND_API_KEY` and
+      optionally `DIGITAL_SERVICES_ALERT_TO`.
+   5. Set `DIGITAL_SERVICES_PUBLIC=on`.
 7. **Sender.** Which no-extra-cost Outback Connections mailbox (not help@)
    sends the pilot, once ownership, send-as, SPF/DKIM/DMARC and reply routing
    are checked.

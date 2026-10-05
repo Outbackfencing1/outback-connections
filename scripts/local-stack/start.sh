@@ -21,9 +21,9 @@ for i in $(seq 1 30); do psql -h 127.0.0.1 -p "$PGPORT" -U postgres -tAc "select
 PSQL="psql -h 127.0.0.1 -p $PGPORT -U postgres -q -v ON_ERROR_STOP=1"
 $PSQL -f "$HERE/schema.sql"
 $PSQL -f "$ROOT/supabase/migrations/_drafts/digital_services_enquiries.sql" 2>/dev/null
-$PSQL -f "$ROOT/supabase/migrations/_drafts/digital_services_pilot.sql" 2>/dev/null
+# The pilot migration requires the owner id at apply time (as in production).
+PGOPTIONS="-c app.ds_owner_user_id=33333333-3333-4333-8333-333333333333" $PSQL -f "$ROOT/supabase/migrations/_drafts/digital_services_pilot.sql" 2>/dev/null
 $PSQL -f "$ROOT/supabase/migrations/_drafts/digital_services_sales.sql" 2>/dev/null
-$PSQL -c "insert into public.digital_services_settings (owner_user_id) values ('33333333-3333-4333-8333-333333333333')"
 
 SECRET="$(head -c 48 /dev/urandom | base64 | tr -d '/+=' | head -c 48)"
 cat > "$STACK/postgrest.conf" <<CONF

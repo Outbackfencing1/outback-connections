@@ -67,6 +67,14 @@ Only one first contact per company is possible. `lib/digital-services/dispatch-g
 - the owned-inbox test (no Outback Connections Workspace mailbox is connected);
 - hosted smoke (paused until the trace-safety fix is on `main`; separate draft PR).
 
+**Release order (once approved):**
+1. Enquiry migration.
+2. Pilot migration, in the same session as `select set_config('app.ds_owner_user_id', '<owner auth id>', false);`. Without it the migration refuses to apply.
+3. Sales migration.
+4. Environment variables: `DIGITAL_SERVICES_OWNER_USER_ID`, `RESEND_API_KEY`, the sender variables after the owned-inbox test.
+5. Privacy wording approved.
+6. `DIGITAL_SERVICES_PUBLIC=on`.
+
 ## 4 Oct 2026: the staff-post clean-up was failing; fixed (branch `ccr-a7a02618-x1gnjy`)
 
 Live check (read-only) before the fix: the 2 and 3 Oct runs of
