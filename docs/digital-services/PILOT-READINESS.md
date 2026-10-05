@@ -204,3 +204,25 @@ record is event `claude-code-three-cleaner-pilot-rev4-2026-10-05`; revisions
 | Sender adapter | Hardened. A handed-off message with an unknown outcome is never closed as "not sent" on an empty search. Reply sync reports any unsaved opt-out as incomplete and retries it |
 | GLM research | Adapter gap reported correctly (no crash, no false rejections). The real GLM mapping needs the return, exclusions and request/schema files in this session |
 | First contact | Held for all three |
+
+## Overnight queue, 5 to 6 October 2026 (PR #23, draft)
+
+Josh authorised the overnight preparation queue. Six work units were done on this branch, each with the full gate green. None of it is applied, connected, published or merged.
+
+| Unit | What exists now | Where |
+|---|---|---|
+| 1. GLM research-contract adapter | Explicit `oc-research-handoff/0.1-proposed` adapter. Real v1/v2 dry runs (private): v1 is 6 proposed for owner review / 10 held / 7 excluded; v2 is 8 / 18 / 7. Both have 0 row errors, stable on repeat, 0 imported. | `RESEARCH-IMPORT.md` |
+| 2. Owner review screen | `/dashboard/owner/review/<draft id>` shows the exact copy, hash, evidence age and method, uncertainties, holds, offer and reviews before approval. Changed evidence voids approvals. Approval sends nothing. | `OUTREACH-SENDER.md` |
+| 3. Local customer journey | Enquiry to hand-over, with care, on the local stack. The app server is restarted between phases. Phone and desktop screenshots; no sideways scroll. | `OPERATOR-WALKTHROUGH.md`, `scripts/local-stack/` |
+| 4. Sender/reply hardening (offline) | Frozen recipient, paged searches, timeouts, replies and bounces outside the thread, sync-health gate on dispatch. | `OUTREACH-SENDER.md` |
+| 5. Preparation queue | Durable and owner-only: leases, backoff, pause/resume, stale-lease recovery, evidence invalidation, a person-run packet/result hand-off. **No automatic worker.** | `PREPARATION-QUEUE.md` |
+| 6. Delivery checklists | Five-page website (A$1,990 + GST) and existing-site form (A$490 + GST). Care is optional. A test keeps the prices in step with the code. | `DELIVERY-CHECKLISTS.md` |
+
+**Still true:**
+- Sending is off and unwired.
+- The mailbox and hosted flow are disconnected.
+- The public page is off (`DIGITAL_SERVICES_PUBLIC`).
+- All digital-services migrations are drafts (enquiries, pilot, sales and the new prep queue) and are not applied to production.
+- Approving a draft records an approval only.
+
+**Out of reach:** `BUILD-STATUS.md` lives in the private engine tree (see `ENGINE-HANDOFF.md`), which this session can't reach. The equivalent status is this section and the `oc_planning.agent_updates` checkpoints `claude-code-overnight-unit{1..5}-*` and `claude-code-overnight-delivery-positions-2026-10-05`.

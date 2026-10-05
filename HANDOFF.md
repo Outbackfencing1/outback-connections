@@ -10,6 +10,66 @@ Pushing to `main` deploys production. All migrations in
 
 ---
 
+## Overnight 5 to 6 Oct 2026: preparation queue (branch `ccr-a7a02618-x1gnjy-digital-services`, PR #23 draft)
+
+Josh authorised the overnight work order (Codex's
+`codex-overnight-work-orders-2026-10-05`, worker `claude-code`).
+
+**Inputs.** The five research artifacts were read from
+`codex-overnight-artifact-{input,schema,exclusions,v1,v2}-2026-10-05` and kept
+outside the checkout. Each was verified by SHA-256 and byte count.
+
+**Commits**, each with tests, tsc, lint and build green:
+
+| Commit | Content |
+|---|---|
+| 481232c | The research-contract adapter |
+| b428f9f | The owner review screen, plus evidence revisions in the pilot draft migration |
+| 39d476f | Codex review fixes for 4545459 |
+| 0055132 | The local journey with restarts; enquiry-linked quotes; phone-width fixes |
+| fd1a251 | Sender/reply hardening and the sync-health gate |
+| b6b75de | The preparation queue |
+| (final) | Delivery checklists and this handoff |
+
+Summary per unit: `docs/digital-services/PILOT-READINESS.md` ("Overnight queue").
+
+**Not done, by rule:**
+- no sending;
+- no Gmail calls;
+- no spending;
+- no production migration;
+- no main merge;
+- no publishing.
+
+Smoke stays paused.
+
+**Prospect data.** Prospect-specific positions are in `oc_planning.agent_updates`
+`claude-code-overnight-delivery-positions-2026-10-05`, not in this repo:
+- Dimi is held and not in the launch cohort.
+- JCS is a form upgrade with no pricing or delivery claims.
+- Q CLEAN's observations are bounded.
+
+**Morning check** (each command was run at the freeze; results are in the PR body):
+
+```sh
+git fetch origin ccr-a7a02618-x1gnjy-digital-services && git checkout <final commit>
+npm ci && npm test && npx tsc --noEmit && npm run lint && npm run build
+# private files, outside the checkout (counts only):
+node --experimental-strip-types scripts/review-research-handoff.mjs <v2.json> \
+  --request <research-input.json> --schema <schema.json> --exclusions <research-exclusions.json> \
+  --now 2026-10-05T23:00:00+11:00 --summary   # expect 8 / 18 / 7, 0 row errors
+# local stack (no hosted services):
+POSTGREST_BIN=/path/to/postgrest scripts/local-stack/start.sh
+set -a; source /var/tmp/oc-local-stack/app.env; set +a; npm run build
+npx next start -p 3200 & npx playwright test -c scripts/local-stack/playwright.local.config.ts scripts/local-stack/flow.spec.ts
+kill %1; scripts/local-stack/lifecycle.sh
+```
+
+**Josh's one decision.** Should the draft migrations be applied to a
+**disposable Supabase branch**, so the review screen, sales controls and
+preparation queue can be tried with real owner sign-in? They are:
+enquiries, pilot, sales and prep queue. Production stays untouched until he says otherwise.
+
 ## 5 Oct 2026: digital services, marketplace side (branch `ccr-a7a02618-x1gnjy-digital-services`)
 
 Handover: `oc_planning.plan_versions` `claude-code-build-handover` rev 2 on
