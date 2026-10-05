@@ -254,7 +254,12 @@ describe("pilot drafts, approvals and first-contact enforcement", { timeout: 30_
     await expect(pg.query(`select public.approve_pilot_message($1, $2)`, [d.id, d.sha256])).rejects.toThrow(/permission denied/i);
     await pg.exec(`reset role`);
     await expect(contact(d.id)).rejects.toThrow(/lacks 1 approval/);
-    await ownerApproves(d);
+    const first = (await ownerApproves(d)).rows[0] as { approve_pilot_message: string };
+    // A double click / retry returns the same approval instead of failing.
+    const again = (await ownerApproves(d)).rows[0] as { approve_pilot_message: string };
+    expect(again.approve_pilot_message).toBe(first.approve_pilot_message);
+    const n = await pg.query<{ c: number }>(`select count(*)::int as c from digital_services_pilot_approvals where kind = 'message_approval'`);
+    expect(n.rows[0].c).toBe(1);
     await contact(d.id);
   });
 

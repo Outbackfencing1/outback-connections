@@ -182,9 +182,17 @@ begin
   if reviews < 3 then
     raise exception 'evidence, preview and copy reviews come first' using errcode = 'OC403';
   end if;
+  -- Idempotent: a double click or a retry after a lost response returns the
+  -- approval already recorded for this exact revision instead of failing.
   insert into public.digital_services_pilot_approvals (draft_id, draft_sha256, kind, actor, approver_user_id)
   values (p_draft_id, p_draft_sha256, 'message_approval', 'owner', caller)
+  on conflict (draft_id, kind) do nothing
   returning id into new_id;
+  if new_id is null then
+    select id into new_id from public.digital_services_pilot_approvals
+      where draft_id = p_draft_id and kind = 'message_approval'
+        and draft_sha256 = p_draft_sha256 and approver_user_id = caller;
+  end if;
   return new_id;
 end;
 $$;
