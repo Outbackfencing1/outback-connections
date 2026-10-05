@@ -30,10 +30,17 @@ scripts/local-stack/stop.sh
   - a status change says "saved" only once the database returns the updated row;
   - a refused write says "Not saved";
   - a deleted row says it no longer exists.
+- **Message approval:** goes through Joshua's own session; a member's session calling the function is refused.
+- **Sales controls:**
+  - draft quote → sent → accepted;
+  - production is refused until deposit evidence (with GST) is recorded;
+  - duplicate evidence (spacing/case changed) is refused;
+  - launch is refused until paid in full;
+  - a conversation note is logged against the quote.
 
 `seed-pilot.mjs <pack.json>` loads a private pilot pack into the draft pilot
 tables and checks the database's draft hashes match the pack's. Pilot packs
 hold prospect data, so they stay out of this public repository.
 
 Recordings are off. The spec saves one deliberate screenshot of fixture data
-to the path in `FLOW_SCREENSHOT`.
+to the path in `FLOW_SCREENSHOT`, and one of the sales section to `SALES_SCREENSHOT`.

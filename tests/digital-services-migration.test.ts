@@ -254,9 +254,39 @@ describe("pilot drafts, approvals and first-contact enforcement", { timeout: 30_
     await expect(contact(d.id, { lane: "engine" })).rejects.toThrow(/not reserved for this lane/);
     await expect(contact(d.id, { sender: "help@outbackconnections.com.au" })).rejects.toThrow(/never help@/);
     await contact(d.id);
-    await expect(contact(d.id)).rejects.toThrow(/duplicate key|unique/i);
+    await expect(contact(d.id)).rejects.toThrow(/duplicate key|unique|already contacted/i);
     const n = await pg.query<{ c: number }>(`select count(*)::int as c from digital_services_pilot_events where kind = 'contacted'`);
     expect(n.rows[0].c).toBe(1);
+  });
+
+  it("a send records its intent first; its outcome must match it; an unresolved attempt blocks another", async () => {
+    const { pg, ins, approveAll } = await seeded();
+    const d1 = await ins(1, "Subject", "Body");
+    const ev = (kind: string, draftId: string | null, msgId: string | null, extra: { provider?: string } = {}) =>
+      pg.query(
+        `insert into digital_services_pilot_events (company_id, kind, lane, draft_id, sender, rfc822_message_id, provider_message_id, recorded_by)
+         values ('OC-901', $1, 'cowork', $2, 'josh@outbackconnections.com.au', $3, $4, 'test')`,
+        [kind, draftId, msgId, extra.provider ?? null]
+      );
+    await expect(ev("send_attempt", d1.id, "<a1@outbackconnections.com.au>")).rejects.toThrow(/lacks 4 approval/); // same gate as contact
+    await approveAll(d1);
+    await expect(ev("send_attempt", d1.id, null)).rejects.toThrow(/own Message-ID/);
+    await ev("send_attempt", d1.id, "<a1@outbackconnections.com.au>");
+    await expect(ev("send_attempt", d1.id, "<a2@outbackconnections.com.au>")).rejects.toThrow(/unresolved|unique|duplicate/i);
+    await expect(ev("contacted", d1.id, "<other@outbackconnections.com.au>")).rejects.toThrow(/no matching send attempt/);
+    // A definite provider refusal resolves it; a new revision can then be attempted.
+    await ev("send_failed", d1.id, "<a1@outbackconnections.com.au>");
+    await expect(ev("send_attempt", d1.id, "<a3@outbackconnections.com.au>")).rejects.toThrow(/unique|duplicate/i); // same revision: no blind retry
+    const d2 = await ins(2, "Subject 2", "Body 2");
+    await approveAll(d2);
+    await ev("send_attempt", d2.id, "<a4@outbackconnections.com.au>");
+    // A reply arriving before the outcome is recorded doesn't stop recording what was sent.
+    await pg.query(`insert into digital_services_pilot_events (company_id, kind, provider_message_id, recorded_by) values ('OC-901', 'replied', 'gm-reply-1', 'sync')`);
+    await ev("contacted", d2.id, "<a4@outbackconnections.com.au>", { provider: "gm-sent-1" });
+    await expect(ev("contacted", d2.id, "<a4@outbackconnections.com.au>", { provider: "gm-sent-2" })).rejects.toThrow(/unique|duplicate/i);
+    await expect(
+      pg.query(`insert into digital_services_pilot_events (company_id, kind, provider_message_id, recorded_by) values ('OC-901', 'replied', 'gm-reply-1', 'sync')`)
+    ).rejects.toThrow(/unique|duplicate/i); // reply sync is idempotent
   });
 
   it("suppression and an unconfirmed contact basis block first contact", async () => {
@@ -383,10 +413,79 @@ describe("quotes and payment evidence (no manual 'paid')", { timeout: 30_000 }, 
     await expect(pay("txn - 123")).rejects.toThrow(/duplicate key|unique/i);
   });
 
+  const payFixture = (pg: PGlite, id: string, cents: number, ref: string) =>
+    pg.query(
+      `insert into digital_services_payments (quote_id, amount_cents, received_on, evidence_source, evidence_ref, recorded_by) values ($1, $2, '2026-10-10', 'bank_statement', $3, 'Joshua')`,
+      [id, cents, ref]
+    );
+  const stage = (pg: PGlite, id: string, s: string) => pg.query(`update digital_services_quotes set delivery_stage = $2 where id = $1`, [id, s]);
+
+  it("a website reaches production only once accepted with its deposit evidenced, and launches only when paid in full", async () => {
+    const pg = await salesDb();
+    const q = (await quote(pg)).rows[0];
+    await stage(pg, q.id, "intake_requested"); // intake can start any time
+    await expect(stage(pg, q.id, "in_production")).rejects.toThrow(/accepted quote/);
+    await pg.query(`update digital_services_quotes set gst_treatment = 'exclusive', status = 'sent', sent_at = now() where id = $1`, [q.id]);
+    await pg.query(`update digital_services_quotes set status = 'accepted', accepted_at = now() where id = $1`, [q.id]);
+    await expect(stage(pg, q.id, "in_production")).rejects.toThrow(/evidenced/);
+    await payFixture(pg, q.id, 99500, "TXN-DEP-SHORT"); // the deposit before GST isn't enough
+    await expect(stage(pg, q.id, "in_production")).rejects.toThrow(/evidenced/);
+    await payFixture(pg, q.id, 9950, "TXN-DEP-GST");
+    await stage(pg, q.id, "in_production");
+    await stage(pg, q.id, "client_review");
+    await stage(pg, q.id, "approved");
+    await expect(stage(pg, q.id, "launched")).rejects.toThrow(/balance evidenced/);
+    await payFixture(pg, q.id, 109450, "TXN-BAL");
+    await stage(pg, q.id, "launched");
+    await stage(pg, q.id, "handed_over");
+  });
+
+  it("a guided form is paid in full before production, and a quote can't be inserted mid-delivery", async () => {
+    const pg = await salesDb();
+    const q = (
+      await pg.query<{ id: string }>(
+        `insert into digital_services_quotes (customer_label, offer, amount_cents, deposit_cents, gst_treatment, terms_version, scope_summary, status, sent_at, accepted_at)
+         values ('Fixture form', 'quote_form_490', 49000, 0, 'exclusive', 'proposed-2026-10-04', 'One guided flow', 'accepted', now(), now()) returning id`
+      )
+    ).rows[0];
+    await expect(stage(pg, q.id, "in_production")).rejects.toThrow(/evidenced/);
+    await payFixture(pg, q.id, 53900, "TXN-FORM");
+    await stage(pg, q.id, "in_production");
+    await expect(
+      pg.query(
+        `insert into digital_services_quotes (customer_label, offer, amount_cents, gst_treatment, terms_version, scope_summary, status, accepted_at, delivery_stage)
+         values ('Fixture', 'quote_form_490', 49000, 'exclusive', 't', 's', 'accepted', now(), 'launched')`
+      )
+    ).rejects.toThrow(/evidenced/);
+  });
+
+  it("a sent quote's price, GST, terms and scope are fixed", async () => {
+    const pg = await salesDb();
+    const q = (await quote(pg)).rows[0];
+    await pg.query(`update digital_services_quotes set amount_cents = 149000, deposit_cents = 74500 where id = $1`, [q.id]); // drafts can change
+    await pg.query(`update digital_services_quotes set gst_treatment = 'exclusive', status = 'sent', sent_at = now() where id = $1`, [q.id]);
+    await expect(pg.query(`update digital_services_quotes set amount_cents = 199000 where id = $1`, [q.id])).rejects.toThrow(/fixed/);
+    await expect(pg.query(`update digital_services_quotes set gst_treatment = 'inclusive' where id = $1`, [q.id])).rejects.toThrow(/fixed/);
+    await pg.query(`update digital_services_quotes set status = 'withdrawn' where id = $1`, [q.id]); // status can still move
+  });
+
+  it("conversations are an append-only owner log linked to something", async () => {
+    const pg = await salesDb();
+    const q = (await quote(pg)).rows[0];
+    await pg.query(`insert into digital_services_conversations (kind, summary, quote_id, recorded_by) values ('call', 'Talked through scope', $1, 'Joshua')`, [q.id]);
+    await expect(pg.query(`insert into digital_services_conversations (kind, summary, recorded_by) values ('note', 'Unlinked', 'Joshua')`)).rejects.toThrow(/check/i);
+    await expect(pg.query(`insert into digital_services_conversations (kind, summary, pilot_company_id, recorded_by) values ('sms', 'x', 'OC-901', 'Joshua')`)).rejects.toThrow(/check/i);
+    await pg.exec(`set role service_role`);
+    await expect(pg.query(`update digital_services_conversations set summary = 'edited'`)).rejects.toThrow(/permission denied/i);
+    await expect(pg.query(`delete from digital_services_payments`)).rejects.toThrow(/permission denied/i);
+    await pg.exec(`reset role`);
+  });
+
   it("is invisible to anon and authenticated", async () => {
     const pg = await salesDb();
     for (const role of ["anon", "authenticated"]) {
       await pg.exec(`set role ${role}`);
+      await expect(pg.query(`select * from digital_services_conversations`)).rejects.toThrow(/permission denied/i);
       await expect(pg.query(`select * from digital_services_quotes`)).rejects.toThrow(/permission denied/i);
       await expect(pg.query(`select * from digital_services_quote_balance`)).rejects.toThrow(/permission denied/i);
       await pg.exec(`reset role`);

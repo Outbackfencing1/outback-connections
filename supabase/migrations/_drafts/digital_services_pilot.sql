@@ -31,7 +31,15 @@
 -- signed-in identity against digital_services_settings.owner_user_id; a
 -- service-role (or any direct) insert of a message approval is refused. A unique index
 -- allows one first contact per company, so two concurrent dispatches can't
--- both succeed. lib/digital-services/dispatch-guard.ts applies the same rules
+-- both succeed.
+-- Sending (lib/digital-services/outreach/): a dispatch first records a
+-- 'send_attempt' carrying our own Message-ID, under the same rules, and only
+-- then calls the provider. Its outcome is recorded against that attempt:
+-- 'contacted' (with the provider's message/thread ids) or 'send_failed' (a
+-- definite provider refusal). An attempt with no outcome is unresolved and
+-- blocks any further attempt for that company until it's reconciled from the
+-- mailbox; it's never retried blindly. Replies, opt-outs and bounces are
+-- recorded once per provider message. lib/digital-services/dispatch-guard.ts applies the same rules
 -- in the server before any future dispatch.
 --
 -- Rollback: drop table if exists public.digital_services_pilot_events;
@@ -219,17 +227,30 @@ grant execute on function public.approve_pilot_message(uuid, text) to authentica
 create table if not exists public.digital_services_pilot_events (
   id                   uuid primary key default gen_random_uuid(),
   company_id           text not null references public.digital_services_pilot(id),
-  kind                 text not null check (kind in ('contacted', 'replied', 'opted_out', 'suppressed', 'bounced')),
+  kind                 text not null check (kind in ('send_attempt', 'send_failed', 'contacted', 'replied', 'opted_out', 'suppressed', 'bounced')),
   lane                 text check (lane is null or lane in ('cowork', 'engine')),
   draft_id             uuid references public.digital_services_pilot_drafts(id),
   sender               text,
   provider_message_id  text,
+  provider_thread_id   text,
+  rfc822_message_id    text,  -- our own Message-ID, set on the send attempt before anything is sent
   occurred_at          timestamptz not null default now(),
   recorded_by          text not null,
   note                 text
 );
 create unique index if not exists uq_ds_pilot_first_contact
   on public.digital_services_pilot_events (company_id) where kind = 'contacted';
+-- Columns added after the first draft (no-ops on a fresh apply).
+alter table public.digital_services_pilot_events add column if not exists provider_thread_id text;
+alter table public.digital_services_pilot_events add column if not exists rfc822_message_id text;
+-- One attempt per draft revision, one outcome per attempt, and a provider
+-- message is recorded once per kind, so reply sync can run repeatedly.
+create unique index if not exists uq_ds_pilot_attempt_per_draft
+  on public.digital_services_pilot_events (company_id, draft_id) where kind = 'send_attempt';
+create unique index if not exists uq_ds_pilot_attempt_outcome
+  on public.digital_services_pilot_events (rfc822_message_id) where kind in ('contacted', 'send_failed');
+create unique index if not exists uq_ds_pilot_provider_message
+  on public.digital_services_pilot_events (kind, provider_message_id) where provider_message_id is not null;
 
 create or replace function public.ds_pilot_contact_guard()
 returns trigger
@@ -241,8 +262,34 @@ declare
   d public.digital_services_pilot_drafts%rowtype;
   missing int;
 begin
-  if new.kind <> 'contacted' then return new; end if;
+  if new.kind not in ('send_attempt', 'send_failed', 'contacted') then return new; end if;
   select * into c from public.digital_services_pilot where id = new.company_id for update;
+  -- The outcome of a recorded attempt is a fact about what the provider did:
+  -- it must match that attempt, and isn't re-gated (a reply arriving after
+  -- the send mustn't stop us recording that we sent).
+  if new.kind = 'send_failed' or (new.kind = 'contacted' and new.rfc822_message_id is not null) then
+    if not exists (select 1 from public.digital_services_pilot_events e
+                   where e.company_id = new.company_id and e.kind = 'send_attempt'
+                     and e.rfc822_message_id = new.rfc822_message_id
+                     and e.draft_id is not distinct from new.draft_id) then
+      raise exception 'no matching send attempt' using errcode = 'OC403';
+    end if;
+    return new;
+  end if;
+  -- A new attempt or a directly recorded contact passes every rule below.
+  if exists (select 1 from public.digital_services_pilot_events e
+             where e.company_id = new.company_id and e.kind = 'contacted') then
+    raise exception 'company already contacted' using errcode = 'OC403';
+  end if;
+  if exists (select 1 from public.digital_services_pilot_events a
+             where a.company_id = new.company_id and a.kind = 'send_attempt'
+               and not exists (select 1 from public.digital_services_pilot_events o
+                               where o.kind in ('contacted', 'send_failed') and o.rfc822_message_id = a.rfc822_message_id)) then
+    raise exception 'an earlier send attempt is unresolved; reconcile it first' using errcode = 'OC409';
+  end if;
+  if new.kind = 'send_attempt' and (new.rfc822_message_id is null or new.rfc822_message_id !~ '^<[^<>@\s]+@[^<>@\s]+>$') then
+    raise exception 'a send attempt needs its own Message-ID' using errcode = 'OC403';
+  end if;
   if c.lane <> 'email' then raise exception 'not an email-lane company' using errcode = 'OC403'; end if;
   if new.lane is null or c.reserved_for is null or c.reserved_for <> new.lane then
     raise exception 'company is not reserved for this lane' using errcode = 'OC403';

@@ -46,10 +46,16 @@ Kept in the owner-only `digital_services_quotes` table (draft migration
 | pilot_company_id / enquiry_id | the pilot ID or enquiry it came from |
 | offer | website_1990 |
 | amount_cents / deposit_cents | 199000 / 99500 (the deposit amount comes from the approved terms) |
-| gst_treatment | pending → exclusive, inclusive or not_registered, once Josh confirms |
+| gst_treatment | exclusive: prices are before GST and the operator is GST-registered (established 5 Oct; see below) |
 | terms_version | the approved terms version |
 | scope_summary | pages, form flow, hosting choice, revision rounds |
 | status | draft → sent → accepted (or withdrawn). **There is no "paid" status.** |
+
+**GST (established, not re-asked):** the operator is Outback Fencing and Steel
+Supplies Pty Ltd, ABN 76 674 671 820, GST-registered from 2 February 2024
+(private record `marcus-owner-mailbox-tax-confirmed-2026-10-05`). Prices are
+quoted "+ GST", so quotes use `exclusive`: the website is A$2,189.00 in total
+with a A$1,094.50 deposit, and the form is A$539.00.
 
 **Payment** is recorded only in `digital_services_payments`, and each row needs:
 - the bank-statement transaction reference, or the payment-provider record ID;
@@ -59,6 +65,16 @@ Kept in the owner-only `digital_services_quotes` table (draft migration
 The same evidence can't be entered twice. Deposit received and the balance
 come from those rows (the `digital_services_quote_balance` view), never from a
 flag, a screenshot or a statement in chat. A draft invoice is never marked paid.
+
+**Owner controls** (`/dashboard/owner`, "Quotes, payments and delivery"; Josh only):
+- **Draft quote:** the price comes from the offer, never typed in.
+- **Status:** "I've sent this quote", "Customer accepted in writing" or Withdraw. Nothing is sent from here, and there is no "paid" control.
+- **Payment evidence:** the reference, amount and date received. The same evidence is refused twice.
+- **Delivery stage:** not started → intake requested → intake received → in production → client review → approved → launched → handed over.
+  - The database refuses production until the quote is accepted and the payment due before production is evidenced (website: the deposit; form: the full price).
+  - It refuses launch and hand-over until everything is evidenced.
+  - Once sent, a quote's price, GST, terms and scope are fixed.
+- **Conversation log:** append-only notes, calls and emails, linked to an enquiry, a pilot company or a quote.
 
 ## 3. Asset intake (send after the deposit is evidenced)
 
@@ -100,7 +116,7 @@ There is no separate spreadsheet or sending tracker.
 ## Decisions still open for Josh
 
 These are the unresolved items in `TERMS-PROPOSED.md` ("Decisions only Josh can make"):
-1. **Seller and GST:** confirm the invoicing entity and its current GST status, and whether prices are quoted inclusive or exclusive.
+1. **Seller and GST:** settled from existing records (above). Still Josh's: approve the terms wording that names them.
 2. **Payment destination:** which existing account receives deposits.
 3. **Balance, refund and revision terms:** approve or edit the proposed wording.
 4. **Care boundaries:** the written hosting/usage/support cap for A$149/month, and which fees, if any, the customer pays directly.

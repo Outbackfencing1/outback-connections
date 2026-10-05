@@ -146,3 +146,37 @@ Enforcement is now in code:
 - the `digital_services_pilot` draft migration, which refuses a "contacted" event unless every condition holds and allows only one first contact per company.
 
 Both are tested, including two simultaneous dispatches on a real Postgres 16, of which exactly one succeeded.
+
+## Revision 3, owner controls and the sender adapter (5 October 2026, later)
+
+Revision 3 of all three drafts is in owner-only storage (event
+`claude-code-three-cleaner-pilot-rev3-2026-10-05`). Revisions 1 and 2 are
+unchanged in the earlier record. Revision 3:
+- resolves the GST wording to "+ GST" from the established operator/ABN/GST record;
+- frames one form offer as an upgrade of the contact form that business already has;
+- moves the draft quotes to exclusive GST.
+
+The older local pitch at A$1,490 that Codex reported (a laptop file) is
+superseded and must not be sent.
+
+| Check | State |
+|---|---|
+| Drafts | Revision 3 for all three; the database recomputed each SHA-256 and it matched |
+| Evidence refresh | **Not done.** The three business sites are still blocked by this session's network policy. Needs the domains allowed, or Codex's five-file `claude-first-customer-handoff` folder attached |
+| Preview content | Two commercial-cleaner previews repaired in PR #23 (not deployed): site types limited to evidenced ones; the action-style service card removed; existing forms, location pages and client login stated as kept. Browser re-check at 390/1440 passed. The website prospect's preview waits on evidence for its "Home" option |
+| Approvals on revision 3 | 0 of 12 |
+| Contact basis confirmed | 0 of 3 |
+| Sender | Adapter ready (Gmail REST, `lib/digital-services/outreach/`). Not connected. Steps: `OUTREACH-SENDER.md` |
+| Sending switch | Off (`DIGITAL_SERVICES_OUTREACH_SENDING` unset); no route calls the dispatcher |
+| First contact | Held for all three |
+
+**Owner controls** are on `/dashboard/owner` (draft migration
+`digital_services_sales`, not applied):
+- quotes;
+- payment evidence;
+- intake/delivery stage, gated on evidenced payment;
+- an append-only conversation log.
+
+Proven on the local stack (Postgres 16 + PostgREST; fixture data only). The
+hosted flow is unproven until the enquiry, pilot and sales migrations are
+approved and applied.

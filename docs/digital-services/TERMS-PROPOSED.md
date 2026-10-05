@@ -51,10 +51,13 @@ parked until a sale makes them relevant.
 
 ## Decisions only Josh can make (bundle)
 
-1. **Seller and tax.** Confirm Outback Fencing & Steel Supplies Pty Ltd (ABN
-   76 674 671 820) is the invoicing entity for digital services and its
-   current GST status (the ABN record seen is dated September 2025). Until
-   then the public page says only that tax is confirmed in writing.
+1. **Seller and tax: settled from existing records (5 Oct 2026).** Outback
+   Fencing & Steel Supplies Pty Ltd (ABN 76 674 671 820) is the operator, and
+   it has been GST-registered since 2 February 2024 (Josh confirmed reuse of
+   the held tax information; private record
+   `marcus-owner-mailbox-tax-confirmed-2026-10-05`). Prices are before GST,
+   and quotes and drafts say "+ GST". The public page wording changes only
+   with the approved terms release.
 2. **Payment destination.** Which existing account receives deposits.
 3. **Care cap.** The hosting/usage/support limit for A$149/month, and whether
    any client-paid fees sit on top.

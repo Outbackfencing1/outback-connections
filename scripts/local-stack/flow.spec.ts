@@ -165,3 +165,72 @@ test("Joshua's message approval goes through his own session; a member's session
     psql(`delete from digital_services_pilot_approvals where draft_id = '${draftId}'; delete from digital_services_pilot_drafts where company_id = 'OC-980'; delete from digital_services_pilot where id = 'OC-980'`);
   }
 });
+
+test("Joshua's sales controls: draft quote, status, payment evidence, gated delivery, conversation log", async ({ page }) => {
+  const CUSTOMER = `Fixture Sales Co ${Date.now()}`;
+  const quoteRow = () => page.locator("#sales li", { hasText: CUSTOMER });
+  const outcome = async (name: string) => {
+    await expect(page).toHaveURL(new RegExp(`sales=${name}`));
+  };
+  try {
+    await as(page, "owner");
+    await page.goto("/dashboard/owner");
+    await page.locator("#sales summary", { hasText: "New draft quote" }).click();
+    await page.fill("#sales input[name=customer_label]", CUSTOMER);
+    await page.selectOption("#sales select[name=offer]", "website_1990");
+    await page.selectOption("#sales select[name=gst_treatment]", "exclusive");
+    await page.fill("#sales input[name=terms_version]", "fixture-terms");
+    await page.fill("#sales textarea[name=scope_summary]", "Fixture scope: five pages, guided form, two rounds");
+    await page.getByRole("button", { name: "Save draft quote" }).click();
+    await outcome("saved");
+    await expect(quoteRow()).toContainText("Total due A$2,189.00");
+    await expect(page.getByRole("button", { name: /mark.*paid|^paid/i })).toHaveCount(0);
+
+    // Intake can start before payment; production can't.
+    await quoteRow().locator("select[name=stage]").selectOption("intake_requested");
+    await quoteRow().getByRole("button", { name: "Set stage" }).click();
+    await outcome("saved");
+    await quoteRow().getByRole("button", { name: "I've sent this quote" }).click();
+    await outcome("saved");
+    await quoteRow().getByRole("button", { name: "Customer accepted in writing" }).click();
+    await outcome("saved");
+    await quoteRow().locator("select[name=stage]").selectOption("in_production");
+    await quoteRow().getByRole("button", { name: "Set stage" }).click();
+    await outcome("gated");
+    await expect(page.locator("#sales p[role=alert]")).toContainText("payment due before production");
+
+    // Deposit evidence (A$995 + GST), then production is allowed.
+    const pay = async (ref: string, amount: string) => {
+      await quoteRow().locator("input[name=evidence_ref]").fill(ref);
+      await quoteRow().locator("input[name=amount]").fill(amount);
+      await quoteRow().locator("input[name=received_on]").fill("2026-10-01");
+      await quoteRow().getByRole("button", { name: "Record payment evidence" }).click();
+    };
+    await pay(`FIXTURE-${CUSTOMER}`, "1,094.50");
+    await outcome("saved");
+    await expect(quoteRow()).toContainText("deposit received");
+    await pay(` fixture-${CUSTOMER.toLowerCase()} `, "1094.50");
+    await outcome("duplicate");
+    await expect(quoteRow()).toContainText("evidenced A$1,094.50");
+    await quoteRow().locator("select[name=stage]").selectOption("in_production");
+    await quoteRow().getByRole("button", { name: "Set stage" }).click();
+    await outcome("saved");
+    await quoteRow().locator("select[name=stage]").selectOption("launched");
+    await quoteRow().getByRole("button", { name: "Set stage" }).click();
+    await outcome("gated");
+
+    // Conversation log, linked to the quote.
+    await page.locator("#sales select[name=quote_id]").selectOption({ label: `${CUSTOMER} (A$1,990 website)` });
+    await page.selectOption("#sales select[name=kind]", "call");
+    await page.fill("#sales textarea[name=summary]", "Fixture call: agreed five pages");
+    await page.getByRole("button", { name: "Add to log" }).click();
+    await outcome("saved");
+    await expect(quoteRow()).toContainText("Phone call: Fixture call: agreed five pages");
+    expect(psql(`select status || '/' || delivery_stage from digital_services_quotes where customer_label = '${CUSTOMER}'`)).toBe("accepted/in_production");
+    await page.screenshot({ path: process.env.SALES_SCREENSHOT ?? "/tmp/owner-sales.png", fullPage: true });
+    console.log("[flow] sales: draft -> sent -> accepted; production gated until deposit evidence; duplicate evidence refused; launch gated; note logged");
+  } finally {
+    const q = `(select id from digital_services_quotes where customer_label = '${CUSTOMER}')`;
+    psql(`delete from digital_services_conversations where quote_id in ${q}; delete from digital_services_payments where quote_id in ${q}; delete from digital_services_quotes where customer_label = '${CUSTOMER}'`);
+  }
+});

@@ -22,7 +22,10 @@ import {
 import { HOLD_LABELS, firstContactHolds, type PilotApproval, type PilotDraft, type PilotEvent } from "@/lib/digital-services/dispatch-guard";
 import { PAGE_SIZE, SEARCH_CHUNK, SEARCH_MAX_ROWS, STATUSES, pageFrom, statusesFor, type StatusChange } from "@/lib/digital-services/queue";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { SALES_NOTICES, type SalesOutcome } from "@/lib/digital-services/sales";
 import { approvePilotMessage, setEnquiryStatus } from "./actions";
+import { SalesSection } from "./SalesSection";
+import { addConversation } from "./sales-actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Owner — digital services", robots: { index: false, follow: false } };
@@ -102,6 +105,7 @@ export default async function OwnerPage({
   const viewQuery = new URLSearchParams({ status: statusFilter, ...(q ? { q } : {}), page: String(page) }).toString();
   const notice = typeof sp.notice === "string" ? NOTICES[sp.notice as StatusChange] : undefined;
   const pilotNotice = typeof sp.pilot === "string" ? PILOT_NOTICES[sp.pilot] : undefined;
+  const salesOutcome = typeof sp.sales === "string" && sp.sales in SALES_NOTICES ? (sp.sales as SalesOutcome) : null;
   const noticeRef = typeof sp.ref === "string" && /^DSE-[0-9A-F]{8}$/.test(sp.ref) ? sp.ref : "";
 
   const admin = createAdminClient();
@@ -148,7 +152,7 @@ export default async function OwnerPage({
       admin.from(PILOT_TABLE).select("*").order("id"),
       admin.from(PILOT_DRAFTS_TABLE).select("id, company_id, revision, subject, body, sha256"),
       admin.from(PILOT_APPROVALS_TABLE).select("draft_id, draft_sha256, kind, actor, approved_at, approver_user_id"),
-      admin.from(PILOT_EVENTS_TABLE).select("company_id, kind, occurred_at"),
+      admin.from(PILOT_EVENTS_TABLE).select("company_id, kind, occurred_at, rfc822_message_id"),
     ]);
     if (!p.error) pilot = (p.data as PilotRow[] | null) ?? [];
     drafts = (d.data as PilotDraft[] | null) ?? [];
@@ -319,6 +323,8 @@ export default async function OwnerPage({
         )}
       </section>
 
+      <SalesSection admin={admin} viewQuery={viewQuery} outcome={salesOutcome} />
+
       <section className="mt-10">
         <h2 className="text-lg font-semibold">Enquiries</h2>
         {notice && (
@@ -400,6 +406,19 @@ export default async function OwnerPage({
                   ))}
                 </select>
                 <button className="rounded border border-neutral-300 px-2 py-1 text-xs">Update</button>
+              </form>
+              <form action={addConversation} className="mt-2 flex flex-wrap items-center gap-2">
+                <input type="hidden" name="enquiry_id" value={r.id} />
+                <input type="hidden" name="view" value={viewQuery} />
+                <select name="kind" className="rounded border border-neutral-300 px-2 py-1 text-xs" aria-label="Kind">
+                  <option value="call">Phone call</option>
+                  <option value="email_out">Email sent</option>
+                  <option value="email_in">Email received</option>
+                  <option value="meeting">Meeting</option>
+                  <option value="note">Note</option>
+                </select>
+                <input name="summary" required maxLength={2000} placeholder="Log what was said" className="w-72 rounded border border-neutral-300 px-2 py-1 text-xs" />
+                <button className="rounded border border-neutral-300 px-2 py-1 text-xs">Log</button>
               </form>
             </li>
           ))}

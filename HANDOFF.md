@@ -75,6 +75,31 @@ Only one first contact per company is possible. `lib/digital-services/dispatch-g
 5. Privacy wording approved.
 6. `DIGITAL_SERVICES_PUBLIC=on`.
 
+### Later still on 5 Oct: owner controls, sender adapter, revision 3
+
+- **Owner controls** (`/dashboard/owner` → "Quotes, payments and delivery"; owner-gated actions in `app/dashboard/owner/sales-actions.ts`):
+  - draft quote (price from the offer);
+  - quote status (sent / accepted in writing / withdrawn; no "paid");
+  - payment evidence (unique);
+  - delivery stage;
+  - an append-only conversation log, also on each enquiry.
+  - The sales draft migration now refuses production until the quote is accepted and the payment due before production is evidenced, refuses launch/hand-over until fully paid, and fixes a quote's price/GST/terms/scope once sent.
+  - Local e2e proves the whole sequence (6/6 flow tests).
+- **Sender/reply adapter:** `lib/digital-services/outreach/` (Gmail REST; scopes gmail.send + gmail.readonly).
+  - Order of operations: guard → `send_attempt` with our own Message-ID → send → `contacted` or `send_failed`.
+  - An unknown outcome stays unresolved and blocks another attempt until `reconcileAttempt()` finds it in the mailbox.
+  - `syncReplies()` records replies, opt-outs and bounces idempotently.
+  - Not wired to any route. `DIGITAL_SERVICES_OUTREACH_SENDING` must be `on` as well.
+  - Josh's connection steps: `docs/digital-services/OUTREACH-SENDER.md` (find the Workspace admin, add a free alias, send-as, owned-inbox test, Internal OAuth client, refresh token, Vercel vars).
+- **Seller/GST settled** from existing records: GST-registered operator, prices "+ GST", quotes `exclusive`. Not re-asked.
+- **Pilot revision 3:** private record `claude-code-three-cleaner-pilot-rev3-2026-10-05`. The older local A$1,490 pitch Codex reported is superseded.
+  - The two form prospects' previews are repaired in this branch (deploys only on merge).
+  - All three are still held: 0/12 approvals, evidence refresh blocked, no connected sender.
+- **GLM research:** a dry-run validator, `scripts/review-research.mjs` (see `docs/digital-services/RESEARCH-IMPORT.md`).
+  - The ten-cleaner file is on Josh's laptop and isn't validated yet: attach it, or have Codex run the script locally.
+  - Nothing imports it.
+- **Ten engine reviews (all HOLD):** their repair and re-review live in the private engine, which isn't in this repository. Not touched here.
+
 ## 4 Oct 2026: the staff-post clean-up was failing; fixed (branch `ccr-a7a02618-x1gnjy`)
 
 Live check (read-only) before the fix: the 2 and 3 Oct runs of

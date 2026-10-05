@@ -19,7 +19,20 @@
 -- 'pending' until Josh confirms it; a pending quote has no total due and
 -- can't be sent.
 --
--- Rollback: drop view if exists public.digital_services_quote_balance;
+-- Delivery: digital_services_quotes.delivery_stage tracks intake and delivery
+-- (not_started → intake_requested → intake_received → in_production →
+-- client_review → approved → launched → handed_over). The database refuses
+-- production before the quote is accepted and the payment due before
+-- production is evidenced (a website's deposit; the full price otherwise), and
+-- launch/hand-over before it's paid in full, both from payment evidence. Once
+-- a quote has left draft, its price, GST treatment, terms and scope are fixed.
+-- digital_services_conversations: an append-only log of calls, emails,
+-- meetings and notes, linked to an enquiry, a pilot company or a quote.
+--
+-- Rollback: drop table if exists public.digital_services_conversations;
+--           drop trigger if exists trg_ds_quote_guard on public.digital_services_quotes;
+--           drop function if exists public.ds_quote_guard();
+--           drop view if exists public.digital_services_quote_balance;
 --           drop table if exists public.digital_services_payments;
 --           drop table if exists public.digital_services_quotes;
 -- ============================================================
@@ -39,6 +52,9 @@ create table if not exists public.digital_services_quotes (
   status           text not null default 'draft' check (status in ('draft', 'sent', 'accepted', 'withdrawn')),
   sent_at          timestamptz,
   accepted_at      timestamptz,
+  delivery_stage   text not null default 'not_started' check (delivery_stage in (
+                     'not_started', 'intake_requested', 'intake_received', 'in_production',
+                     'client_review', 'approved', 'launched', 'handed_over')),
   check (deposit_cents <= amount_cents),
   check (status = 'draft' or status = 'withdrawn' or gst_treatment <> 'pending'),
   check (status <> 'accepted' or accepted_at is not null)
@@ -78,6 +94,75 @@ select id as quote_id,
        (round(amount_cents * factor) - paid_cents)::integer as outstanding_cents,
        deposit_cents > 0 and factor is not null and paid_cents >= round(deposit_cents * factor) as deposit_received
 from t;
+
+-- Production and launch are gated on evidenced payment, never on a flag.
+-- What a customer was sent can't change afterwards: a new price is a new quote.
+create or replace function public.ds_quote_guard()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+declare
+  paid integer;
+  factor numeric;
+  before_production integer;
+begin
+  if tg_op = 'UPDATE' and old.status <> 'draft'
+     and (new.offer, new.amount_cents, new.deposit_cents, new.gst_treatment, new.terms_version, new.scope_summary)
+         is distinct from
+         (old.offer, old.amount_cents, old.deposit_cents, old.gst_treatment, old.terms_version, old.scope_summary) then
+    raise exception 'a sent quote is fixed; write a new quote instead' using errcode = 'OC409';
+  end if;
+  if (tg_op = 'UPDATE' and new.delivery_stage is not distinct from old.delivery_stage)
+     or new.delivery_stage in ('not_started', 'intake_requested', 'intake_received') then
+    return new;
+  end if;
+  if new.status <> 'accepted' then
+    raise exception 'production needs an accepted quote' using errcode = 'OC402';
+  end if;
+  factor := case new.gst_treatment when 'exclusive' then 1.1 when 'pending' then null else 1.0 end;
+  if factor is null then
+    raise exception 'GST treatment is still pending' using errcode = 'OC402';
+  end if;
+  select coalesce(sum(amount_cents), 0) into paid
+    from public.digital_services_payments where quote_id = new.id;
+  -- A website starts on its deposit; everything else is paid before production.
+  before_production := case when new.offer = 'website_1990' and new.deposit_cents > 0
+                            then round(new.deposit_cents * factor)
+                            else round(new.amount_cents * factor) end;
+  if paid < before_production then
+    raise exception 'production needs the payment due before production evidenced' using errcode = 'OC402';
+  end if;
+  if new.delivery_stage in ('launched', 'handed_over') and paid < round(new.amount_cents * factor) then
+    raise exception 'launch and hand-over need the balance evidenced' using errcode = 'OC402';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists trg_ds_quote_guard on public.digital_services_quotes;
+create trigger trg_ds_quote_guard
+  before insert or update on public.digital_services_quotes
+  for each row execute function public.ds_quote_guard();
+
+create table if not exists public.digital_services_conversations (
+  id               uuid primary key default gen_random_uuid(),
+  occurred_at      timestamptz not null default now(),
+  kind             text not null check (kind in ('note', 'call', 'email_in', 'email_out', 'meeting')),
+  summary          text not null check (char_length(btrim(summary)) between 1 and 2000),
+  enquiry_id       uuid,
+  pilot_company_id text,
+  quote_id         uuid references public.digital_services_quotes(id),
+  recorded_by      text not null check (char_length(btrim(recorded_by)) between 1 and 120),
+  check (enquiry_id is not null or pilot_company_id is not null or quote_id is not null)
+);
+create index if not exists idx_ds_conversations_links
+  on public.digital_services_conversations (enquiry_id, pilot_company_id, quote_id, occurred_at desc);
+
+alter table public.digital_services_conversations enable row level security;
+drop policy if exists "Service role manages conversations" on public.digital_services_conversations;
+create policy "Service role manages conversations" on public.digital_services_conversations for all to service_role using (true) with check (true);
+revoke all on public.digital_services_conversations from anon, authenticated;
+grant select, insert on public.digital_services_conversations to service_role;  -- append-only log
 
 alter table public.digital_services_quotes enable row level security;
 alter table public.digital_services_payments enable row level security;

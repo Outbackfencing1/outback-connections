@@ -1,6 +1,6 @@
 // lib/digital-services/dispatch-guard.ts
-// The server-side check any future first-contact dispatch must pass. There is
-// no sending code in this app yet; this is the gate it will call, and the
+// The server-side check any first-contact dispatch must pass
+// (lib/digital-services/outreach/dispatch.ts calls it before sending), and the
 // owner dashboard shows its verdict for every pilot company. The same rules
 // are enforced again in the database (digital_services_pilot draft
 // migration), which also makes "one first contact per company" race-proof.
@@ -28,7 +28,8 @@ export type PilotApproval = {
   approved_at: string;
   approver_user_id?: string | null; // message_approval: the owner's auth user id
 };
-export type PilotEvent = { company_id: string; kind: "contacted" | "replied" | "opted_out" | "suppressed" | "bounced" };
+export type PilotEventKind = "send_attempt" | "send_failed" | "contacted" | "replied" | "opted_out" | "suppressed" | "bounced";
+export type PilotEvent = { company_id: string; kind: PilotEventKind; rfc822_message_id?: string | null };
 
 export type Hold =
   | "not_email_lane"
@@ -36,6 +37,7 @@ export type Hold =
   | "reserved_for_other_lane"
   | "suppressed"
   | "already_contacted"
+  | "unresolved_attempt"
   | "replied"
   | "no_contact_address"
   | "no_contact_basis"
@@ -70,6 +72,9 @@ export function firstContactHolds(input: {
   else if (company.reserved_for !== lane) holds.push("reserved_for_other_lane");
   if (mine.some((e) => (STOP_EVENTS as readonly string[]).includes(e.kind))) holds.push("suppressed");
   if (mine.some((e) => e.kind === "contacted")) holds.push("already_contacted");
+  // An attempt with no recorded outcome may have been delivered: reconcile, never resend.
+  const resolved = new Set(mine.filter((e) => e.kind === "contacted" || e.kind === "send_failed").map((e) => e.rfc822_message_id));
+  if (mine.some((e) => e.kind === "send_attempt" && !resolved.has(e.rfc822_message_id))) holds.push("unresolved_attempt");
   if (mine.some((e) => e.kind === "replied")) holds.push("replied");
   if (!company.contact_address) holds.push("no_contact_address");
   const norm = (v: string | null) => (v ?? "").trim().toLowerCase();
@@ -107,6 +112,7 @@ export const HOLD_LABELS: Record<string, string> = {
   reserved_for_other_lane: "reserved for another lane",
   suppressed: "suppressed or opted out",
   already_contacted: "already contacted",
+  unresolved_attempt: "an earlier send attempt is unresolved (reconcile it from the mailbox)",
   replied: "has replied (a person handles it)",
   no_contact_address: "no contact address",
   no_contact_basis: "contact basis not confirmed for the current address",
