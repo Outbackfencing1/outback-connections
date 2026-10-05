@@ -106,7 +106,7 @@ export type IntakeResult =
 
 type DbError = { code?: string; message: string } | null;
 type Row = { id: string };
-type KeyedRow = Row & { notified_at?: string | null };
+type KeyedRow = Row & { notified_at?: string | null; notify_error?: string | null };
 
 /** The few database operations intake needs (service role). */
 export type IntakeStore = {
@@ -123,9 +123,13 @@ export type IntakeDeps = {
   meta: { ip: string | null; ua: string | null; host: string | null };
   /** Server-side log for failures that must not reach the customer. */
   log?: (message: string) => void;
+  /** Injected for tests; defaults to a real timer. */
+  sleep?: (ms: number) => Promise<void>;
 };
 
 export const RATE_WINDOW_MS = 60 * 60 * 1000;
+/** How long a duplicate waits for the saving request's own alert before sending one. */
+export const ALERT_GRACE_MS = 3000;
 export const RATE_MAX = 5;
 /** SQLSTATE raised by the digital_services_enquiries rate-limit trigger. */
 export const RATE_LIMITED_CODE = "OC429";
@@ -165,16 +169,8 @@ export async function processIntake(input: IntakeInput, deps: IntakeDeps): Promi
   const existing = await store.findByKey(v.value.idempotency_key);
   if (isMissingTable(existing.error)) return { ok: false, errors: { _: NOT_READY } };
   if (existing.data) {
-    const reference = referenceFor(existing.data.id);
-    // Saved before, but the owner alert never landed (the first request died
-    // between insert and notify, or the send failed): this retry sends it.
-    // A double click mid-flight can at worst send a second reference-only
-    // alert; a lost lead is the worse failure.
-    if (existing.data.notified_at == null) {
-      const notified = await alertOwner(store, deps, existing.data.id, reference);
-      return { ok: true, reference, duplicate: true, notified };
-    }
-    return { ok: true, reference, duplicate: true, notified: false };
+    const notified = await ensureAlerted(store, deps, existing.data, v.value.idempotency_key);
+    return { ok: true, reference: referenceFor(existing.data.id), duplicate: true, notified };
   }
 
   // Early exit only: parallel submits can all pass this count. The database
@@ -200,7 +196,10 @@ export async function processIntake(input: IntakeInput, deps: IntakeDeps): Promi
     // row that won rather than an error for an enquiry that was saved.
     if (inserted.error.code === "23505" || inserted.error.code === RATE_LIMITED_CODE) {
       const again = await store.findByKey(v.value.idempotency_key);
-      if (again.data) return { ok: true, reference: referenceFor(again.data.id), duplicate: true, notified: false };
+      if (again.data) {
+        const notified = await ensureAlerted(store, deps, again.data, v.value.idempotency_key);
+        return { ok: true, reference: referenceFor(again.data.id), duplicate: true, notified };
+      }
     }
     if (inserted.error.code === RATE_LIMITED_CODE) return { ok: false, errors: { _: RATE_LIMITED } };
     return { ok: false, errors: { _: "We couldn't save that just now. Please try again, or email help@outbackconnections.com.au." } };
@@ -210,6 +209,24 @@ export async function processIntake(input: IntakeInput, deps: IntakeDeps): Promi
   const reference = referenceFor(row.id);
   const notified = await alertOwner(store, deps, row.id, reference);
   return { ok: true, reference, duplicate: false, notified };
+}
+
+/**
+ * A duplicate submit found a saved row. If its owner alert is confirmed,
+ * stay quiet. If the saving request recorded a failed alert, send it now.
+ * If neither is recorded, the saving request may still be sending, or it may
+ * have died between insert and notify: wait briefly, look again, and send
+ * only if there's still no confirmation. A lost lead is worse than the rare
+ * second reference-only alert.
+ */
+async function ensureAlerted(store: IntakeStore, deps: IntakeDeps, row: KeyedRow, key: string): Promise<boolean> {
+  if (row.notified_at != null) return false;
+  if (row.notify_error == null) {
+    await (deps.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms))))(ALERT_GRACE_MS);
+    const again = await store.findByKey(key);
+    if (again.data?.notified_at != null) return false;
+  }
+  return alertOwner(store, deps, row.id, referenceFor(row.id));
 }
 
 /** Send the owner alert for a saved row and record the outcome on it. */

@@ -8,7 +8,7 @@ import { getOwnerAccess } from "@/lib/digital-services/owner";
 import { alertReadiness, digitalServicesPublic } from "@/lib/digital-services/flags";
 import { matchesSearch, referenceFor } from "@/lib/digital-services/intake";
 import { INTERESTS } from "@/lib/digital-services/offer";
-import { PILOT, PILOT_BLOCKERS, PILOT_CHECKED_AT } from "@/lib/digital-services/pilot";
+import { PILOT_BLOCKERS, PILOT_TABLE, previewHref, type PilotRow } from "@/lib/digital-services/pilot";
 import { PAGE_SIZE, SEARCH_CHUNK, SEARCH_MAX_ROWS, STATUSES, pageFrom, statusesFor } from "@/lib/digital-services/queue";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { setEnquiryStatus } from "./actions";
@@ -106,6 +106,12 @@ export default async function OwnerPage({
       total = count ?? null;
     }
   }
+  // Pilot rows: owner-only table, read after the owner check (never in source).
+  let pilot: PilotRow[] | null = null;
+  if (admin) {
+    const { data, error } = await admin.from(PILOT_TABLE).select("*").order("id");
+    if (!error) pilot = (data as PilotRow[] | null) ?? [];
+  }
   const pages = total !== null ? Math.max(1, Math.ceil(total / PAGE_SIZE)) : 1;
   const link = (p: number) =>
     `/dashboard/owner?${new URLSearchParams({ status: statusFilter, ...(q ? { q } : {}), page: String(p) }).toString()}`;
@@ -144,39 +150,58 @@ export default async function OwnerPage({
       <section className="mt-10">
         <h2 className="text-lg font-semibold">Small pilot</h2>
         <p className="mt-1 text-sm text-neutral-600">
-          Preview checks {PILOT_CHECKED_AT}. Every email row is blocked on: {PILOT_BLOCKERS.join("; ")}.
+          Every email row is blocked on: {PILOT_BLOCKERS.join("; ")}.
         </p>
-        <div className="mt-3 overflow-x-auto rounded-xl border border-neutral-200 bg-white">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-neutral-50 text-xs uppercase text-neutral-600">
-              <tr>
-                <th className="px-3 py-2">ID</th>
-                <th className="px-3 py-2">Company</th>
-                <th className="px-3 py-2">Lane</th>
-                <th className="px-3 py-2">Preview</th>
-                <th className="px-3 py-2">Reservation</th>
-                <th className="px-3 py-2">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {PILOT.map((p) => (
-                <tr key={p.id} className="border-t border-neutral-100 align-top">
-                  <td className="px-3 py-2 font-mono text-xs">{p.id}</td>
-                  <td className="px-3 py-2">{p.company}</td>
-                  <td className="px-3 py-2">{p.lane === "email" ? "Email" : p.lane === "walk-in" ? "Walk-in (Josh)" : "Phone (Josh)"}</td>
-                  <td className="px-3 py-2">
-                    <a href={`${SITE}/preview/${p.previewToken}.html`} className="underline" target="_blank" rel="noreferrer">
-                      {p.previewCheck === "pass" ? "Pass" : "Pass, see note"}
-                    </a>
-                    {p.previewNote && <span className="mt-1 block text-xs text-amber-800">{p.previewNote}</span>}
-                  </td>
-                  <td className="px-3 py-2">{p.reservedForCowork ? "Reserved for Cowork (engine hold)" : "—"}</td>
-                  <td className="px-3 py-2">{p.lane === "email" ? "Held: approval + sender" : "Josh, in person"}</td>
+        {pilot === null ? (
+          <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Pilot records aren&apos;t connected. They stay in owner-only storage (the shared plan&apos;s private update
+            log) until the approved <code>digital_services_pilot</code> table is applied and loaded. They are never kept
+            in the public repository.
+          </p>
+        ) : pilot.length === 0 ? (
+          <p className="mt-3 text-sm text-neutral-600">The pilot table is empty.</p>
+        ) : (
+          <div className="mt-3 overflow-x-auto rounded-xl border border-neutral-200 bg-white">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-neutral-50 text-xs uppercase text-neutral-600">
+                <tr>
+                  <th className="px-3 py-2">ID</th>
+                  <th className="px-3 py-2">Company</th>
+                  <th className="px-3 py-2">Lane</th>
+                  <th className="px-3 py-2">Preview</th>
+                  <th className="px-3 py-2">Reservation</th>
+                  <th className="px-3 py-2">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {pilot.map((p) => {
+                  const href = previewHref(SITE, p.preview_token);
+                  const label = p.preview_check === "pass" ? "Pass" : p.preview_check === "pass-with-note" ? "Pass, see note" : "Not checked";
+                  return (
+                    <tr key={p.id} className="border-t border-neutral-100 align-top">
+                      <td className="px-3 py-2 font-mono text-xs">{p.id}</td>
+                      <td className="px-3 py-2">{p.company}</td>
+                      <td className="px-3 py-2">{p.lane === "email" ? "Email" : p.lane === "walk-in" ? "Walk-in (Josh)" : "Phone (Josh)"}</td>
+                      <td className="px-3 py-2">
+                        {href ? (
+                          <a href={href} className="underline" target="_blank" rel="noreferrer">
+                            {label}
+                          </a>
+                        ) : (
+                          label
+                        )}
+                        {p.checked_at && <span className="block text-xs text-neutral-500">{p.checked_at}</span>}
+                        {p.preview_note && <span className="mt-1 block text-xs text-amber-800">{p.preview_note}</span>}
+                      </td>
+                      <td className="px-3 py-2">{p.reserved_for_cowork ? "Reserved for Cowork (engine hold)" : "—"}</td>
+                      <td className="px-3 py-2">{p.lane === "email" ? "Held: approval + sender" : "Josh, in person"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="mt-10">

@@ -8,11 +8,13 @@ import {
   validateIntake,
   RATE_MAX,
   RATE_LIMITED_CODE,
+  ALERT_GRACE_MS,
   type IntakeDeps,
   type IntakeInput,
   type IntakeStore,
 } from "@/lib/digital-services/intake";
 import { OFFERS } from "@/lib/digital-services/offer";
+import { previewHref } from "@/lib/digital-services/pilot";
 import { OPEN_STATUSES, pageFrom, statusesFor } from "@/lib/digital-services/queue";
 
 const OWNER = "11111111-2222-4333-8444-555555555555";
@@ -119,7 +121,7 @@ describe("validateIntake", () => {
 });
 
 type Saved = Record<string, unknown> & { id: string };
-function fakeStore(opts: { missingTable?: boolean; raceOnInsert?: boolean; recentCount?: number; markFailures?: number; dbRateLimited?: boolean; dbRateLimitedAfterTwin?: boolean } = {}) {
+function fakeStore(opts: { missingTable?: boolean; raceOnInsert?: boolean; recentCount?: number; markFailures?: number; dbRateLimited?: boolean; dbRateLimitedAfterTwin?: boolean; raceWinnerDied?: boolean } = {}) {
   let markFailuresLeft = opts.markFailures ?? 0;
   const rows: Saved[] = [];
   const marks: Array<{ id: string; notified_at: string | null; notify_error: string | null }> = [];
@@ -135,12 +137,13 @@ function fakeStore(opts: { missingTable?: boolean; raceOnInsert?: boolean; recen
       if (opts.dbRateLimited) return { data: null, error: { code: RATE_LIMITED_CODE, message: "rate limit reached" } };
       if (opts.dbRateLimitedAfterTwin) {
         // The same enquiry's twin submit took the IP's last slot first.
-        rows.push({ ...row, id: "cccccccc-0000-4000-8000-000000000003" });
+        rows.push({ ...row, id: "cccccccc-0000-4000-8000-000000000003", notified_at: "2026-10-05T01:00:00.000Z" });
         return { data: null, error: { code: RATE_LIMITED_CODE, message: "rate limit reached" } };
       }
       if (opts.raceOnInsert) {
         // Another request saved the same key between our check and insert.
-        rows.push({ ...row, id: "bbbbbbbb-0000-4000-8000-000000000002" });
+        // By default the winner finished and alerted; raceWinnerDied: it saved, then died.
+        rows.push({ ...row, id: "bbbbbbbb-0000-4000-8000-000000000002", notified_at: opts.raceWinnerDied ? null : "2026-10-05T01:00:00.000Z" });
         return { data: null, error: { code: "23505", message: "duplicate key" } };
       }
       const saved = { ...row, id: `aaaaaaaa-0000-4000-8000-00000000000${++n}` };
@@ -165,6 +168,7 @@ const deps = (store: IntakeStore | null, notifyOwner: IntakeDeps["notifyOwner"] 
   notifyOwner,
   now: () => new Date("2026-10-05T01:00:00Z"),
   meta: { ip: "203.0.113.7", ua: "test", host: "www.outbackconnections.com.au" },
+  sleep: async () => {},
 });
 
 describe("processIntake", () => {
@@ -200,6 +204,28 @@ describe("processIntake", () => {
     expect(rows).toHaveLength(1);
     expect(notify).toHaveBeenCalledWith("DSE-DDDDDDDD");
     expect(marks[0]).toMatchObject({ id: "dddddddd-0000-4000-8000-000000000004", notify_error: null });
+  });
+
+  it("insert race where the winner saved then died: the loser waits, then sends the alert", async () => {
+    const { store, marks } = fakeStore({ raceOnInsert: true, raceWinnerDied: true });
+    const sleep = vi.fn(async () => {});
+    const notify = vi.fn(async () => ({ ok: true }));
+    const res = await processIntake(good(), { ...deps(store, notify), sleep });
+    expect(res).toEqual({ ok: true, reference: "DSE-BBBBBBBB", duplicate: true, notified: true });
+    expect(sleep).toHaveBeenCalledWith(ALERT_GRACE_MS);
+    expect(notify).toHaveBeenCalledWith("DSE-BBBBBBBB");
+    expect(marks[0]).toMatchObject({ id: "bbbbbbbb-0000-4000-8000-000000000002", notify_error: null });
+  });
+
+  it("a duplicate whose saving request alerts during the grace wait doesn't alert again", async () => {
+    const { store, rows } = fakeStore();
+    rows.push({ ...good(), idempotency_key: good().idempotency_key.toLowerCase(), id: "eeeeeeee-0000-4000-8000-000000000005", notified_at: null });
+    const notify = vi.fn(async () => ({ ok: true }));
+    // The in-flight request confirms its alert while we wait.
+    const sleep = async () => { rows[0].notified_at = "2026-10-05T01:00:01.000Z"; };
+    const res = await processIntake(good(), { ...deps(store, notify), sleep });
+    expect(res).toEqual({ ok: true, reference: "DSE-EEEEEEEE", duplicate: true, notified: false });
+    expect(notify).not.toHaveBeenCalled();
   });
 
   it("a retry after a failed alert tries again; once confirmed, further retries stay quiet", async () => {
@@ -333,5 +359,13 @@ describe("owner queue paging and filters", () => {
     expect(pageFrom("abc")).toBe(1);
     expect(pageFrom("7")).toBe(7);
     expect(pageFrom("99999999")).toBe(10000);
+  });
+});
+
+describe("pilot preview links", () => {
+  it("links only well-formed preview tokens", () => {
+    expect(previewHref("https://example.com", "0123456789abcdef0123")).toBe("https://example.com/preview/0123456789abcdef0123.html");
+    expect(previewHref("https://example.com", null)).toBeNull();
+    expect(previewHref("https://example.com", "../admin")).toBeNull();
   });
 });

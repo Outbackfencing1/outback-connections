@@ -118,3 +118,42 @@ describe("digital_services_enquiries migration", { timeout: 30_000 }, () => {
     expect(left.rows[0].c).toBe(1);
   });
 });
+
+const PILOT_SQL = readFileSync("supabase/migrations/_drafts/digital_services_pilot.sql", "utf8");
+
+describe("digital_services_pilot migration (owner-only prospect data)", { timeout: 30_000 }, () => {
+  async function pilotDb() {
+    const pg = new PGlite();
+    await pg.exec(`create role anon; create role authenticated; create role service_role;`);
+    await pg.exec(PILOT_SQL);
+    await pg.exec(PILOT_SQL); // idempotent DDL
+    return pg;
+  }
+
+  it("is service-role only: RLS on, anon and authenticated refused", async () => {
+    const pg = await pilotDb();
+    const t = await pg.query<{ relrowsecurity: boolean }>(`select relrowsecurity from pg_class where relname = 'digital_services_pilot'`);
+    expect(t.rows[0].relrowsecurity).toBe(true);
+    for (const role of ["anon", "authenticated"]) {
+      await pg.exec(`set role ${role}`);
+      await expect(pg.query(`select * from digital_services_pilot`)).rejects.toThrow(/permission denied/i);
+      await pg.exec(`reset role`);
+    }
+    await pg.exec(`set role service_role`);
+    await pg.query(
+      `insert into digital_services_pilot (id, company, lane, preview_token, preview_check, reserved_for_cowork) values ('OC-999', 'Test Co', 'email', '0123456789abcdef0123', 'pass', true)`
+    );
+    const r = await pg.query<{ c: number }>(`select count(*)::int as c from digital_services_pilot`);
+    expect(r.rows[0].c).toBe(1);
+    await pg.exec(`reset role`);
+  });
+
+  it("rejects malformed ids, lanes and preview tokens", async () => {
+    const pg = await pilotDb();
+    await expect(pg.query(`insert into digital_services_pilot (id, company, lane) values ('X-1', 'Co', 'email')`)).rejects.toThrow(/check/i);
+    await expect(pg.query(`insert into digital_services_pilot (id, company, lane) values ('OC-998', 'Co', 'sms')`)).rejects.toThrow(/check/i);
+    await expect(
+      pg.query(`insert into digital_services_pilot (id, company, lane, preview_token) values ('OC-997', 'Co', 'email', '../../etc')`)
+    ).rejects.toThrow(/check/i);
+  });
+});
