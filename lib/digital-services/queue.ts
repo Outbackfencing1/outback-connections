@@ -41,14 +41,20 @@ export async function applyStatusChange(
   if (typeof id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return "invalid";
   if (typeof status !== "string" || !(STATUSES as readonly string[]).includes(status)) return "invalid";
   if (!update) return "unavailable";
-  try {
-    const { data, error } = await update(id, status as Status);
-    if (error) return "failed";
-    if (!data || data.length === 0) return "not_found";
-    return data[0].status === status ? "saved" : "failed";
-  } catch {
-    return "failed";
+  // Setting a status is idempotent, so a thrown (transport) error is retried
+  // once: a lost response after the write committed then reads back "saved".
+  // A database error is an explicit refusal and isn't retried.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const { data, error } = await update(id, status as Status);
+      if (error) return "failed";
+      if (!data || data.length === 0) return "not_found";
+      return data[0].status === status ? "saved" : "failed";
+    } catch {
+      // retry once, then report failure
+    }
   }
+  return "failed";
 }
 
 /** Keep only the queue's own view parameters from a posted query string. */

@@ -48,7 +48,7 @@ const SITE = "https://www.outbackconnections.com.au";
 const PILOT_NOTICES: Record<string, { ok: boolean; text: string }> = {
   approved: { ok: true, text: "Message approval recorded for that exact revision." },
   refused: { ok: false, text: "Not approved: the database refused it (only your own session can approve, after the three reviews)." },
-  failed: { ok: false, text: "Not approved: something went wrong. Nothing was recorded; try again." },
+  unconfirmed: { ok: false, text: "We couldn't confirm the approval. Refresh to see whether it was recorded; trying again is safe." },
   invalid: { ok: false, text: "Not approved: that draft reference isn't valid." },
 };
 

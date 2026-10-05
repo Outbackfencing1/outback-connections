@@ -14,8 +14,22 @@ describe("applyStatusChange", () => {
   it("a database error is a visible failure, not a success", async () => {
     expect(await applyStatusChange({ id: ID, status: "replied" }, async () => ({ data: null, error: { message: "permission denied" } }))).toBe("failed");
   });
-  it("a thrown client error is a failure", async () => {
-    expect(await applyStatusChange({ id: ID, status: "replied" }, async () => { throw new Error("network"); })).toBe("failed");
+  it("a thrown client error is retried once, then reported as a failure", async () => {
+    const update = vi.fn(async () => { throw new Error("network"); });
+    expect(await applyStatusChange({ id: ID, status: "replied" }, update)).toBe("failed");
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+  it("a lost response is retried and reads back the committed change as saved", async () => {
+    const update = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("socket hang up"))
+      .mockResolvedValueOnce({ data: [{ id: ID, status: "replied" }], error: null });
+    expect(await applyStatusChange({ id: ID, status: "replied" }, update)).toBe("saved");
+  });
+  it("an explicit database refusal isn't retried", async () => {
+    const update = vi.fn(async () => ({ data: null, error: { message: "permission denied" } }));
+    expect(await applyStatusChange({ id: ID, status: "replied" }, update)).toBe("failed");
+    expect(update).toHaveBeenCalledTimes(1);
   });
   it("zero updated rows means the enquiry no longer exists", async () => {
     expect(await applyStatusChange({ id: ID, status: "closed" }, async () => ({ data: [], error: null }))).toBe("not_found");
@@ -52,12 +66,15 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/digital-services/owner", () => ({
   getOwnerAccess: async () => (access.ok ? { ok: true, userId: "owner" } : { ok: false, reason: "forbidden" }),
 }));
-const rpc = vi.hoisted(() => ({ result: { data: "appr-1" as string | null, error: null as { code?: string; message: string } | null }, calls: [] as unknown[] }));
+type RpcResult = { data: string | null; error: { code?: string; message: string } | null } | "throw";
+const rpc = vi.hoisted(() => ({ result: { data: "appr-1", error: null } as RpcResult, queue: [] as RpcResult[], calls: [] as unknown[] }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: () => ({
     rpc: async (name: string, args: unknown) => {
       rpc.calls.push([name, args]);
-      return rpc.result;
+      const r = rpc.queue.length ? rpc.queue.shift()! : rpc.result;
+      if (r === "throw") throw new Error("network");
+      return r;
     },
   }),
 }));
@@ -132,6 +149,7 @@ describe("approvePilotMessage action", () => {
   beforeEach(() => {
     access.ok = true;
     rpc.calls = [];
+    rpc.queue = [];
     rpc.result = { data: "appr-1", error: null };
     revalidate.mockClear();
   });
@@ -154,10 +172,27 @@ describe("approvePilotMessage action", () => {
     expect(revalidate).not.toHaveBeenCalled();
   });
 
-  it("no approval id back is a failure, never 'approved'", async () => {
+  it("no approval id back is unconfirmed (after one retry), never 'approved'", async () => {
     rpc.result = { data: null, error: null };
-    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe("/dashboard/owner?pilot=failed");
+    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe("/dashboard/owner?pilot=unconfirmed");
+    expect(rpc.calls).toHaveLength(2);
     expect(revalidate).not.toHaveBeenCalled();
+  });
+
+  it("a lost response is retried once; the retry returns the committed approval", async () => {
+    rpc.queue = ["throw"];
+    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe("/dashboard/owner?pilot=approved");
+    expect(rpc.calls).toHaveLength(2);
+    rpc.calls = [];
+    rpc.queue = [{ data: null, error: { code: "57014", message: "timeout" } }];
+    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe("/dashboard/owner?pilot=approved");
+    expect(rpc.calls).toHaveLength(2);
+  });
+
+  it("a policy refusal is final and isn't retried", async () => {
+    rpc.result = { data: null, error: { code: "OC403", message: "only the owner" } };
+    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe("/dashboard/owner?pilot=refused");
+    expect(rpc.calls).toHaveLength(1);
   });
 
   it("an approval conflict by a different owner is refused", async () => {

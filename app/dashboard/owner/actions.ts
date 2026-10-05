@@ -54,14 +54,21 @@ export async function approvePilotMessage(formData: FormData): Promise<void> {
     params.set("pilot", "invalid");
     redirect(`/dashboard/owner?${params.toString()}`);
   }
-  let outcome = "failed";
-  try {
-    const { data, error } = await createClient().rpc("approve_pilot_message", { p_draft_id: draftId, p_draft_sha256: sha });
-    // "approved" only with the recorded approval's id back from the database.
-    outcome = error ? (error.code === "OC403" || error.code === "OC409" ? "refused" : "failed") : data ? "approved" : "failed";
-  } catch {
-    outcome = "failed";
-  }
+  // The function is idempotent, so a lost response or transient error is
+  // retried once: a retry returns the approval if the first call committed.
+  // "approved" only with the recorded approval's id back; a policy refusal is
+  // final; anything still unconfirmed is reported as unconfirmed, not "not recorded".
+  const attempt = async (): Promise<"approved" | "refused" | "unconfirmed"> => {
+    try {
+      const { data, error } = await createClient().rpc("approve_pilot_message", { p_draft_id: draftId, p_draft_sha256: sha });
+      if (error) return error.code === "OC403" || error.code === "OC409" ? "refused" : "unconfirmed";
+      return data ? "approved" : "unconfirmed";
+    } catch {
+      return "unconfirmed";
+    }
+  };
+  let outcome = await attempt();
+  if (outcome === "unconfirmed") outcome = await attempt();
   if (outcome === "approved") revalidatePath("/dashboard/owner");
   params.set("pilot", outcome);
   redirect(`/dashboard/owner?${params.toString()}`);
