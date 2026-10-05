@@ -263,6 +263,16 @@ describe("pilot drafts, approvals and first-contact enforcement", { timeout: 30_
     await contact(d.id);
   });
 
+  it("after an owner change, the old owner's approval neither counts nor lets the new owner's call look successful", async () => {
+    const { pg, ins, approveAll, ownerApproves, contact } = await seeded();
+    const d = await ins(1, "Subject", "Body");
+    await approveAll(d);
+    const NEW_OWNER = "55555555-5555-4555-8555-555555555555";
+    await pg.query(`update digital_services_settings set owner_user_id = $1`, [NEW_OWNER]);
+    await expect(ownerApproves(d, NEW_OWNER)).rejects.toMatchObject({ code: "OC409" });
+    await expect(contact(d.id)).rejects.toThrow(/lacks 1 approval/);
+  });
+
   it("an unreserved company can't be contacted by either lane; a changed address needs re-confirming", async () => {
     const { pg, ins, approveAll, contact } = await seeded();
     const d = await ins(1, "Subject", "Body");

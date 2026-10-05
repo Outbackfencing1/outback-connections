@@ -52,7 +52,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/digital-services/owner", () => ({
   getOwnerAccess: async () => (access.ok ? { ok: true, userId: "owner" } : { ok: false, reason: "forbidden" }),
 }));
-const rpc = vi.hoisted(() => ({ result: { error: null as { code?: string; message: string } | null }, calls: [] as unknown[] }));
+const rpc = vi.hoisted(() => ({ result: { data: "appr-1" as string | null, error: null as { code?: string; message: string } | null }, calls: [] as unknown[] }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: () => ({
     rpc: async (name: string, args: unknown) => {
@@ -132,7 +132,7 @@ describe("approvePilotMessage action", () => {
   beforeEach(() => {
     access.ok = true;
     rpc.calls = [];
-    rpc.result = { error: null };
+    rpc.result = { data: "appr-1", error: null };
     revalidate.mockClear();
   });
 
@@ -149,9 +149,20 @@ describe("approvePilotMessage action", () => {
   });
 
   it("a database refusal is shown as refused, not approved", async () => {
-    rpc.result = { error: { code: "OC403", message: "reviews come first" } };
+    rpc.result = { data: null, error: { code: "OC403", message: "reviews come first" } };
     expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe("/dashboard/owner?pilot=refused");
     expect(revalidate).not.toHaveBeenCalled();
+  });
+
+  it("no approval id back is a failure, never 'approved'", async () => {
+    rpc.result = { data: null, error: null };
+    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe("/dashboard/owner?pilot=failed");
+    expect(revalidate).not.toHaveBeenCalled();
+  });
+
+  it("an approval conflict by a different owner is refused", async () => {
+    rpc.result = { data: null, error: { code: "OC409", message: "different owner" } };
+    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe("/dashboard/owner?pilot=refused");
   });
 
   it("malformed input never reaches the database", async () => {

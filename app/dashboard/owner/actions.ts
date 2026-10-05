@@ -56,8 +56,9 @@ export async function approvePilotMessage(formData: FormData): Promise<void> {
   }
   let outcome = "failed";
   try {
-    const { error } = await createClient().rpc("approve_pilot_message", { p_draft_id: draftId, p_draft_sha256: sha });
-    outcome = error ? (error.code === "OC403" ? "refused" : "failed") : "approved";
+    const { data, error } = await createClient().rpc("approve_pilot_message", { p_draft_id: draftId, p_draft_sha256: sha });
+    // "approved" only with the recorded approval's id back from the database.
+    outcome = error ? (error.code === "OC403" || error.code === "OC409" ? "refused" : "failed") : data ? "approved" : "failed";
   } catch {
     outcome = "failed";
   }

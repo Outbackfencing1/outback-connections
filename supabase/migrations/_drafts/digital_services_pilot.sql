@@ -192,6 +192,12 @@ begin
     select id into new_id from public.digital_services_pilot_approvals
       where draft_id = p_draft_id and kind = 'message_approval'
         and draft_sha256 = p_draft_sha256 and approver_user_id = caller;
+    if new_id is null then
+      -- The revision already carries an approval by someone else (for example
+      -- a previous owner). It doesn't count for the current owner, and this
+      -- call must not look like success: re-approve on a new revision.
+      raise exception 'this revision already has an approval by a different owner; add a new revision' using errcode = 'OC409';
+    end if;
   end if;
   return new_id;
 end;
