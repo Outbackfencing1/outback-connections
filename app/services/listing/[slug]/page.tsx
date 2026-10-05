@@ -23,6 +23,7 @@ import {
 } from "@/lib/seo";
 import { logEvent } from "@/lib/analytics";
 import { responseLine } from "@/lib/enquiry-outcome";
+import { enquiryNoticeFrom } from "@/lib/enquiry-fallback";
 
 export const dynamic = "force-dynamic";
 
@@ -77,10 +78,13 @@ export async function generateMetadata({
 
 export default async function ServiceDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { slug } = await params;
+  const enquiryNotice = enquiryNoticeFrom(await searchParams);
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
   const viewer = userData.user;
@@ -293,6 +297,8 @@ export default async function ServiceDetailPage({
             listingId={listing.id}
             businessName={listing.title}
             claimed={!isUnclaimedScraped}
+            returnTo={`/services/listing/${listing.slug}`}
+            notice={enquiryNotice}
           />
         </section>
       )}

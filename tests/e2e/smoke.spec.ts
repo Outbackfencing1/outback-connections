@@ -37,8 +37,12 @@ test("contractor directory: category page, region chips, listing detail with the
   await expect(page).toHaveURL(/\/services\/listing\//);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
-  const quote = page.getByRole("button", { name: /get a quote/i });
+  const quote = page.locator("summary", { hasText: /get a quote/i });
   await expect(quote).toBeVisible();
+  // Without JavaScript the form must POST, so nothing typed lands in a URL.
+  const form = page.locator("form:has(input[name='listing_id'])");
+  await expect(form).toHaveAttribute("method", /post/i);
+  await expect(form).toHaveAttribute("action", "/api/enquiries");
   await quote.click();
   await expect(page.getByLabel(/your name/i)).toBeVisible();
   await expect(page.getByLabel(/what needs doing/i)).toBeVisible();
