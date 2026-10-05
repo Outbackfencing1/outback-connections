@@ -5,7 +5,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getOwnerAccess } from "@/lib/digital-services/owner";
-import { digitalServicesPublic } from "@/lib/digital-services/flags";
+import { alertReadiness, digitalServicesPublic } from "@/lib/digital-services/flags";
 import { matchesSearch, referenceFor } from "@/lib/digital-services/intake";
 import { INTERESTS } from "@/lib/digital-services/offer";
 import { PILOT, PILOT_BLOCKERS, PILOT_CHECKED_AT } from "@/lib/digital-services/pilot";
@@ -109,6 +109,7 @@ export default async function OwnerPage({
   const pages = total !== null ? Math.max(1, Math.ceil(total / PAGE_SIZE)) : 1;
   const link = (p: number) =>
     `/dashboard/owner?${new URLSearchParams({ status: statusFilter, ...(q ? { q } : {}), page: String(p) }).toString()}`;
+  const alerts = alertReadiness();
   const interestLabel = (v: string) => INTERESTS.find((i) => i.value === v)?.label ?? v;
 
   return (
@@ -134,11 +135,7 @@ export default async function OwnerPage({
             label="Public page"
             detail={digitalServicesPublic() ? "/digital-services is live." : "Off (DIGITAL_SERVICES_PUBLIC is not 'on'). Switch on after terms are confirmed."}
           />
-          <Check
-            ok={process.env.DIGITAL_SERVICES_ALERT_TO ? true : null}
-            label="Owner alerts"
-            detail={process.env.DIGITAL_SERVICES_ALERT_TO ? "Alerts go to the configured owner address." : "Falls back to NOTIFICATION_TO; set DIGITAL_SERVICES_ALERT_TO for a dedicated address."}
-          />
+          <Check ok={alerts.ok} label="Owner alerts" detail={alerts.detail} />
           <Check ok={false} label="Outreach sender" detail="No verified Outback Connections mailbox is connected. No outreach can send." />
           <Check ok={false} label="Engine" detail="The digital-services engine source isn't in this repository yet; reservations, drafts and replies aren't connected." />
         </ul>

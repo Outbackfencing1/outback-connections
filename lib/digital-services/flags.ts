@@ -5,3 +5,30 @@
 export function digitalServicesPublic(env: Record<string, string | undefined> = process.env): boolean {
   return env.DIGITAL_SERVICES_PUBLIC === "on";
 }
+
+export type AlertReadiness = { ok: boolean | null; detail: string };
+
+/**
+ * Owner-alert readiness for the owner dashboard. A destination alone isn't
+ * enough: without RESEND_API_KEY, sendEmail() only logs, and every enquiry is
+ * saved with "owner alert not confirmed". A set key is configuration, not
+ * proof of delivery; each enquiry's notified_at is the per-alert evidence.
+ */
+export function alertReadiness(env: Record<string, string | undefined> = process.env): AlertReadiness {
+  if (!env.RESEND_API_KEY?.trim()) {
+    return {
+      ok: false,
+      detail: "RESEND_API_KEY isn't set on this environment: alerts are only logged, never emailed. Set it before switching the page on.",
+    };
+  }
+  if (!env.DIGITAL_SERVICES_ALERT_TO?.trim()) {
+    return {
+      ok: null,
+      detail: "Mail transport configured. Alerts fall back to NOTIFICATION_EMAIL (default help@); set DIGITAL_SERVICES_ALERT_TO for a dedicated address.",
+    };
+  }
+  return {
+    ok: true,
+    detail: "Mail transport configured; alerts go to the dedicated owner address. Each enquiry shows whether its alert was confirmed.",
+  };
+}

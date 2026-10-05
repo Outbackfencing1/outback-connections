@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { decideOwnerAccess } from "@/lib/digital-services/owner-access";
-import { digitalServicesPublic } from "@/lib/digital-services/flags";
+import { alertReadiness, digitalServicesPublic } from "@/lib/digital-services/flags";
 import {
   matchesSearch,
   processIntake,
@@ -42,6 +42,20 @@ describe("public page flag", () => {
     for (const v of [undefined, "", "true", "ON", "1", "on "]) {
       expect(digitalServicesPublic({ DIGITAL_SERVICES_PUBLIC: v })).toBe(false);
     }
+  });
+});
+
+describe("owner alert readiness", () => {
+  it("is blocked without a mail transport, even with a destination", () => {
+    expect(alertReadiness({ DIGITAL_SERVICES_ALERT_TO: "owner@example.com" }).ok).toBe(false);
+    expect(alertReadiness({ DIGITAL_SERVICES_ALERT_TO: "owner@example.com", RESEND_API_KEY: "  " }).ok).toBe(false);
+    expect(alertReadiness({}).ok).toBe(false);
+  });
+  it("waits on a dedicated address when only the transport is set", () => {
+    expect(alertReadiness({ RESEND_API_KEY: "re_test" }).ok).toBeNull();
+  });
+  it("is ready only with both transport and destination", () => {
+    expect(alertReadiness({ RESEND_API_KEY: "re_test", DIGITAL_SERVICES_ALERT_TO: "owner@example.com" }).ok).toBe(true);
   });
 });
 
