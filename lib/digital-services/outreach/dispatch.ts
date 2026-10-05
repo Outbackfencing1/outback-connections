@@ -66,7 +66,7 @@ export type DispatchResult =
   | { status: "sent"; messageId: string; providerId: string; threadId: string }
   | { status: "sent_unrecorded"; messageId: string } // sent, but recording it failed: reconcile
   | { status: "failed"; reason: string } // Gmail refused it: nothing sent
-  | { status: "failed_unrecorded"; messageId: string; reason: string; refusal: GmailRefusal } // refused, but the record failed: closeAttemptNotSent() with this refusal
+  | { status: "failed_unrecorded"; messageId: string; reason: string; refusal: NotSentProof } // refused, but the record failed: closeAttemptNotSent() with this refusal
   | { status: "unconfirmed"; messageId: string }; // may have been sent: reconcile, never resend
 
 const RECORDER = "outreach-dispatch";
@@ -132,7 +132,7 @@ export async function dispatchFirstContact(companyId: string, lane: Lane, deps: 
     // close it as not sent so it doesn't block the company forever.
     const closed = await insert(deps.store, { ...base, kind: "send_failed", note: "not sent: intent record unconfirmed" });
     // "refused" here usually means no matching attempt exists (the intent never landed).
-    if (closed === "unknown") return { status: "not_sent_unrecorded", messageId, reason: "the send attempt couldn't be confirmed", proof: { neverCalled: true } };
+    if (closed === "unknown") return { status: "not_sent_unrecorded", messageId, reason: "the send attempt couldn't be confirmed", proof: { neverCalled: true, messageId } };
     return { status: "not_sent", reason: "the send attempt couldn't be confirmed" };
   }
   // From the handoff marker on, Gmail may have the message. Without a
@@ -141,7 +141,7 @@ export async function dispatchFirstContact(companyId: string, lane: Lane, deps: 
   if (handoff !== "ok") {
     const closed = await insert(deps.store, { ...base, kind: "send_failed", note: "not sent: handoff marker unconfirmed" });
     if (closed !== "ok" && closed !== "duplicate") {
-      return { status: "not_sent_unrecorded", messageId, reason: "the handoff marker couldn't be confirmed", proof: { neverCalled: true } };
+      return { status: "not_sent_unrecorded", messageId, reason: "the handoff marker couldn't be confirmed", proof: { neverCalled: true, messageId } };
     }
     return { status: "not_sent", reason: "the handoff marker couldn't be confirmed" };
   }
@@ -155,7 +155,7 @@ export async function dispatchFirstContact(companyId: string, lane: Lane, deps: 
       const closed = await insert(deps.store, { ...base, kind: "send_failed", note: e.message.slice(0, 300) });
       // Until the refusal is recorded the attempt stays open (and blocks the
       // company), so say so rather than reporting a clean failure.
-      if (closed !== "ok" && closed !== "duplicate") return { status: "failed_unrecorded", messageId, reason: e.message, refusal: { status: e.status ?? 400, message: e.message } };
+      if (closed !== "ok" && closed !== "duplicate") return { status: "failed_unrecorded", messageId, reason: e.message, refusal: { status: e.status ?? 400, message: e.message, messageId } };
       return { status: "failed", reason: e.message };
     }
     return { status: "unconfirmed", messageId };
@@ -213,13 +213,14 @@ export type GmailRefusal = { status: number; message: string };
  * exist: a definite refusal, or the dispatcher's own knowledge that it never
  * called Gmail (the marker's write was unconfirmed, so it may have landed).
  */
-export type NotSentProof = GmailRefusal | { neverCalled: true };
+export type NotSentProof = (GmailRefusal | { neverCalled: true }) & { messageId: string };
 
 export type CloseResult =
   | { status: "nothing_unresolved" | "not_connected" | "unknown_company" }
   | { status: "found_sent"; providerId: string } // it did go out: recorded as contacted instead
   | { status: "closed" }
   | { status: "uncertain"; messageId: string } // handed to Gmail, no refusal: may be delivered; stays open
+  | { status: "proof_mismatch"; messageId: string } // the proof is for a different attempt: nothing closed
   | { status: "ambiguous" | "record_failed"; messageId: string };
 
 /**
@@ -261,6 +262,8 @@ export async function closeAttemptNotSent(companyId: string, proof: NotSentProof
     return ok === "ok" || ok === "duplicate" ? { status: "found_sent", providerId: found.id } : { status: "record_failed", messageId: open.rfc822_message_id };
   }
   const handedOff = state.events.some((e) => e.kind === "send_handoff" && e.rfc822_message_id === open.rfc822_message_id);
+  // A proof only ever applies to the attempt it came from.
+  if (proof && proof.messageId !== open.rfc822_message_id) return { status: "proof_mismatch", messageId: open.rfc822_message_id };
   const neverCalled = !!proof && "neverCalled" in proof;
   const refusal = proof && "status" in proof ? proof : null;
   const definite = !!refusal && refusal.status >= 400 && refusal.status < 500 && refusal.status !== 429;

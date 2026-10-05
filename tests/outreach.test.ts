@@ -204,7 +204,7 @@ describe("dispatchFirstContact", () => {
     // 429/5xx "refusal" isn't definite either.
     const notYet = gmail({ ...base, "/messages": () => json({}) });
     expect(await closeAttemptNotSent("OC-901", null, { store, env: ENV, fetch: notYet.f })).toEqual({ status: "uncertain", messageId: MSGID });
-    expect(await closeAttemptNotSent("OC-901", { status: 503, message: "backend error" }, { store, env: ENV, fetch: notYet.f })).toEqual({ status: "uncertain", messageId: MSGID });
+    expect(await closeAttemptNotSent("OC-901", { status: 503, message: "backend error", messageId: MSGID }, { store, env: ENV, fetch: notYet.f })).toEqual({ status: "uncertain", messageId: MSGID });
     expect(await reconcileAttempt("OC-901", { store, env: ENV, fetch: notYet.f })).toEqual({ status: "not_found", messageId: MSGID });
     expect(store.events.map((e) => e.kind)).toEqual(["send_attempt", "send_handoff"]);
     // Resend stays blocked.
@@ -237,7 +237,7 @@ describe("dispatchFirstContact", () => {
     // The attempt commits but both responses are lost; both closing writes hit an outage.
     const store = memoryStore({ fail: [{ kind: "send_attempt", code: "PGRST001", times: 1, commit: true }], failOutcomeWrites: 2 });
     const r = await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f, messageId: () => MSGID });
-    expect(r).toEqual({ status: "not_sent_unrecorded", messageId: MSGID, reason: "the send attempt couldn't be confirmed", proof: { neverCalled: true } });
+    expect(r).toEqual({ status: "not_sent_unrecorded", messageId: MSGID, reason: "the send attempt couldn't be confirmed", proof: { neverCalled: true, messageId: MSGID } });
     expect(send).not.toHaveBeenCalled();
     expect(await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f })).toMatchObject({ status: "held", holds: ["unresolved_attempt"] });
     const empty = gmail({ ...base, "/messages": () => json({}) });
@@ -249,12 +249,23 @@ describe("dispatchFirstContact", () => {
     const { f } = gmail({ ...base, "/messages/send": send });
     const store = memoryStore({ fail: [{ kind: "send_handoff", code: "PGRST002", times: 1, commit: true }], failOutcomeWrites: 2 });
     const r = await dispatchFirstContact("OC-901", "cowork", { store, env: ENV, fetch: f, messageId: () => MSGID });
-    expect(r).toMatchObject({ status: "not_sent_unrecorded", messageId: MSGID, proof: { neverCalled: true } });
+    expect(r).toMatchObject({ status: "not_sent_unrecorded", messageId: MSGID, proof: { neverCalled: true, messageId: MSGID } });
     expect(send).not.toHaveBeenCalled();
     expect(store.events.map((e) => e.kind)).toEqual(["send_attempt", "send_handoff"]);
     const empty = gmail({ ...base, "/messages": () => json({}) });
     expect(await closeAttemptNotSent("OC-901", null, { store, env: ENV, fetch: empty.f })).toEqual({ status: "uncertain", messageId: MSGID });
-    expect(await closeAttemptNotSent("OC-901", { neverCalled: true }, { store, env: ENV, fetch: empty.f })).toEqual({ status: "closed" });
+    expect(await closeAttemptNotSent("OC-901", { neverCalled: true, messageId: MSGID }, { store, env: ENV, fetch: empty.f })).toEqual({ status: "closed" });
+  });
+
+  it("a proof only closes the attempt it came from: a stale proof can't close a newer, possibly delivered attempt", async () => {
+    const store = memoryStore();
+    const NEWER = "<oc-newer@outbackconnections.com.au>";
+    await store.insertEvent({ company_id: "OC-901", kind: "send_attempt", lane: "cowork", draft_id: "d1", sender: SENDER, rfc822_message_id: NEWER, recorded_by: "t" });
+    await store.insertEvent({ company_id: "OC-901", kind: "send_handoff", lane: "cowork", draft_id: "d1", sender: SENDER, rfc822_message_id: NEWER, recorded_by: "t" });
+    const empty = gmail({ ...base, "/messages": () => json({}) });
+    expect(await closeAttemptNotSent("OC-901", { neverCalled: true, messageId: MSGID }, { store, env: ENV, fetch: empty.f })).toEqual({ status: "proof_mismatch", messageId: NEWER });
+    expect(await closeAttemptNotSent("OC-901", { status: 400, message: "Invalid To", messageId: MSGID }, { store, env: ENV, fetch: empty.f })).toEqual({ status: "proof_mismatch", messageId: NEWER });
+    expect(store.events.map((e) => e.kind)).toEqual(["send_attempt", "send_handoff"]);
   });
 
   it("closing an attempt that actually went out records it as contacted instead", async () => {

@@ -56,5 +56,5 @@ node --experimental-strip-types scripts/review-research.mjs research.json --lane
 ```
 
 - **Output:** a summary plus a verdict per row: `invalid`, `wrong_lane`, `excluded_by_list`, `matches_existing`, `duplicate_in_batch`, `research_hold`, `research_excluded` or `new_for_review`.
-- **Exit codes:** 0 reviewed; 1 some rows invalid; 2 usage error; 3 adapter gap.
+- **Exit codes:** 0 reviewed; 1 some rows invalid; 2 usage error or an unreadable file; 3 adapter gap.
 - **Imports:** the report always says `"imported": 0`.

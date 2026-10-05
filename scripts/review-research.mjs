@@ -24,14 +24,29 @@ if (!file || !["cleaning", "detailing"].includes(lane)) {
 const read = (path) => JSON.parse(readFileSync(path, "utf8"));
 let known = [];
 let exclusions = [];
+const readList = (name, label) => {
+  try {
+    return read(opt(name));
+  } catch (e) {
+    console.log(JSON.stringify({ lane, error: `${label} file unreadable: ${e.message}`, imported: 0 }, null, 2));
+    process.exit(2);
+  }
+};
 try {
-  if (opt("--known")) known = loadIdentityList(read(opt("--known")), "known");
-  if (opt("--exclusions")) exclusions = loadIdentityList(read(opt("--exclusions")), "exclusions");
+  if (opt("--known")) known = loadIdentityList(readList("--known", "known"), "known");
+  if (opt("--exclusions")) exclusions = loadIdentityList(readList("--exclusions", "exclusions"), "exclusions");
 } catch (e) {
   console.log(JSON.stringify({ lane, adapter_gap: { reason: e.message }, imported: 0 }, null, 2));
   process.exit(3);
 }
+let research;
+try {
+  research = read(file);
+} catch (e) {
+  console.log(JSON.stringify({ lane, error: `research file unreadable: ${e.message}`, imported: 0 }, null, 2));
+  process.exit(2);
+}
 const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney" }).format(new Date());
-const { adapter_gap, verdicts, summary } = reviewResearchBatch(read(file), lane, known, today, exclusions);
+const { adapter_gap, verdicts, summary } = reviewResearchBatch(research, lane, known, today, exclusions);
 console.log(JSON.stringify({ lane, known: known.length, exclusions: exclusions.length, adapter_gap, summary, verdicts, imported: 0 }, null, 2));
 process.exit(adapter_gap ? 3 : summary.invalid > 0 ? 1 : 0);
