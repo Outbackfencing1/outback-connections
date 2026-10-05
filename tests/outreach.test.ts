@@ -24,7 +24,7 @@ type Fail = { kind: NewEvent["kind"]; code: string; times: number; commit?: bool
 function memoryStore(opts: { approvals?: boolean; refuseAttempt?: boolean; failOutcomeWrites?: number; fail?: Fail[] } = {}) {
   let failOutcome = opts.failOutcomeWrites ?? 0;
   const fails = (opts.fail ?? []).map((x) => ({ ...x }));
-  const draft: PilotDraft = { id: "d1", company_id: "OC-901", revision: 1, subject: SUBJECT, body: BODY, sha256: draftHash(SUBJECT, BODY) };
+  const draft: PilotDraft = { id: "d1", company_id: "OC-901", revision: 1, subject: SUBJECT, body: BODY, sha256: draftHash(SUBJECT, BODY), evidence_revision: 0 };
   const approvals: PilotApproval[] =
     opts.approvals === false
       ? []
@@ -42,7 +42,7 @@ function memoryStore(opts: { approvals?: boolean; refuseAttempt?: boolean; failO
     async load(id) {
       if (id !== "OC-901") return null;
       return {
-        company: { id, lane: "email", reserved_for: "cowork", contact_address: "office@fixture.example", contact_basis_confirmed_at: "2026-10-06", contact_basis_confirmed_for: "office@fixture.example" },
+        company: { id, lane: "email", reserved_for: "cowork", contact_address: "office@fixture.example", contact_basis_confirmed_at: "2026-10-06", contact_basis_confirmed_for: "office@fixture.example", evidence_revision: 0 },
         drafts: [draft],
         approvals,
         events: events.map((e) => ({ ...e })),

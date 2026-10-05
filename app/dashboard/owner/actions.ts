@@ -50,18 +50,25 @@ export async function approvePilotMessage(formData: FormData): Promise<void> {
   const draftId = formData.get("draft_id");
   const sha = formData.get("draft_sha256");
   const params = queueViewParams(formData.get("view"));
-  if (typeof draftId !== "string" || !/^[0-9a-f-]{36}$/i.test(draftId) || typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha)) {
+  const valid = typeof draftId === "string" && /^[0-9a-f-]{36}$/i.test(draftId) && typeof sha === "string" && /^[0-9a-f]{64}$/.test(sha);
+  // Approvals are made from the review screen, which shows the exact copy,
+  // evidence and reviews first; the outcome is reported back there.
+  const back = (outcome: string) =>
+    valid ? `/dashboard/owner/review/${draftId}?pilot=${outcome}` : `/dashboard/owner?${params.toString()}`;
+  if (!valid) {
     params.set("pilot", "invalid");
-    redirect(`/dashboard/owner?${params.toString()}`);
+    redirect(back("invalid"));
   }
   // The function is idempotent, so a lost response or transient error is
   // retried once: a retry returns the approval if the first call committed.
   // "approved" only with the recorded approval's id back; a policy refusal is
-  // final; anything still unconfirmed is reported as unconfirmed, not "not recorded".
-  const attempt = async (): Promise<"approved" | "refused" | "unconfirmed"> => {
+  // final ("stale" when the revision is no longer current); anything still
+  // unconfirmed is reported as unconfirmed, not "not recorded". Approving
+  // records the approval only: it never sends.
+  const attempt = async (): Promise<"approved" | "refused" | "stale" | "unconfirmed"> => {
     try {
       const { data, error } = await createClient().rpc("approve_pilot_message", { p_draft_id: draftId, p_draft_sha256: sha });
-      if (error) return error.code === "OC403" || error.code === "OC409" ? "refused" : "unconfirmed";
+      if (error) return error.code === "OC403" ? "refused" : error.code === "OC409" ? "stale" : "unconfirmed";
       return data ? "approved" : "unconfirmed";
     } catch {
       return "unconfirmed";
@@ -69,7 +76,9 @@ export async function approvePilotMessage(formData: FormData): Promise<void> {
   };
   let outcome = await attempt();
   if (outcome === "unconfirmed") outcome = await attempt();
-  if (outcome === "approved") revalidatePath("/dashboard/owner");
-  params.set("pilot", outcome);
-  redirect(`/dashboard/owner?${params.toString()}`);
+  if (outcome === "approved") {
+    revalidatePath("/dashboard/owner");
+    revalidatePath(`/dashboard/owner/review/${draftId}`);
+  }
+  redirect(back(outcome));
 }

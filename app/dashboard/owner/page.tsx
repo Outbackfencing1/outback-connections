@@ -23,7 +23,7 @@ import { HOLD_LABELS, firstContactHolds, type PilotApproval, type PilotDraft, ty
 import { PAGE_SIZE, SEARCH_CHUNK, SEARCH_MAX_ROWS, STATUSES, pageFrom, statusesFor, type StatusChange } from "@/lib/digital-services/queue";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SALES_NOTICES, quoteListView, type SalesOutcome } from "@/lib/digital-services/sales";
-import { approvePilotMessage, setEnquiryStatus } from "./actions";
+import { setEnquiryStatus } from "./actions";
 import { SalesSection } from "./SalesSection";
 import { addConversation } from "./sales-actions";
 
@@ -49,7 +49,7 @@ type Enquiry = {
 const SITE = "https://www.outbackconnections.com.au";
 
 const PILOT_NOTICES: Record<string, { ok: boolean; text: string }> = {
-  approved: { ok: true, text: "Message approval recorded for that exact revision." },
+  approved: { ok: true, text: "Message approval recorded for that exact revision. Nothing was sent." },
   refused: { ok: false, text: "Not approved: the database refused it (only your own session can approve, after the three reviews)." },
   unconfirmed: { ok: false, text: "We couldn't confirm the approval. Refresh to see whether it was recorded; trying again is safe." },
   invalid: { ok: false, text: "Not approved: that draft reference isn't valid." },
@@ -300,13 +300,10 @@ export default async function OwnerPage({
                             {approvals.filter((a) => a.draft_id === draft.id && a.draft_sha256 === draft.sha256).length}/4 approvals
                           </span>
                         )}
-                        {draft && reviewsDone && !ownerApproved && (
-                          <form action={approvePilotMessage} className="mt-1">
-                            <input type="hidden" name="draft_id" value={draft.id} />
-                            <input type="hidden" name="draft_sha256" value={draft.sha256} />
-                            <input type="hidden" name="view" value={viewQuery} />
-                            <button className="rounded border border-neutral-300 px-2 py-0.5 text-xs">Approve revision {draft.revision}</button>
-                          </form>
+                        {draft && (
+                          <a href={`/dashboard/owner/review/${draft.id}`} className="mt-1 block text-xs underline">
+                            {reviewsDone && !ownerApproved ? `Review revision ${draft.revision} to approve` : `Review revision ${draft.revision}`}
+                          </a>
                         )}
                       </td>
                       <td className="px-3 py-2">

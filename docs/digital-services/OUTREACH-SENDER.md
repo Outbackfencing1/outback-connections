@@ -128,7 +128,55 @@ messages and a release that calls the dispatcher.
   - It skips our own messages: anything Gmail labels SENT, and any alias recorded on the contact.
   - If an event isn't saved (a database refusal or an outage) or a thread can't be read, the run reports `incomplete` and lists each failure. An unsaved opt-out is never reported as healthy, and it's retried on the next run. An event already recorded counts as `already`, not as a failure.
 - **Not wired:** nothing in the app calls the dispatcher yet. No route, button or schedule. Wiring it is a separate, approved change.
-  - The owner page's "Approve revision N" button only records Josh's approval of that exact revision. It sends nothing.
+  - Approval happens on the review screen, `/dashboard/owner/review/<draft id>`, and only there. It only records Josh's approval of that exact revision; it sends nothing.
+
+## Reviewing a draft before approval
+
+The dashboard's pilot table links each latest draft to its review screen. Before the approval button appears, the screen shows the following. The model's text is rendered as plain text, with hidden or control characters shown as `⟦U+XXXX⟧` markers.
+- The exact subject and body.
+- The revision and whether it is the latest, its SHA-256, and the evidence revision it was written against.
+- Each piece of source evidence: URL, method, check time and age, limitations, and who recorded it.
+- The company's open uncertainties.
+- The sending holds. Sending is not connected regardless.
+- The offer scope and the preview check.
+- Every review on record, with its status:
+  - valid for this exact revision;
+  - only on an earlier revision;
+  - against different copy;
+  - by a different owner.
+
+**The approval button is withheld, with the reason shown, when any of these is true:**
+- The revision isn't the latest.
+- The stored hash doesn't match the copy.
+- The evidence changed after the draft was written.
+- There is no evidence, or some evidence is older than 30 days.
+- The copy has hidden characters.
+- The body has a non-https or credential-bearing link.
+- A review is missing.
+- The owner has already approved this revision.
+
+**Unavailable and error states.** These show their own message, and no button:
+- no service key;
+- any failed read.
+
+**What the database enforces** (pilot draft migration):
+- Any evidence change, or a change to the company's uncertainties, bumps the company's `evidence_revision`.
+- Drafts record the evidence revision they were written against, and their copy, offer and preview are immutable.
+- Reviews and approvals are refused for a revision that isn't the latest, or whose evidence changed.
+- Each approval freezes its draft revision and evidence revision from the draft itself.
+- Approvals can't be edited.
+- The contact guard refuses to send a revision whose evidence changed.
+
+**Access.** Only Josh (the verified `DIGITAL_SERVICES_OWNER_USER_ID`) can open the screen:
+- Logged-out visitors go to sign-in.
+- Members and other admins get a 404.
+
+**Outcomes** come back on the screen:
+- `approved`, which says nothing was sent;
+- `refused`;
+- `stale`, when the revision is no longer current;
+- `unconfirmed`;
+- `invalid`.
 
 ## Rollback
 

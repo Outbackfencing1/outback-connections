@@ -18,8 +18,19 @@ export type PilotCompany = {
   contact_address: string | null;
   contact_basis_confirmed_at: string | null;
   contact_basis_confirmed_for: string | null; // the address the confirmation was for
+  /** Bumped by the database whenever the company's evidence or uncertainties change. */
+  evidence_revision?: number | null;
 };
-export type PilotDraft = { id: string; company_id: string; revision: number; subject: string; body: string; sha256: string };
+export type PilotDraft = {
+  id: string;
+  company_id: string;
+  revision: number;
+  subject: string;
+  body: string;
+  sha256: string;
+  /** The company's evidence revision when this draft was written (set by the database). */
+  evidence_revision?: number | null;
+};
 export type PilotApproval = {
   draft_id: string;
   draft_sha256: string;
@@ -27,6 +38,8 @@ export type PilotApproval = {
   actor: string;
   approved_at: string;
   approver_user_id?: string | null; // message_approval: the owner's auth user id
+  draft_revision?: number | null; // frozen by the database from the draft
+  evidence_revision?: number | null;
 };
 export type PilotEventKind = "send_attempt" | "send_handoff" | "send_failed" | "contacted" | "replied" | "opted_out" | "suppressed" | "bounced";
 export type PilotEvent = { company_id: string; kind: PilotEventKind; rfc822_message_id?: string | null };
@@ -44,6 +57,7 @@ export type Hold =
   | "no_draft"
   | "not_latest_revision"
   | "draft_hash_mismatch"
+  | "evidence_changed"
   | `missing_${ApprovalKind}`
   | "no_verified_sender";
 
@@ -89,6 +103,10 @@ export function firstContactHolds(input: {
   } else {
     if (draft.revision !== Math.max(...ours.map((d) => d.revision))) holds.push("not_latest_revision");
     if (draftHash(draft.subject, draft.body) !== draft.sha256) holds.push("draft_hash_mismatch");
+    // Written against older evidence (or unversioned): reviews and approvals of it don't stand.
+    if (draft.evidence_revision == null || company.evidence_revision == null || draft.evidence_revision !== company.evidence_revision) {
+      holds.push("evidence_changed");
+    }
     for (const kind of APPROVAL_KINDS) {
       const counts = (a: PilotApproval) =>
         a.draft_id === draft.id &&
@@ -119,6 +137,7 @@ export const HOLD_LABELS: Record<string, string> = {
   no_draft: "no draft",
   not_latest_revision: "not the latest draft revision",
   draft_hash_mismatch: "draft changed after hashing",
+  evidence_changed: "evidence changed since this revision was written (add a new revision)",
   missing_evidence_refresh: "evidence refresh not signed off",
   missing_preview_review: "preview review missing",
   missing_copy_review: "copy review missing",

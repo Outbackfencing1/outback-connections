@@ -349,6 +349,122 @@ describe("pilot drafts, approvals and first-contact enforcement", { timeout: 30_
   });
 });
 
+describe("pilot evidence revisions and frozen approvals", { timeout: 30_000 }, () => {
+  async function seeded() {
+    const pg = new PGlite();
+    await pg.exec(`create role anon; create role authenticated; create role service_role;`);
+    await pg.query(`select set_config('app.ds_owner_user_id', $1, false)`, [OWNER]);
+    await pg.exec(PILOT_SQL);
+    await pg.exec(`insert into digital_services_pilot (id, company, lane, reserved_for, contact_address, contact_basis, contact_basis_confirmed_at, contact_basis_confirmed_by, contact_basis_confirmed_for)
+                   values ('OC-901', 'Fixture Cleaners', 'email', 'cowork', 'info@example.test', 'published on the business contact page', now(), 'Joshua', 'info@example.test')`);
+    const evidence = (url = "https://fixture.example/") =>
+      pg.query(`insert into digital_services_pilot_evidence (company_id, source_url, source_type, checked_at, fact_text, limitations, recorded_by)
+                values ('OC-901', $1, 'primary_business_website', now(), 'Fixture fact', '{"Public page only"}', 'claude-code') returning id`, [url]);
+    const ins = async (rev: number, subject = "Subject", body = "Body") =>
+      (await pg.query<{ id: string; sha256: string; evidence_revision: number }>(
+        `insert into digital_services_pilot_drafts (company_id, revision, subject, body, sha256, author, evidence_revision, offer) values ('OC-901', $1, $2, $3, 'ignored', 'claude-code', 999, 'quote_form_490') returning id, sha256, evidence_revision`,
+        [rev, subject, body]
+      )).rows[0];
+    const review = async (d: { id: string; sha256: string }, kind: string) => {
+      await pg.exec(`set role service_role`);
+      try {
+        return await pg.query<{ draft_revision: number; evidence_revision: number }>(
+          `insert into digital_services_pilot_approvals (draft_id, draft_sha256, kind, actor, draft_revision, evidence_revision) values ($1, $2, $3, 'reviewer', 77, 77) returning draft_revision, evidence_revision`,
+          [d.id, d.sha256, kind]
+        );
+      } finally {
+        await pg.exec(`reset role`);
+      }
+    };
+    const ownerApproves = async (d: { id: string; sha256: string }) => {
+      await pg.exec(`set role authenticated`);
+      await pg.query(`select set_config('request.jwt.claims', $1, false)`, [JSON.stringify({ sub: OWNER, role: "authenticated" })]);
+      try {
+        return await pg.query(`select public.approve_pilot_message($1, $2)`, [d.id, d.sha256]);
+      } finally {
+        await pg.exec(`reset role`);
+      }
+    };
+    const contact = (draftId: string) =>
+      pg.query(`insert into digital_services_pilot_events (company_id, kind, lane, draft_id, sender, recorded_by) values ('OC-901', 'contacted', 'cowork', $1, 'josh@outbackconnections.com.au', 'test')`, [draftId]);
+    const rev = async () => (await pg.query<{ r: number }>(`select evidence_revision as r from digital_services_pilot where id = 'OC-901'`)).rows[0].r;
+    return { pg, evidence, ins, review, ownerApproves, contact, rev };
+  }
+
+  it("evidence changes bump the company's evidence revision; it can't be set directly", async () => {
+    const { pg, evidence, rev } = await seeded();
+    expect(await rev()).toBe(0);
+    const e = (await evidence()).rows[0] as { id: string };
+    expect(await rev()).toBe(1);
+    await pg.query(`update digital_services_pilot_evidence set fact_text = 'Changed' where id = $1`, [e.id]);
+    expect(await rev()).toBe(2);
+    await pg.query(`delete from digital_services_pilot_evidence where id = $1`, [e.id]);
+    expect(await rev()).toBe(3);
+    await pg.query(`update digital_services_pilot set uncertainties = '{"Form delivery untested"}' where id = 'OC-901'`);
+    expect(await rev()).toBe(4);
+    await expect(pg.query(`update digital_services_pilot set evidence_revision = 0 where id = 'OC-901'`)).rejects.toMatchObject({ code: "OC409" });
+  });
+
+  it("evidence URLs must be plain https without credentials", async () => {
+    const { evidence } = await seeded();
+    await expect(evidence("http://fixture.example/")).rejects.toThrow(/check/);
+    await expect(evidence("https://user:pw@fixture.example/")).rejects.toThrow(/check/);
+  });
+
+  it("a draft records the evidence revision it was written against (not the caller's value), and its offer/preview can't change", async () => {
+    const { pg, evidence, ins } = await seeded();
+    await evidence();
+    const d = await ins(1);
+    expect(d.evidence_revision).toBe(1);
+    await expect(pg.query(`update digital_services_pilot_drafts set offer = 'website_1990' where id = $1`, [d.id])).rejects.toMatchObject({ code: "OC409" });
+    await expect(pg.query(`update digital_services_pilot_drafts set preview_token = 'aaaaaaaaaaaaaaaaaaaa' where id = $1`, [d.id])).rejects.toMatchObject({ code: "OC409" });
+    await pg.query(`update digital_services_pilot_drafts set change_reason = 'note' where id = $1`, [d.id]);
+  });
+
+  it("approvals freeze the draft's revision and evidence revision from the draft itself", async () => {
+    const { evidence, ins, review } = await seeded();
+    await evidence();
+    const d = await ins(1);
+    const r = (await review(d, "copy_review")).rows[0];
+    expect(r).toEqual({ draft_revision: 1, evidence_revision: 1 });
+  });
+
+  it("changed evidence invalidates reviews, approval and sending of the old revision; a new revision starts over", async () => {
+    const { pg, evidence, ins, review, ownerApproves, contact } = await seeded();
+    await evidence();
+    const d1 = await ins(1);
+    for (const k of ["evidence_refresh", "preview_review", "copy_review"]) await review(d1, k);
+    await ownerApproves(d1);
+    await evidence("https://fixture.example/contact");
+    await expect(review(d1, "copy_review")).rejects.toMatchObject({ code: "OC409" });
+    await expect(contact(d1.id)).rejects.toThrow(/evidence changed/);
+    const d2 = await ins(2);
+    await expect(review(d1, "evidence_refresh")).rejects.toThrow(/newer revision/);
+    for (const k of ["evidence_refresh", "preview_review", "copy_review"]) await review(d2, k);
+    await evidence("https://fixture.example/about");
+    await expect(ownerApproves(d2)).rejects.toMatchObject({ code: "OC409" });
+    const n = await pg.query<{ c: number }>(`select count(*)::int as c from digital_services_pilot_approvals where kind = 'message_approval' and draft_id = $1`, [d2.id]);
+    expect(n.rows[0].c).toBe(0);
+  });
+
+  it("approvals are a record: they can't be edited", async () => {
+    const { pg, evidence, ins, review } = await seeded();
+    await evidence();
+    const d = await ins(1);
+    await review(d, "copy_review");
+    await expect(pg.query(`update digital_services_pilot_approvals set actor = 'someone else'`)).rejects.toMatchObject({ code: "OC409" });
+  });
+
+  it("the evidence table is service-role only", async () => {
+    const { pg } = await seeded();
+    for (const role of ["anon", "authenticated"]) {
+      await pg.exec(`set role ${role}`);
+      await expect(pg.query(`select * from digital_services_pilot_evidence`)).rejects.toThrow(/permission denied/i);
+      await pg.exec(`reset role`);
+    }
+  });
+});
+
 const SALES_SQL = readFileSync("supabase/migrations/_drafts/digital_services_sales.sql", "utf8");
 
 describe("quotes and payment evidence (no manual 'paid')", { timeout: 30_000 }, () => {

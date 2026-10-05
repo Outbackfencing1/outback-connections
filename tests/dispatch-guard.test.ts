@@ -9,9 +9,10 @@ const company: PilotCompany = {
   contact_address: "info@example.test",
   contact_basis_confirmed_at: "2026-10-06T00:00:00Z",
   contact_basis_confirmed_for: "Info@Example.test ",
+  evidence_revision: 3,
 };
-const d1: PilotDraft = { id: "d1", company_id: "OC-900", revision: 1, subject: "Old", body: "Old body", sha256: draftHash("Old", "Old body") };
-const d2: PilotDraft = { id: "d2", company_id: "OC-900", revision: 2, subject: "New", body: "New body", sha256: draftHash("New", "New body") };
+const d1: PilotDraft = { id: "d1", company_id: "OC-900", revision: 1, subject: "Old", body: "Old body", sha256: draftHash("Old", "Old body"), evidence_revision: 3 };
+const d2: PilotDraft = { id: "d2", company_id: "OC-900", revision: 2, subject: "New", body: "New body", sha256: draftHash("New", "New body"), evidence_revision: 3 };
 const approve = (d: PilotDraft): PilotApproval[] =>
   APPROVAL_KINDS.map((kind) => ({ draft_id: d.id, draft_sha256: d.sha256, kind, actor: "Joshua", approved_at: "2026-10-06", approver_user_id: kind === "message_approval" ? OWNER : null }));
 const sender = { address: "josh@outbackconnections.com.au", verified: true };
@@ -66,5 +67,14 @@ describe("first-contact dispatch guard", () => {
   });
   it("walk-in and phone lanes never get a dispatched email", () => {
     expect(firstContactHolds({ ...base, company: { ...company, lane: "walk-in" } })).toContain("not_email_lane");
+  });
+});
+
+describe("evidence revisions", () => {
+  it("a draft written against older (or unversioned) evidence is held", () => {
+    expect(firstContactHolds({ ...base, company: { ...company, evidence_revision: 4 } })).toContain("evidence_changed");
+    expect(firstContactHolds({ ...base, company: { ...company, evidence_revision: null } })).toContain("evidence_changed");
+    const unversioned = { ...d2, evidence_revision: undefined };
+    expect(firstContactHolds({ ...base, drafts: [d1, unversioned], approvals: approve(unversioned) })).toContain("evidence_changed");
   });
 });

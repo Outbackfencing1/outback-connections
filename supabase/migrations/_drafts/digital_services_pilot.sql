@@ -22,6 +22,12 @@
 --                                     approval never carries over to new copy
 --   digital_services_pilot_events     contacted / replied / opted_out /
 --                                     suppressed / bounced, at company level
+--   digital_services_pilot_evidence   the dated source evidence a draft was
+--                                     written from; any change to a company's
+--                                     evidence or uncertainties bumps its
+--                                     evidence_revision, and a draft written
+--                                     against an older evidence revision can't
+--                                     be reviewed, approved or sent
 -- A 'contacted' event is refused unless the company is in the email lane, it
 -- is reserved for exactly the dispatching lane, it isn't suppressed or already
 -- contacted, its contact basis is confirmed for its CURRENT address, the draft
@@ -43,7 +49,14 @@
 -- per provider message. lib/digital-services/dispatch-guard.ts applies the
 -- same rules in the server before any dispatch.
 --
--- Rollback: drop table if exists public.digital_services_pilot_events;
+-- Approvals freeze what they approved: the draft's revision, hash and
+-- evidence revision are copied from the draft by the database (never taken
+-- from the caller). An approval never sends anything.
+--
+-- Rollback: drop table if exists public.digital_services_pilot_evidence;
+--           drop function if exists public.ds_pilot_evidence_bump();
+--           drop function if exists public.ds_pilot_company_guard();
+--           drop table if exists public.digital_services_pilot_events;
 --           drop table if exists public.digital_services_pilot_approvals;
 --           drop table if exists public.digital_services_pilot_drafts;
 --           drop function if exists public.ds_pilot_draft_guard();
@@ -75,6 +88,10 @@ create table if not exists public.digital_services_pilot (
 
 comment on table public.digital_services_pilot is
   'Owner-only pilot view (prospect companies, lanes, reservations). Service role only; never committed to the public repo.';
+
+-- Columns added after the first draft (no-ops on a fresh apply).
+alter table public.digital_services_pilot add column if not exists evidence_revision integer not null default 0;
+alter table public.digital_services_pilot add column if not exists uncertainties text[] not null default '{}';
 
 alter table public.digital_services_pilot enable row level security;
 
@@ -123,18 +140,27 @@ create table if not exists public.digital_services_pilot_drafts (
   unique (company_id, revision),
   unique (id, sha256)
 );
+alter table public.digital_services_pilot_drafts add column if not exists evidence_revision integer;
 
 -- The hash is always computed here (subject, blank line, body), never trusted
--- from the caller, and the copy can't be edited after insert.
+-- from the caller, and what a reviewer sees can't be edited after insert: the
+-- copy, the offer, the preview and the evidence revision it was written from.
 create or replace function public.ds_pilot_draft_guard()
 returns trigger
 language plpgsql
 set search_path = public
 as $$
 begin
-  if tg_op = 'UPDATE' and (new.subject is distinct from old.subject or new.body is distinct from old.body
-                           or new.company_id is distinct from old.company_id or new.revision is distinct from old.revision) then
-    raise exception 'pilot drafts are immutable: add a new revision' using errcode = 'OC409';
+  if tg_op = 'UPDATE' then
+    if new.subject is distinct from old.subject or new.body is distinct from old.body
+       or new.company_id is distinct from old.company_id or new.revision is distinct from old.revision
+       or new.offer is distinct from old.offer or new.preview_token is distinct from old.preview_token
+       or new.evidence_revision is distinct from old.evidence_revision then
+      raise exception 'pilot drafts are immutable: add a new revision' using errcode = 'OC409';
+    end if;
+  else
+    -- Written against the company's evidence as it stands now.
+    new.evidence_revision := (select evidence_revision from public.digital_services_pilot where id = new.company_id);
   end if;
   new.sha256 := encode(sha256(convert_to(new.subject || E'\n\n' || new.body, 'UTF8')), 'hex');
   return new;
@@ -158,6 +184,8 @@ create table if not exists public.digital_services_pilot_approvals (
   foreign key (draft_id, draft_sha256) references public.digital_services_pilot_drafts (id, sha256),
   unique (draft_id, kind)
 );
+alter table public.digital_services_pilot_approvals add column if not exists draft_revision integer;
+alter table public.digital_services_pilot_approvals add column if not exists evidence_revision integer;
 
 -- Josh's message approval: never a direct insert. Only approve_pilot_message()
 -- (security definer, running as the function owner) may insert one, after
@@ -167,11 +195,30 @@ returns trigger
 language plpgsql
 set search_path = public
 as $$
+declare
+  d public.digital_services_pilot_drafts%rowtype;
 begin
+  if tg_op = 'UPDATE' then
+    raise exception 'approvals are a record: add a new revision instead' using errcode = 'OC409';
+  end if;
   if new.kind = 'message_approval' and (current_user in ('service_role', 'authenticated', 'anon')
       or new.approver_user_id is distinct from (select owner_user_id from public.digital_services_settings)) then
     raise exception 'message approval must come from the owner via approve_pilot_message()' using errcode = 'OC403';
   end if;
+  -- Any review or approval is of the company's latest revision, written
+  -- against its current evidence; it freezes both from the draft itself.
+  select * into d from public.digital_services_pilot_drafts where id = new.draft_id;
+  if d.id is null or d.sha256 is distinct from new.draft_sha256 then
+    raise exception 'no such draft revision' using errcode = 'OC403';
+  end if;
+  if d.revision <> (select max(revision) from public.digital_services_pilot_drafts where company_id = d.company_id) then
+    raise exception 'a newer revision exists; review that one' using errcode = 'OC409';
+  end if;
+  if d.evidence_revision is distinct from (select evidence_revision from public.digital_services_pilot where id = d.company_id) then
+    raise exception 'evidence changed since this revision was written; add a new revision' using errcode = 'OC409';
+  end if;
+  new.draft_revision := d.revision;
+  new.evidence_revision := d.evidence_revision;
   return new;
 end;
 $$;
@@ -311,6 +358,9 @@ begin
      or d.revision <> (select max(revision) from public.digital_services_pilot_drafts where company_id = new.company_id) then
     raise exception 'draft is not this company''s latest revision' using errcode = 'OC403';
   end if;
+  if d.evidence_revision is distinct from c.evidence_revision then
+    raise exception 'evidence changed since this revision was written; add a new revision' using errcode = 'OC409';
+  end if;
   select 4 - count(distinct a.kind) into missing from public.digital_services_pilot_approvals a
     where a.draft_id = d.id and a.draft_sha256 = d.sha256
       and (a.kind <> 'message_approval'
@@ -339,4 +389,72 @@ drop policy if exists "Service role manages pilot events" on public.digital_serv
 create policy "Service role manages pilot events" on public.digital_services_pilot_events for all to service_role using (true) with check (true);
 revoke all on public.digital_services_pilot_drafts, public.digital_services_pilot_approvals, public.digital_services_pilot_events from anon, authenticated;
 grant select, insert on public.digital_services_pilot_drafts, public.digital_services_pilot_approvals, public.digital_services_pilot_events to service_role;
-grant update (preview_token, offer, change_reason) on public.digital_services_pilot_drafts to service_role;
+-- Only the change note stays editable; the guard refuses content edits anyway.
+revoke update on public.digital_services_pilot_drafts from service_role;
+grant update (change_reason) on public.digital_services_pilot_drafts to service_role;
+
+-- -------------------------------------------------------------- evidence
+create table if not exists public.digital_services_pilot_evidence (
+  id           uuid primary key default gen_random_uuid(),
+  company_id   text not null references public.digital_services_pilot(id),
+  source_url   text not null check (char_length(source_url) <= 2000 and source_url ~ '^https://[^/@[:space:]]+(/[^[:space:]]*)?$'),
+  source_type  text not null check (source_type in ('primary_business_website', 'official_business_social_page',
+                                                    'discovery_only_directory_or_search', 'owner_observation')),
+  checked_at   timestamptz not null,
+  fact_text    text not null check (char_length(fact_text) between 1 and 4000),
+  limitations  text[] not null default '{}',
+  recorded_by  text not null check (char_length(btrim(recorded_by)) between 1 and 120),
+  created_at   timestamptz not null default now()
+);
+create index if not exists ix_ds_pilot_evidence_company on public.digital_services_pilot_evidence (company_id, checked_at);
+
+-- Any change to a company's evidence bumps its evidence revision, which makes
+-- every draft written before it unreviewable (the approval guard refuses it,
+-- and the contact guard refuses to send it).
+create or replace function public.ds_pilot_evidence_bump()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if tg_op in ('UPDATE', 'DELETE') then
+    update public.digital_services_pilot set evidence_revision = evidence_revision + 1 where id = old.company_id;
+  end if;
+  if tg_op in ('INSERT', 'UPDATE') and (tg_op = 'INSERT' or new.company_id is distinct from old.company_id) then
+    update public.digital_services_pilot set evidence_revision = evidence_revision + 1 where id = new.company_id;
+  end if;
+  return null;
+end;
+$$;
+drop trigger if exists trg_ds_pilot_evidence_bump on public.digital_services_pilot_evidence;
+create trigger trg_ds_pilot_evidence_bump
+  after insert or update or delete on public.digital_services_pilot_evidence
+  for each row execute function public.ds_pilot_evidence_bump();
+
+-- The evidence revision moves only through the trigger above (or when the
+-- company's open uncertainties change); it can't be set or wound back directly.
+create or replace function public.ds_pilot_company_guard()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.evidence_revision is distinct from old.evidence_revision and pg_trigger_depth() < 2 then
+    raise exception 'evidence_revision moves only when evidence changes' using errcode = 'OC409';
+  end if;
+  if new.uncertainties is distinct from old.uncertainties then
+    new.evidence_revision := new.evidence_revision + 1;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists trg_ds_pilot_company_guard on public.digital_services_pilot;
+create trigger trg_ds_pilot_company_guard
+  before update on public.digital_services_pilot
+  for each row execute function public.ds_pilot_company_guard();
+
+alter table public.digital_services_pilot_evidence enable row level security;
+drop policy if exists "Service role manages pilot evidence" on public.digital_services_pilot_evidence;
+create policy "Service role manages pilot evidence" on public.digital_services_pilot_evidence for all to service_role using (true) with check (true);
+revoke all on public.digital_services_pilot_evidence from anon, authenticated;
+grant select, insert, update, delete on public.digital_services_pilot_evidence to service_role;

@@ -11,8 +11,8 @@ export function supabaseOutreachStore(admin: SupabaseClient): OutreachStore {
   return {
     async load(companyId) {
       const [c, d, a, e, s] = await Promise.all([
-        admin.from(PILOT_TABLE).select("id, lane, reserved_for, contact_address, contact_basis_confirmed_at, contact_basis_confirmed_for").eq("id", companyId).maybeSingle(),
-        admin.from(PILOT_DRAFTS_TABLE).select("id, company_id, revision, subject, body, sha256").eq("company_id", companyId),
+        admin.from(PILOT_TABLE).select("id, lane, reserved_for, contact_address, contact_basis_confirmed_at, contact_basis_confirmed_for, evidence_revision").eq("id", companyId).maybeSingle(),
+        admin.from(PILOT_DRAFTS_TABLE).select("id, company_id, revision, subject, body, sha256, evidence_revision").eq("company_id", companyId),
         admin.from(PILOT_APPROVALS_TABLE).select("draft_id, draft_sha256, kind, actor, approved_at, approver_user_id"),
         admin.from(PILOT_EVENTS_TABLE).select(EVENT_COLS).eq("company_id", companyId),
         admin.from("digital_services_settings").select("owner_user_id").maybeSingle(),

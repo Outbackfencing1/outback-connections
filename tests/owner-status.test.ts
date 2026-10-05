@@ -188,43 +188,45 @@ describe("approvePilotMessage action", () => {
   });
 
   it("calls the database function with the owner's own session for that exact revision", async () => {
-    expect(await approve({ draft_id: ID, draft_sha256: SHA, view: "status=all" })).toBe("/dashboard/owner?status=all&pilot=approved");
+    expect(await approve({ draft_id: ID, draft_sha256: SHA, view: "status=all" })).toBe(`/dashboard/owner/review/${ID}?pilot=approved`);
     expect(rpc.calls).toEqual([["approve_pilot_message", { p_draft_id: ID, p_draft_sha256: SHA }]]);
     expect(revalidate).toHaveBeenCalled();
   });
 
   it("a database refusal is shown as refused, not approved", async () => {
     rpc.result = { data: null, error: { code: "OC403", message: "reviews come first" } };
-    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe("/dashboard/owner?pilot=refused");
+    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe(`/dashboard/owner/review/${ID}?pilot=refused`);
     expect(revalidate).not.toHaveBeenCalled();
   });
 
   it("no approval id back is unconfirmed (after one retry), never 'approved'", async () => {
     rpc.result = { data: null, error: null };
-    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe("/dashboard/owner?pilot=unconfirmed");
+    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe(`/dashboard/owner/review/${ID}?pilot=unconfirmed`);
     expect(rpc.calls).toHaveLength(2);
     expect(revalidate).not.toHaveBeenCalled();
   });
 
   it("a lost response is retried once; the retry returns the committed approval", async () => {
     rpc.queue = ["throw"];
-    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe("/dashboard/owner?pilot=approved");
+    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe(`/dashboard/owner/review/${ID}?pilot=approved`);
     expect(rpc.calls).toHaveLength(2);
     rpc.calls = [];
     rpc.queue = [{ data: null, error: { code: "57014", message: "timeout" } }];
-    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe("/dashboard/owner?pilot=approved");
+    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe(`/dashboard/owner/review/${ID}?pilot=approved`);
     expect(rpc.calls).toHaveLength(2);
   });
 
   it("a policy refusal is final and isn't retried", async () => {
     rpc.result = { data: null, error: { code: "OC403", message: "only the owner" } };
-    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe("/dashboard/owner?pilot=refused");
+    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe(`/dashboard/owner/review/${ID}?pilot=refused`);
     expect(rpc.calls).toHaveLength(1);
   });
 
-  it("an approval conflict by a different owner is refused", async () => {
-    rpc.result = { data: null, error: { code: "OC409", message: "different owner" } };
-    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe("/dashboard/owner?pilot=refused");
+  it("a revision that's no longer current (newer revision, changed evidence, another owner's approval) is stale, not approved", async () => {
+    rpc.result = { data: null, error: { code: "OC409", message: "evidence changed" } };
+    expect(await approve({ draft_id: ID, draft_sha256: SHA })).toBe(`/dashboard/owner/review/${ID}?pilot=stale`);
+    expect(rpc.calls).toHaveLength(1);
+    expect(revalidate).not.toHaveBeenCalled();
   });
 
   it("malformed input never reaches the database", async () => {
