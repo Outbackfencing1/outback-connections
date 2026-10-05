@@ -18,7 +18,11 @@ const HELP = "Email help@outbackconnections.com.au with the listing name and we'
 
 type Listing = { id: string; status: string; title: string };
 type Checked = { ok: true; listing: Listing } | { ok: false; reason: Failure };
-type Failure = "invalid" | "expired" | "not_yours" | "deleted" | "server_error";
+type Failure = "invalid" | "expired" | "not_yours" | "deleted" | "closed" | "unavailable" | "server_error";
+
+// Only these can be renewed. A closed, flagged or draft listing isn't shown
+// publicly, so renewing it would say "stays up" while it stays hidden.
+const RENEWABLE = new Set(["active", "expired"]);
 
 async function check(id: string, token: string | null): Promise<Checked> {
   if (!token) return { ok: false, reason: "invalid" };
@@ -44,6 +48,8 @@ async function check(id: string, token: string | null): Promise<Checked> {
   if (listing.status === "deleted_by_user" || listing.status === "deleted_by_admin") {
     return { ok: false, reason: "deleted" };
   }
+  if (listing.status === "closed") return { ok: false, reason: "closed" };
+  if (!RENEWABLE.has(listing.status)) return { ok: false, reason: "unavailable" };
   return { ok: true, listing };
 }
 
@@ -67,6 +73,16 @@ const FAILURES: Record<Failure, { status: number; heading: string; message: stri
     status: 410,
     heading: "That listing has been deleted",
     message: "Deleted listings can't be renewed. You can post it again from the Post a listing page.",
+  },
+  closed: {
+    status: 409,
+    heading: "That listing is closed",
+    message: "Nothing was changed: it was marked closed, so it isn't shown on the site. If that was a mistake, email help@outbackconnections.com.au with the listing name and we'll reopen it for you.",
+  },
+  unavailable: {
+    status: 409,
+    heading: "That listing can't be renewed from this link",
+    message: `Nothing was changed. It isn't live on the site right now (it may be under review). ${HELP}`,
   },
   server_error: {
     status: 500,

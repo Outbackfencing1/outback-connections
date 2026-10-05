@@ -172,6 +172,21 @@ describe("renew link", () => {
     expect(db.updates).toHaveLength(0);
   });
 
+  it.each([
+    ["closed", 409, "is closed"],
+    ["hidden_flagged", 409, "can&#39;t be renewed from this link"],
+    ["draft", 409, "can&#39;t be renewed from this link"],
+  ])("refuses a %s listing on GET and POST instead of claiming it stays up", async (status, code, text) => {
+    db.listing = { ...db.listing, status };
+    for (const res of [await getRenew(renewToken()), await postRenew(renewToken())]) {
+      expect(res.status).toBe(code);
+      const html = await res.text();
+      expect(html).toContain(text);
+      expect(html).not.toContain("stays up");
+    }
+    expect(db.updates).toHaveLength(0);
+  });
+
   it("refuses a deleted listing", async () => {
     db.listing = { ...db.listing, status: "deleted_by_user" };
     const res = await postRenew(renewToken());
