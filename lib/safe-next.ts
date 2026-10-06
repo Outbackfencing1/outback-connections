@@ -17,3 +17,8 @@ export function safeNextPath(value: string | null | undefined): string {
   }
   return value;
 }
+
+/** Sign-in URL that comes back to `path` (query included) afterwards. */
+export function signInHref(path: string): string {
+  return `/signin?next=${encodeURIComponent(safeNextPath(path))}`;
+}

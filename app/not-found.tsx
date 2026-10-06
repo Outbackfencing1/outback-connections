@@ -1,7 +1,13 @@
 // app/not-found.tsx
 import Link from "next/link";
+import { getCountsByPillar } from "@/lib/category-counts";
 
-export default function NotFound() {
+const btn =
+  "inline-flex items-center justify-center rounded-xl border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50";
+
+export default async function NotFound() {
+  // Same rule as the header nav: an empty section isn't offered.
+  const counts = await getCountsByPillar();
   return (
     <main className="mx-auto max-w-3xl px-4 py-16">
       <div className="rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm sm:p-10">
@@ -27,18 +33,21 @@ export default function NotFound() {
           >
             Services
           </Link>
-          <Link
-            href="/jobs"
-            className="inline-flex items-center justify-center rounded-xl border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
-          >
-            Jobs
-          </Link>
-          <Link
-            href="/freight"
-            className="inline-flex items-center justify-center rounded-xl border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
-          >
-            Freight
-          </Link>
+          {counts.jobs.total > 0 && (
+            <Link href="/jobs" className={btn}>
+              Jobs
+            </Link>
+          )}
+          {counts.freight.total > 0 && (
+            <Link href="/freight" className={btn}>
+              Freight
+            </Link>
+          )}
+          {counts.sale.total > 0 && (
+            <Link href="/sale" className={btn}>
+              For sale
+            </Link>
+          )}
           <Link
             href="/post"
             className="inline-flex items-center justify-center rounded-xl border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"

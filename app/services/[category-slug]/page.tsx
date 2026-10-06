@@ -139,8 +139,8 @@ export default async function ServiceCategoryPage({
         </Link>
       </p>
 
-      <div className="mt-3 flex items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+      <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <h1 className="min-w-0 text-2xl font-bold tracking-tight [overflow-wrap:anywhere] sm:text-3xl">
           {cat.label}
         </h1>
         <Link
