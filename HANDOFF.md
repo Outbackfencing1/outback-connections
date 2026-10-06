@@ -1,6 +1,6 @@
 # HANDOFF
 
-Date: 2026-10-04 (previous: 2026-09-06)
+Date: 2026-10-06 (previous: 2026-10-04)
 Branch: `main`. Live: https://www.outbackconnections.com.au
 
 Everything from the 6 Sep session is on `main` and deployed (PR #18, 7 Sep;
@@ -9,6 +9,53 @@ Pushing to `main` deploys production. All migrations in
 `supabase/migrations/` are applied to the live project.
 
 ---
+
+## 6 Oct 2026: staff-post clean-up made bounded and resumable (branch `ccr-a7a02618-x1gnjy-privacy-cleanup`, draft PR, NOT merged, NOT run live)
+
+The 4 Oct fix processed every staff post in one request, which could run past
+the 60s function limit and end with no receipt. Rebuilt on Codex's
+6 Oct handoff (sections 1 and 2), no migration:
+- `lib/staff-post-cleanup.ts` (pure, tested) runs one bounded pass: privacy
+  sweep of closed rows first (archive, then clear), then quote requests left
+  on adopted originals, then a batch of 10 active posts. It doesn't start an
+  item that wouldn't finish inside a 40s budget (it reserves the longest item
+  seen), so the route always answers with a receipt: counts, titles, errors,
+  what remains and `more_work`. No phone/email values in the receipt or email.
+- Every write is conditional or idempotent (`lib/staff-post-cleanup-store.ts`):
+  contact is cleared only after its archive is confirmed, and by
+  compare-and-swap on the values read (PostgREST refuses an `or` filter on an
+  update; found on the local stack); closes only apply to rows still active
+  and unlinked; ingest is keyed by source and retried once on a concurrent
+  unique violation; enquiries move before the original closes. A killed,
+  retried or overlapping run neither duplicates a business nor loses a
+  contact or an enquiry; a refused write is an error, never counted as done.
+- Before re-filing, the business is looked up by name + postcode: claimed, or
+  listed by its genuine owner -> the staff post is held for a person (no
+  unclaimed copy beside the owner's row); already an unclaimed entry from an
+  import under another source -> linked to it, not copied, and that row keeps
+  its own attribution. (ingest's own claimed check only matches the same
+  source id.)
+- `?dry=1` plans the next batch (including the lookup above) with zero
+  writes and no email.
+- Contractor outreach: `OUTREACH_STATUSES` moved to a plain module
+  (`statuses.ts`). On main the page 500s for every staff/admin visit
+  (`OUTREACH_STATUSES.some is not a function`: a server component gets a
+  client reference, not the array).
+
+Verified locally only (throwaway Postgres 16 + PostgREST 12.2.3 with main's
+migrations, a built `next start`, fake fixtures): cron auth 401s, dry run
+leaves the database byte-identical, full drain, 1.5s latency per call (every
+run under 45s; worst case is the budget plus one adoption), hard kill at
+2-14s then retry, 2- and 3-way overlapping
+runs, refused archive/enquiry writes (HTTP 207, nothing cleared or closed,
+recovers on the next run), genuine-owner/admin/claimed rows untouched; the
+outreach page by persona (anonymous -> sign-in, member -> refused,
+staff/admin -> renders; main -> 500). Gate green.
+
+**Not done, needs Josh:** merge, then a live run. If authorised: dry run
+first, CRON_SECRET in the `Authorization: Bearer` header only (never `?k=`,
+never in a URL, chat or screenshot); the daily cron then drains a batch per
+run. The 4 Oct "After deploy" note's `?k=` form is superseded.
 
 ## 4 Oct 2026: the staff-post clean-up was failing; fixed (branch `ccr-a7a02618-x1gnjy`)
 
