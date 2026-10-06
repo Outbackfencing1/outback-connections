@@ -69,3 +69,25 @@ stale, attempt intent persisted before dispatch, and unknown outcomes
 reconciled against provider history before any retry. Drafting stays
 draft-only; the model never sends, prices or publishes. Prove it with owned
 test inboxes only.
+
+## Engine contracts in the owner flow (bridge)
+
+`lib/digital-services/engine-bridge.ts` applies the private engine's own
+`validateCreator`, `validateReview` and `validateReply` (engine
+`app/src/contracts.ts`, unchanged) to imported outputs. The validators are
+passed in; none of the engine is copied here.
+
+- **Connected locally:** `tests/engine-flow.local.test.ts` loads them from a
+  private checkout (`OC_ENGINE_DIR`, with the engine's own `ajv@^8` installed
+  beside it) and drives one synthetic customer through the draft schema:
+  saved enquiry (a repeated submit is the same row) → owner status → failed
+  alert receipt kept → restart → creator output validated into a held draft
+  revision (a repeated import adds nothing; no approval exists) → engine
+  review (hold; tampered binding rejected; stale once the draft is revised)
+  → reply example surfaced as an opt-out → quote accepted → production refused
+  until the deposit evidence is recorded → launch refused until the balance is.
+  CI skips this file.
+- **Not connected:** the hosted app has no copy of the validators, so the
+  bridge reports `not_connected` there and outputs stay held. The bridge is
+  not yet called from the owner's import actions; no worker runs the engine;
+  nothing is sent, published or charged at any stage.
