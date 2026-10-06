@@ -2,9 +2,13 @@
 // Supabase one (keyed ingest, unique archive key, conditional closes) and can
 // add latency, fail a call, or apply a write and then lose the response.
 // These are simulations: they prove the run's logic, not a hosted database.
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ADOPT_BATCH,
+  FINISH_BUDGET_MS,
+  NOTIFY_BUDGET_MS,
+  ROUTE_MAX_DURATION_S,
+  WORK_BUDGET_MS,
   redact,
   runCleanup,
   type CandidateRow,
@@ -52,6 +56,10 @@ class World {
     { user_id: OWNER, is_admin: false, is_staff: false, directory_contributor: false },
   ];
   latencyMs = 0;
+  /** Per-method latency, overriding latencyMs. */
+  methodLatency: Partial<Record<keyof CleanupStore, number>> = {};
+  /** When each call started (Date.now(), faked in the deadline tests). */
+  calls: { method: keyof CleanupStore; at: number }[] = [];
   faults: Fault[] = [];
   writes = 0;
   private seq = 0;
@@ -101,7 +109,9 @@ class World {
 
   /** Wraps a method: latency, then any matching fault. "lost" applies the write, then hangs. */
   private async gate<T>(method: keyof CleanupStore, id: string | undefined, write: boolean, body: () => T): Promise<T> {
-    if (this.latencyMs) await tick(this.latencyMs);
+    this.calls.push({ method, at: Date.now() });
+    const latency = this.methodLatency[method] ?? this.latencyMs;
+    if (latency) await tick(latency);
     const f = this.faults.find((x) => x.method === method && (!x.id || x.id === id) && (x.times ?? 1) > 0);
     if (f) {
       f.times = (f.times ?? 1) - 1;
@@ -385,9 +395,11 @@ describe("runCleanup", () => {
     const runs = [];
     for (let i = 0; i < 20; i++) {
       const t0 = Date.now();
-      const r = await runCleanup(w.store(), { dry: false, budgetMs: 120, callTimeoutMs: 1000 });
-      // Budget + at most one row in flight + the closing count.
-      expect(Date.now() - t0).toBeLessThan(120 + 8 * 15 + 200);
+      // The budget must exceed the reads plus one row (here 4 x 15 + 5 x 15 ms),
+      // as the real 35s does by orders of magnitude, or no row could finish.
+      const r = await runCleanup(w.store(), { dry: false, budgetMs: 250, callTimeoutMs: 1000 });
+      // Nothing runs past the budget; then only the closing count.
+      expect(Date.now() - t0).toBeLessThan(250 + 15 + 200);
       expect(r.errors).toEqual([]);
       runs.push(r);
       if (!r.more_work) break;
@@ -503,5 +515,81 @@ describe("redact", () => {
     expect(redact("duplicate for jobs@example.com and 0400 123 456 (+61 2 6555 1234)")).toBe(
       "duplicate for [email] and [number] ([number])"
     );
+  });
+});
+
+// Codex's exact-source repro (6 Oct): row 1 takes 34s, row 2 starts under
+// budget and its sub-8s calls used to carry the run to ~70s, past the route's
+// 60s maxDuration, before the awaited team email. Fake timers, no real waiting.
+describe("deadline per stage", () => {
+  afterEach(() => vi.useRealTimers());
+
+  const slowAdopt = (w: World) => {
+    w.methodLatency = { ingest: 7_000, labelSource: 7_000, archiveContact: 7_000, moveEnquiries: 6_500, closeAdopted: 6_500, remaining: 1_000 };
+  };
+
+  it("the time plan fits inside maxDuration", () => {
+    expect(WORK_BUDGET_MS + FINISH_BUDGET_MS + NOTIFY_BUDGET_MS).toBeLessThanOrEqual(ROUTE_MAX_DURATION_S * 1000 - 10_000);
+  });
+
+  it("no stage starts or runs past the deadline; the count has its own window; the next run finishes the row", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const { w, originalContacts } = seed(3, 0);
+    slowAdopt(w);
+    const t0 = Date.now();
+    const pending = runCleanup(w.store(), { dry: false });
+    await vi.advanceTimersByTimeAsync(120_000);
+    const r = await pending;
+    const work = w.calls.filter((c) => c.method !== "remaining");
+    // Row 1 (34s) completes; row 2's ingest starts at 34s and is cut off at 35s,
+    // which stops the run (outcome unknown, not an error).
+    expect(r.adopt.adopted).toBe(1);
+    expect(Math.max(...work.map((c) => c.at - t0))).toBeLessThan(WORK_BUDGET_MS);
+    expect(r.stopped_early).toBe(true);
+    expect(r.more_work).toBe(true);
+    expect(r.errors).toEqual([]);
+    expect(w.calls.filter((c) => c.method === "ingest")).toHaveLength(2);
+    // The remaining count started at the deadline and finished in its window.
+    const count = w.calls.find((c) => c.method === "remaining")!;
+    expect(count.at - t0).toBe(WORK_BUDGET_MS);
+    expect(r.elapsed_ms).toBeLessThanOrEqual(WORK_BUDGET_MS + FINISH_BUDGET_MS);
+    expect(r.remaining).toEqual({ closed_with_contact: 0, active_candidates: 3, stranded_originals: 0 }); // 2 rows + the held one
+    // The cut-off ingest still lands later; the next (fast) runs reuse it and finish cleanly.
+    w.methodLatency = {};
+    vi.useRealTimers();
+    let last = r;
+    for (let i = 0; i < 5 && last.more_work; i++) last = await runCleanup(w.store(), { dry: false });
+    expect(last).toMatchObject({ ok: true, more_work: false });
+    checkInvariants(w, originalContacts);
+  });
+
+  it("a hanging count or a slow sweep still returns by deadline plus the reserved window", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const { w } = seed(2, 25);
+    w.methodLatency = { archiveContact: 4_000, clearClosedContact: 4_000 };
+    w.faults.push({ method: "remaining", mode: "hang" });
+    const t0 = Date.now();
+    const pending = runCleanup(w.store(), { dry: false });
+    await vi.advanceTimersByTimeAsync(120_000);
+    const r = await pending;
+    expect(Math.max(...w.calls.filter((c) => c.method !== "remaining").map((c) => c.at - t0))).toBeLessThan(WORK_BUDGET_MS);
+    expect(r.elapsed_ms).toBeLessThanOrEqual(WORK_BUDGET_MS + FINISH_BUDGET_MS);
+    expect(r.stopped_early).toBe(true);
+    expect(r.more_work).toBe(true); // unknown remaining counts as more work
+    expect(r.adopt.seen).toBe(0); // the sweep used the budget; adopting waits for the next run
+    expect(r.errors.map((e) => e.stage)).toEqual(["read"]);
+  });
+
+  it("a dry run under the same latency still writes nothing and stays inside the window", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const { w } = seed(3, 2);
+    slowAdopt(w);
+    const before = w.snapshot();
+    const pending = runCleanup(w.store(), { dry: true });
+    await vi.advanceTimersByTimeAsync(120_000);
+    const r = await pending;
+    expect(w.snapshot()).toBe(before);
+    expect(w.writes).toBe(0);
+    expect(r.elapsed_ms).toBeLessThanOrEqual(WORK_BUDGET_MS + FINISH_BUDGET_MS);
   });
 });

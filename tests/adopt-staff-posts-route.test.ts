@@ -91,4 +91,30 @@ describe("GET /api/cron/adopt-staff-posts", () => {
     expect(body.ok).toBe(false);
     expect(body.errors[0].message).toBe("team email not sent: Error: smtp down for [email]");
   });
+
+  it("a team email that never answers is aborted at its reserved window and reported", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      runCleanup.mockResolvedValue(busyReceipt(false));
+      let signal: AbortSignal | undefined;
+      sendEmail.mockImplementationOnce(((opts: { signal?: AbortSignal }) => {
+        signal = opts.signal;
+        return new Promise(() => {});
+      }) as never);
+      const { GET, maxDuration } = await import("@/app/api/cron/adopt-staff-posts/route");
+      const { NOTIFY_BUDGET_MS } = await import("@/lib/staff-post-cleanup");
+      const t0 = Date.now();
+      const pending = GET(req("/api/cron/adopt-staff-posts", "Bearer s3cret-for-tests"));
+      await vi.advanceTimersByTimeAsync(NOTIFY_BUDGET_MS);
+      const body = await (await pending).json();
+      expect(Date.now() - t0).toBe(NOTIFY_BUDGET_MS);
+      expect(NOTIFY_BUDGET_MS).toBeLessThan(maxDuration * 1000);
+      expect(signal?.aborted).toBe(true);
+      expect(body.ok).toBe(false);
+      expect(body.errors[0].message).toBe("team email not sent: Error: no answer within 8s");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
+

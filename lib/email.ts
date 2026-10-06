@@ -19,6 +19,8 @@ export type EmailSendInput = {
   text: string;
   replyTo?: string;
   from?: string;
+  /** Aborts the request (for callers with a deadline). */
+  signal?: AbortSignal;
 };
 
 export type EmailResult =
@@ -46,6 +48,7 @@ export async function sendEmail(opts: EmailSendInput): Promise<EmailResult> {
   try {
     const res = await fetch(RESEND_ENDPOINT, {
       method: "POST",
+      signal: opts.signal,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,

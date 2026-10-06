@@ -10,6 +10,21 @@ Pushing to `main` deploys production. All migrations in
 
 ---
 
+## 6 Oct 2026 (later): clean-up deadline enforced per stage (PR #26, Codex finding)
+
+Codex found the 35s budget was checked only before each row: a slow row 2
+could run every stage to ~70s, past maxDuration 60, before the awaited team
+email. Now every store call checks the deadline before it starts and is cut
+off at it (a cut-off stops the run as "more work", outcome settled by the
+next run; nothing is an error just for being late). The remaining-work count
+has its own 5s window and the team email an 8s abort-bounded window: worst
+case 48s. Fake-clock regressions reproduce Codex's case (they fail on
+2be2665: row 2 adopted, a call starting at 36s) and pass now; dry run still
+writes nothing. Gates: test 74, tsc, lint (1 existing warning), build exit 0.
+The live endpoint was not called.
+
+---
+
 ## 6 Oct 2026: clean-up made bounded; outreach page crash (branch `ccr-privacy-recovery`, draft PR, not merged)
 
 Not deployed and not run against production. Production still has staff posts

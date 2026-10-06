@@ -28,8 +28,17 @@ import type { SourceUrlKind } from "./source-platforms";
 export const SWEEP_BATCH = 25;
 export const RECOVER_BATCH = 25;
 export const ADOPT_BATCH = 10;
-/** Work stops starting new rows after this; maxDuration is 60s. */
+/**
+ * The route's time plan (maxDuration is 60s). Every store call checks the
+ * work deadline before it starts and is cut off at it, so no stage of any
+ * row runs past WORK_BUDGET_MS. The final remaining-work count then gets its
+ * own reserved window, and the route bounds the team email with
+ * NOTIFY_BUDGET_MS. Worst case: 35 + 5 + 8 = 48s, inside 60s.
+ */
 export const WORK_BUDGET_MS = 35_000;
+export const FINISH_BUDGET_MS = 5_000;
+export const NOTIFY_BUDGET_MS = 8_000;
+export const ROUTE_MAX_DURATION_S = 60;
 /** Ceiling for any one store call; the outcome of a call past it is unknown. */
 export const CALL_TIMEOUT_MS = 8_000;
 
@@ -95,6 +104,13 @@ export class CallTimeout extends Error {
   }
 }
 
+/**
+ * The run's deadline came before a call could start, or while it ran (its
+ * outcome is then unknown; every step is repeatable, so the next run settles
+ * it). Either way the run stops and reports more work, not an error.
+ */
+class DeadlineReached extends Error {}
+
 /** Removes anything that looks like an email address or phone number. */
 export function redact(message: string): string {
   return message
@@ -111,19 +127,29 @@ type Clock = { now(): number };
 
 export async function runCleanup(
   store: CleanupStore,
-  opts: { dry: boolean; clock?: Clock; budgetMs?: number; callTimeoutMs?: number }
+  opts: { dry: boolean; clock?: Clock; budgetMs?: number; callTimeoutMs?: number; finishMs?: number }
 ): Promise<Receipt> {
   const clock = opts.clock ?? { now: () => Date.now() };
   const started = clock.now();
   const budget = opts.budgetMs ?? WORK_BUDGET_MS;
   const callTimeout = opts.callTimeoutMs ?? CALL_TIMEOUT_MS;
-  const outOfTime = () => clock.now() - started >= budget;
+  const finishMs = opts.finishMs ?? FINISH_BUDGET_MS;
+  const deadline = started + budget;
+  const outOfTime = () => clock.now() >= deadline;
 
-  // Each store call is bounded; a call that outlives it is reported as
-  // unknown, and the idempotent steps let the next run settle it.
-  const call = <T>(p: Promise<T>): Promise<T> =>
-    new Promise<T>((resolve, reject) => {
-      const t = setTimeout(() => reject(new CallTimeout()), callTimeout);
+  // Every store call is checked against the deadline before it starts (so no
+  // stage begins late) and is cut off at whichever comes first: its own
+  // ceiling or the deadline. A call cut off is reported as unknown, and the
+  // idempotent steps let the next run settle it.
+  const call = <T>(start: () => Promise<T>, until = deadline): Promise<T> => {
+    const left = until - clock.now();
+    if (left <= 0) return Promise.reject(new DeadlineReached());
+    const p = start();
+    // Cut off by the deadline: the run stops there (outcome unknown, settled
+    // by the next run). Cut off by its own ceiling: an error for this row.
+    const cutByDeadline = left < callTimeout;
+    return new Promise<T>((resolve, reject) => {
+      const t = setTimeout(() => reject(cutByDeadline ? new DeadlineReached() : new CallTimeout()), Math.min(callTimeout, left));
       p.then(
         (v) => {
           clearTimeout(t);
@@ -135,6 +161,7 @@ export async function runCleanup(
         }
       );
     });
+  };
 
   const receipt: Receipt = {
     ok: true,
@@ -152,11 +179,18 @@ export async function runCleanup(
   };
   const fail = (id: string | null, title: string | null, stage: Stage, e: unknown) =>
     receipt.errors.push({ id, title, stage, message: errMessage(e) });
+  /** A call that couldn't start in time ends the run's work; it isn't an error. */
+  const late = (e: unknown) => {
+    if (!(e instanceof DeadlineReached)) return false;
+    receipt.stopped_early = true;
+    return true;
+  };
 
   const finish = async (staffIds: string[] | null): Promise<Receipt> => {
     if (staffIds) {
       try {
-        receipt.remaining = await call(store.remaining(staffIds));
+        // Its own reserved window, after the work deadline.
+        receipt.remaining = await call(() => store.remaining(staffIds), Math.max(clock.now(), deadline) + finishMs);
       } catch (e) {
         fail(null, null, "read", e);
       }
@@ -171,9 +205,9 @@ export async function runCleanup(
 
   let staffIds: string[];
   try {
-    staffIds = await call(store.staffIds());
+    staffIds = await call(() => store.staffIds());
   } catch (e) {
-    fail(null, null, "read", e);
+    if (!late(e)) fail(null, null, "read", e);
     return finish(null);
   }
   if (staffIds.length === 0) {
@@ -184,9 +218,9 @@ export async function runCleanup(
   // 1. Sweep closed rows that still carry contact.
   let closed: ContactRow[] = [];
   try {
-    closed = await call(store.closedWithContact(staffIds, SWEEP_BATCH));
+    closed = await call(() => store.closedWithContact(staffIds, SWEEP_BATCH));
   } catch (e) {
-    fail(null, null, "read", e);
+    if (!late(e)) fail(null, null, "read", e);
   }
   receipt.sweep.seen = closed.length;
   if (!opts.dry) {
@@ -196,16 +230,18 @@ export async function runCleanup(
         break;
       }
       try {
-        await call(store.archiveContact(row, new Date(clock.now()).toISOString()));
+        await call(() => store.archiveContact(row, new Date(clock.now()).toISOString()));
       } catch (e) {
+        if (late(e)) break;
         fail(row.id, row.title, "sweep", `contact not archived, so not cleared: ${errMessage(e)}`);
         continue;
       }
       try {
-        const done = await call(store.clearClosedContact(row.id, row.source_url ?? closedOriginalSourceUrl(row)));
+        const done = await call(() => store.clearClosedContact(row.id, row.source_url ?? closedOriginalSourceUrl(row)));
         if (done) receipt.sweep.cleared += 1;
         else receipt.sweep.skipped += 1;
       } catch (e) {
+        if (late(e)) break;
         fail(row.id, row.title, "sweep", `archived, contact not cleared: ${errMessage(e)}`);
       }
     }
@@ -215,9 +251,9 @@ export async function runCleanup(
   let stranded: StrandedOriginal[] = [];
   if (!receipt.stopped_early) {
     try {
-      stranded = await call(store.strandedOriginals(staffIds, RECOVER_BATCH));
+      stranded = await call(() => store.strandedOriginals(staffIds, RECOVER_BATCH));
     } catch (e) {
-      fail(null, null, "read", e);
+      if (!late(e)) fail(null, null, "read", e);
     }
   }
   receipt.recover.seen = stranded.length;
@@ -228,11 +264,12 @@ export async function runCleanup(
         break;
       }
       try {
-        const businessId = await call(store.businessOf(s.canonical_listing_id));
-        const moved = await call(store.moveEnquiries(s.id, s.canonical_listing_id, businessId));
+        const businessId = await call(() => store.businessOf(s.canonical_listing_id));
+        const moved = await call(() => store.moveEnquiries(s.id, s.canonical_listing_id, businessId));
         receipt.recover.enquiries_moved += moved;
         receipt.recover.originals_fixed += 1;
       } catch (e) {
+        if (late(e)) break;
         fail(s.id, s.title, "recover", `quote requests not moved: ${errMessage(e)}`);
       }
     }
@@ -242,9 +279,9 @@ export async function runCleanup(
   let candidates: CandidateRow[] = [];
   if (!receipt.stopped_early) {
     try {
-      candidates = await call(store.activeCandidates(staffIds, ADOPT_BATCH));
+      candidates = await call(() => store.activeCandidates(staffIds, ADOPT_BATCH));
     } catch (e) {
-      fail(null, null, "read", e);
+      if (!late(e)) fail(null, null, "read", e);
     }
   }
   receipt.adopt.seen = candidates.length;
@@ -269,18 +306,20 @@ export async function runCleanup(
 
     if (p.verdict === "hold") {
       try {
-        await call(store.archiveContact(row, now));
+        await call(() => store.archiveContact(row, now));
       } catch (e) {
+        if (late(e)) break;
         fail(row.id, row.title, "hold", `contact not archived, row left as is: ${errMessage(e)}`);
         continue;
       }
       try {
-        const done = await call(store.closeHeld(row, p.reasons, row.source_url ?? closedOriginalSourceUrl(row), now));
+        const done = await call(() => store.closeHeld(row, p.reasons, row.source_url ?? closedOriginalSourceUrl(row), now));
         if (done) {
           receipt.adopt.held += 1;
           receipt.held.push({ title: row.title, reasons: p.reasons });
         } else receipt.adopt.skipped += 1;
       } catch (e) {
+        if (late(e)) break;
         fail(row.id, row.title, "hold", `archived, not closed: ${errMessage(e)}`);
       }
       continue;
@@ -292,37 +331,42 @@ export async function runCleanup(
     // the same business and listing back.
     let ingested: { listing_id: string; business_id: string | null };
     try {
-      ingested = await call(store.ingest(p.record));
+      ingested = await call(() => store.ingest(p.record));
       if (!ingested?.listing_id) throw new Error("no listing id returned");
     } catch (e) {
+      if (late(e)) break;
       fail(row.id, row.title, "adopt", `not re-filed: ${errMessage(e)}`);
       continue;
     }
     const notes: string[] = [];
     try {
-      await call(store.labelSource(ingested.listing_id, p.urlKind));
+      await call(() => store.labelSource(ingested.listing_id, p.urlKind));
     } catch (e) {
+      if (late(e)) break;
       notes.push(`source label not saved (${errMessage(e)})`);
     }
     try {
-      await call(store.archiveContact(row, now));
+      await call(() => store.archiveContact(row, now));
     } catch (e) {
+      if (late(e)) break;
       fail(row.id, row.title, "adopt", `re-filed, contact not archived, original left open: ${errMessage(e)}`);
       continue;
     }
     try {
-      await call(store.moveEnquiries(row.id, ingested.listing_id, ingested.business_id));
+      await call(() => store.moveEnquiries(row.id, ingested.listing_id, ingested.business_id));
     } catch (e) {
+      if (late(e)) break;
       fail(row.id, row.title, "adopt", `re-filed, quote requests not moved, original left open: ${errMessage(e)}`);
       continue;
     }
     try {
-      const done = await call(store.closeAdopted(row, ingested.listing_id, p.record.source_url, now));
+      const done = await call(() => store.closeAdopted(row, ingested.listing_id, p.record.source_url, now));
       if (!done) {
         receipt.adopt.skipped += 1;
         continue;
       }
     } catch (e) {
+      if (late(e)) break;
       fail(row.id, row.title, "adopt", `re-filed, original not closed: ${errMessage(e)}`);
       continue;
     }

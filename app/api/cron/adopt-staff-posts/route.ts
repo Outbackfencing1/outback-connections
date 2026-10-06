@@ -8,7 +8,9 @@
 // Each run is bounded and resumable (lib/staff-post-cleanup.ts): it clears
 // contact from already-closed staff posts first, then fixes quote requests
 // left on adopted originals, then adopts a small batch, and stops starting new
-// rows well inside maxDuration so it can always return a receipt. The receipt
+// rows or stages at a 35s deadline (each call is capped to the time left), so
+// with the reserved count and the bounded team email it always returns a
+// receipt inside maxDuration. The receipt
 // says what was done, what failed and whether more work remains; it holds
 // counts and business names only, never phone/email.
 //   adopt -> ingest_scraped_business() exactly like /dashboard/directory/add
@@ -27,7 +29,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { authoriseCron } from "@/lib/cron-auth";
-import { redact, runCleanup, type CleanupStore, type ContactRow, type CandidateRow, type Receipt } from "@/lib/staff-post-cleanup";
+import { NOTIFY_BUDGET_MS, redact, runCleanup, type CleanupStore, type ContactRow, type CandidateRow, type Receipt } from "@/lib/staff-post-cleanup";
 import { DEFAULT_FROM, NOTIFICATION_TO, escapeHtml, sendEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
@@ -310,18 +312,31 @@ export async function GET(req: NextRequest) {
     receipt.sweep.cleared + receipt.recover.enquiries_moved + receipt.adopt.adopted + receipt.adopt.held + receipt.errors.length > 0;
   if (!dry && didSomething) {
     const text = teamEmail(receipt);
+    // Bounded: the email can't hold the route past its reserved window.
+    const abort = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const sent = await sendEmail({
+      const timedOut = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          abort.abort();
+          reject(new Error(`no answer within ${NOTIFY_BUDGET_MS / 1000}s`));
+        }, NOTIFY_BUDGET_MS);
+      });
+      const sending = sendEmail({
+        signal: abort.signal,
         to: NOTIFICATION_TO,
         from: DEFAULT_FROM,
         subject: `Directory clean-up: ${receipt.adopt.adopted} published, ${receipt.adopt.held} held${receipt.more_work ? ", more to do" : ""}`,
         text,
         html: `<pre style="font-family:-apple-system,system-ui,sans-serif;white-space:pre-wrap;">${escapeHtml(text)}</pre>`,
       });
+      const sent = await Promise.race([sending, timedOut]);
       if (!sent.ok) throw new Error("reason" in sent && sent.reason ? String(sent.reason) : "not sent");
     } catch (e) {
       receipt.errors.push({ id: null, title: null, stage: "read", message: `team email not sent: ${redact(String(e))}` });
       receipt.ok = false;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
