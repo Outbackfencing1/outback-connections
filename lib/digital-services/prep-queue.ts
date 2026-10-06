@@ -2,17 +2,17 @@
 // The preparation queue's packet/result boundary (owner-only; draft migration
 // digital_services_prep_queue.sql). No automatic worker exists here: a person
 // hands a job's packet to the private engine (or works it by hand) and
-// imports the result file. This module builds packets ONLY from facts the
-// database already holds (company, evidence revision and sources, the draft's
-// revision and hash) and validates result files against the exact packet they
-// answer. It never invents a packet, a hash or a review verdict, and an
-// imported review is recorded as the worker's report, never as an approval.
+// imports the result file. Packets are built only by the database
+// (prep_enqueue), from one locked snapshot of the company, its evidence and
+// the draft, so this module never builds or edits one. It validates result
+// files against the exact packet they answer, and never invents a hash or a
+// review verdict; an imported review is the worker's report, never an approval.
 import { createHash } from "node:crypto";
 
 export const PREP_JOBS_TABLE = "digital_services_prep_jobs";
 export const PREP_SETTINGS_TABLE = "digital_services_prep_settings";
 export const PREP_PAGE_SIZE = 20;
-export const PREP_PACKET_CONTRACT = "oc-prep-packet/0.1";
+export const PREP_PACKET_CONTRACT = "oc-prep-packet/0.2";
 export const PREP_RESULT_CONTRACT = "oc-prep-result/0.1";
 export const PREP_KINDS = ["research_review", "evidence_refresh", "preview_build", "copy_draft", "copy_review"] as const;
 export type PrepKind = (typeof PREP_KINDS)[number];
@@ -23,62 +23,26 @@ export const PREP_KIND_LABELS: Record<PrepKind, string> = {
   copy_draft: "Copy draft",
   copy_review: "Copy review",
 };
-/** Kinds that work on one existing draft revision. */
+/** Kinds that work on one existing draft revision (the database enforces this too). */
 export const DRAFT_KINDS: PrepKind[] = ["copy_review", "preview_build"];
 export const PREP_HANDOFF_WORKER = "handoff:owner";
 export const PREP_HANDOFF_LEASE_SECONDS = 86_400;
 
-const TASKS: Record<PrepKind, string> = {
-  research_review: "Review the company's recorded evidence for identity, lane and fit. Report holds; never mark anything sendable.",
-  evidence_refresh: "Re-check each source and report what changed, with check time and method. Record new evidence through the owner, not this result.",
-  preview_build: "Build a private preview for the named draft revision. Report the preview's file hashes; publish nothing.",
-  copy_draft: "Draft one email for the owner's review from the recorded evidence only. Make no claims the evidence doesn't support.",
-  copy_review: "Review the named draft revision's exact copy against the evidence. Report a verdict and notes; this is not an approval.",
-};
-
 export const sha256Hex = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
 
-/** JSON with sorted keys and no whitespace, so the same facts give the same packet (and the same job). */
-export function canonicalJson(v: unknown): string {
-  if (Array.isArray(v)) return `[${v.map(canonicalJson).join(",")}]`;
-  if (v && typeof v === "object") {
-    return `{${Object.keys(v as object)
-      .sort()
-      .filter((k) => (v as Record<string, unknown>)[k] !== undefined)
-      .map((k) => `${JSON.stringify(k)}:${canonicalJson((v as Record<string, unknown>)[k])}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(v);
-}
-
-export type PacketFacts = {
-  kind: PrepKind;
-  company: { id: string; evidence_revision: number; uncertainties: string[] };
-  evidence: { source_url: string; source_type: string; checked_at: string }[];
-  draft: { id: string; revision: number; sha256: string } | null;
-};
-
-/** Build a packet from database facts. Returns null (with the reason) rather than inventing a missing fact. */
-export function buildPacket(f: PacketFacts): { text: string; sha256: string } | { error: string } {
-  if (!(PREP_KINDS as readonly string[]).includes(f.kind)) return { error: "unknown job kind" };
-  if (!/^OC-\d{3}$/.test(f.company.id) || !Number.isInteger(f.company.evidence_revision)) return { error: "company facts incomplete" };
-  if (DRAFT_KINDS.includes(f.kind) && !f.draft) return { error: "this kind works on a draft revision; choose one" };
-  if (f.draft && !/^[0-9a-f]{64}$/.test(f.draft.sha256)) return { error: "the draft has no stored hash" };
-  const packet = {
-    contract_id: PREP_PACKET_CONTRACT,
-    job_kind: f.kind,
-    company_id: f.company.id,
-    evidence_revision: f.company.evidence_revision,
-    evidence: [...f.evidence].sort((a, b) => a.checked_at.localeCompare(b.checked_at) || a.source_url.localeCompare(b.source_url)),
-    uncertainties: f.company.uncertainties,
-    draft: f.draft,
-    task: TASKS[f.kind],
-    constraints: { sendable: false, contact: "none", spending: "none", publishing: "none", approvals: "owner only, on the review screen" },
-    result_contract: PREP_RESULT_CONTRACT,
-  };
-  const text = canonicalJson(packet);
-  return { text, sha256: sha256Hex(text) };
-}
+/** Plain-language reasons prep_enqueue refuses a packet (its own messages), shown to the owner. */
+export const ENQUEUE_REFUSALS = [
+  "no such pilot company",
+  "unknown job kind",
+  "this company has no recorded evidence: record evidence first",
+  "this kind works on a draft revision: choose one",
+  "the draft belongs to another company",
+  "the draft's stored hash doesn't match its copy",
+  "the draft was written against older evidence: add a new revision first",
+  "this kind doesn't take a draft",
+  "choose the company's offer before drafting copy",
+  "this packet was captured before an evidence change: build a new one",
+] as const;
 
 export type PrepJobFacts = { id: string; kind: PrepKind; packet_sha256: string; created_at: string };
 export type PrepResult = {

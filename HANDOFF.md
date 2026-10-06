@@ -1,12 +1,45 @@
 # HANDOFF
 
-Date: 2026-10-04 (previous: 2026-09-06)
+Date: 2026-10-06 (previous: 2026-10-04)
 Branch: `main`. Live: https://www.outbackconnections.com.au
 
 Everything from the 6 Sep session is on `main` and deployed (PR #18, 7 Sep;
 PR #19, the staff-post clean-up, 2 Oct).
 Pushing to `main` deploys production. All migrations in
 `supabase/migrations/` are applied to the live project.
+
+---
+
+## 6 Oct 2026: Codex's three preparation-queue fixes (PR #23, still draft)
+
+From Codex's independent review (`codex-overnight-independent-review-2026-10-05`).
+All in the draft migration `supabase/migrations/_drafts/digital_services_prep_queue.sql`
+(**not applied anywhere**) and the owner dashboard code.
+
+1. **Stale captures refused at enqueue.** The database now builds every
+   packet (`prep_enqueue`) from one locked snapshot of the company row, its
+   evidence and the draft. The insert guard refuses (`OC409`) a packet whose
+   evidence revision isn't current; it no longer relabels one. The service
+   role can no longer insert jobs directly. Regression: evidence changing
+   mid-enqueue (a test trigger) refuses the enqueue and queues nothing.
+2. **Every lease mutation fenced.** Each claim gets a new `lease_generation`
+   and a unique `lease_token`. Heartbeat, complete and fail take the token
+   (signatures changed from worker name to token) and need an unexpired
+   lease; `prep_fail` on an expired lease now changes nothing. Tested with
+   reclaim by the same and another worker, and late heartbeats, failures and
+   results. The dashboard import form carries the hand-off's token.
+3. **Complete packets.** `oc-prep-packet/0.2` carries the company facts (name,
+   lane, offer, uncertainties), every evidence item's fact text and
+   limitations, and for review/preview jobs the exact draft subject, body,
+   offer and verified SHA-256. Missing facts refuse the packet. One held
+   **fixture** draft is run end to end in PGlite (packet, a stand-in reviewer
+   working only from the packet, validated import, no approval written). The
+   private engine stage is not connected to this repository.
+
+Gates on this branch: `npm test` 316/316, `tsc`, `lint` (one existing
+warning), `build`, all exit 0. Not run: the local-stack Playwright specs
+(updated for the new fixtures, but they need a local Supabase stack), and any
+hosted test (needs the draft migrations on an approved isolated database).
 
 ---
 

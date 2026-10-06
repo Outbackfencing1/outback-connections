@@ -129,7 +129,8 @@ test.describe("phase 1: enquiry to sent quote", () => {
     await shots(page, "lifecycle-1-owner-quote-sent");
 
     // A preparation job handed off before the restart.
-    psql(`insert into digital_services_pilot (id, company, lane) values ('OC-982', 'Lifecycle Prep Fixture', 'email') on conflict do nothing`);
+    psql(`insert into digital_services_pilot (id, company, lane, offer) values ('OC-982', 'Lifecycle Prep Fixture', 'email', 'quote_form_490') on conflict do nothing`);
+    psql(`insert into digital_services_pilot_evidence (company_id, source_url, source_type, checked_at, fact_text, recorded_by) values ('OC-982', 'https://fixture.example/', 'primary_business_website', now(), 'Lifecycle fixture fact.', 'local-stack')`);
     await page.goto("/dashboard/owner#prep");
     await page.locator("#prep summary", { hasText: "Queue a preparation job" }).click();
     await page.fill("#prep input[name=company_id]", "OC-982");
@@ -204,7 +205,7 @@ test.describe("phase 2: acceptance to production (after a restart)", () => {
       } else {
         // Re-importing after success isn't offered, and the database answers 'already'.
         await expect(row.locator("textarea[name=result]")).toHaveCount(0);
-        expect(psql(`select prep_complete('${prepJob}', 'handoff:owner', '${result.replace(/'/g, "''")}')`)).toBe("already");
+        expect(psql(`select prep_complete('${prepJob}', (select coalesce(lease_token, gen_random_uuid()) from digital_services_prep_jobs where id = '${prepJob}'), '${result.replace(/'/g, "''")}')`)).toBe("already");
       }
     }
     console.log("[lifecycle] phase 2: restart survived; accepted in writing; A$500 deposit gated; refused save visible; remaining deposit -> production; prep hand-off survived and recorded once");
@@ -268,7 +269,7 @@ test.describe("phase 3: review to hand-over, and care from go-live (after anothe
         ` delete from digital_services_payments where quote_id in ${ids};` +
         ` delete from digital_services_quotes where customer_label like '${q(business)}%';` +
         ` delete from digital_services_enquiries where business_name = '${q(business)}';` +
-        ` delete from digital_services_prep_jobs where company_id = 'OC-982'; delete from digital_services_pilot where id = 'OC-982'`
+        ` delete from digital_services_prep_jobs where company_id = 'OC-982'; delete from digital_services_pilot_evidence where company_id = 'OC-982'; delete from digital_services_pilot where id = 'OC-982'`
     );
   });
 });

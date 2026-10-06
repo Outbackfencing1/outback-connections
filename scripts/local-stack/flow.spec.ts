@@ -308,7 +308,8 @@ test("the conversation log not tied to a quote is paged, so older entries stay r
 });
 
 test("preparation queue: queue a job, hand it off, download its exact packet, import a result; no worker runs by itself", async ({ page }) => {
-  psql(`insert into digital_services_pilot (id, company, lane) values ('OC-981', 'Fixture Prep Co', 'email') on conflict do nothing`);
+  psql(`insert into digital_services_pilot (id, company, lane, offer) values ('OC-981', 'Fixture Prep Co', 'email', 'quote_form_490') on conflict do nothing`);
+  psql(`insert into digital_services_pilot_evidence (company_id, source_url, source_type, checked_at, fact_text, recorded_by) values ('OC-981', 'https://fixture.example/', 'primary_business_website', now(), 'Fixture fact for the prep packet.', 'local-stack')`);
   try {
     await as(page, "owner");
     await page.goto("/dashboard/owner#prep");
@@ -336,7 +337,7 @@ test("preparation queue: queue a job, hand it off, download its exact packet, im
     const text = await packet.text();
     expect(createHash("sha256").update(text, "utf8").digest("hex")).toBe(packetSha);
     expect(packet.headers()["x-packet-sha256"]).toBe(packetSha);
-    expect(JSON.parse(text)).toMatchObject({ contract_id: "oc-prep-packet/0.1", company_id: "OC-981", constraints: { sendable: false } });
+    expect(JSON.parse(text)).toMatchObject({ contract_id: "oc-prep-packet/0.2", company: { id: "OC-981" }, evidence: [{ fact_text: "Fixture fact for the prep packet." }], constraints: { sendable: false } });
 
     // A result for a different packet is rejected; the right one is recorded once.
     const result = (sha: string) =>
@@ -362,6 +363,6 @@ test("preparation queue: queue a job, hand it off, download its exact packet, im
     expect((await page.request.get(`/dashboard/owner/prep/${jobId}/packet`)).status()).toBe(404);
     console.log("[flow] prep queue: queued once (idempotent), handed off, packet hash matched the database, wrong-packet result rejected, result recorded");
   } finally {
-    psql(`delete from digital_services_prep_jobs where company_id = 'OC-981'; delete from digital_services_pilot where id = 'OC-981'`);
+    psql(`delete from digital_services_prep_jobs where company_id = 'OC-981'; delete from digital_services_pilot_evidence where company_id = 'OC-981'; delete from digital_services_pilot where id = 'OC-981'`);
   }
 });

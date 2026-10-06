@@ -1,36 +1,16 @@
 // The preparation queue's packet/result boundary and its owner-only actions
 // and packet download, with the database mocked. Synthetic data only.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { buildPacket, canonicalJson, sha256Hex, validateResult, PREP_RESULT_CONTRACT, type PrepJobFacts } from "@/lib/digital-services/prep-queue";
+import { readFileSync } from "node:fs";
+import { ENQUEUE_REFUSALS, validateResult, PREP_RESULT_CONTRACT, type PrepJobFacts } from "@/lib/digital-services/prep-queue";
 
 const JOB = "11111111-1111-4111-8111-111111111111";
-const DRAFT = "22222222-2222-4222-8222-222222222222";
-const facts = {
-  kind: "copy_draft" as const,
-  company: { id: "OC-901", evidence_revision: 2, uncertainties: ["Form delivery untested"] },
-  evidence: [
-    { source_url: "https://fixture.example/contact", source_type: "primary_business_website", checked_at: "2026-10-05T07:14:52Z" },
-    { source_url: "https://fixture.example/", source_type: "primary_business_website", checked_at: "2026-10-05T07:13:56Z" },
-  ],
-  draft: null,
-};
+const TOKEN = "44444444-4444-4444-8444-444444444444";
 
 describe("packets", () => {
-  it("are built only from database facts, deterministically (same facts, same packet, same job)", () => {
-    const a = buildPacket(facts);
-    const b = buildPacket({ ...facts, evidence: [...facts.evidence].reverse() });
-    if ("error" in a || "error" in b) throw new Error("expected packets");
-    expect(a.text).toBe(b.text);
-    expect(a.sha256).toBe(sha256Hex(a.text));
-    const p = JSON.parse(a.text);
-    expect(p).toMatchObject({ contract_id: "oc-prep-packet/0.1", job_kind: "copy_draft", company_id: "OC-901", evidence_revision: 2, constraints: { sendable: false } });
-    expect(p.evidence.map((e: { checked_at: string }) => e.checked_at)).toEqual(["2026-10-05T07:13:56Z", "2026-10-05T07:14:52Z"]);
-    expect(canonicalJson({ b: 1, a: [2, { d: 3, c: 4 }] })).toBe('{"a":[2,{"c":4,"d":3}],"b":1}');
-  });
-  it("refuse to invent a missing fact", () => {
-    expect(buildPacket({ ...facts, kind: "copy_review" })).toEqual({ error: "this kind works on a draft revision; choose one" });
-    expect(buildPacket({ ...facts, kind: "copy_review", draft: { id: DRAFT, revision: 1, sha256: "" } })).toEqual({ error: "the draft has no stored hash" });
-    expect(buildPacket({ ...facts, company: { ...facts.company, id: "acme" } })).toEqual({ error: "company facts incomplete" });
+  it("are built only by the database; every refusal the dashboard explains is one the migration raises", () => {
+    const sql = readFileSync("supabase/migrations/_drafts/digital_services_prep_queue.sql", "utf8").replace(/''/g, "'");
+    for (const reason of ENQUEUE_REFUSALS) expect(sql).toContain(`'${reason}'`);
   });
 });
 
@@ -165,12 +145,22 @@ describe("preparation queue actions", () => {
     expect(db.inserts).toHaveLength(0);
   });
 
-  it("enqueue builds the packet from the database and never sends a hash the database would trust", async () => {
+  it("enqueue asks the database to build the packet and explains its refusals; nothing is inserted directly", async () => {
+    db.rpcResult = { data: [{ job_id: JOB, outcome: "queued", packet_sha256: "a".repeat(64) }], error: null };
     expect(await act("enqueuePrepJob", { company_id: "oc-901", kind: "copy_draft" })).toBe("/dashboard/owner?prep=queued#prep");
-    expect(db.inserts[0]).toMatchObject({ company_id: "OC-901", kind: "copy_draft", packet_sha256: "computed-by-database", created_by: "owner:owner-uuid" });
-    db.insertError = { code: "23505", message: "duplicate" };
+    expect(db.rpc[0]).toEqual(["prep_enqueue", { p_company: "OC-901", p_kind: "copy_draft", p_draft: null, p_created_by: "owner:owner-uuid" }]);
+    db.rpcResult = { data: [{ job_id: JOB, outcome: "already_queued", packet_sha256: "a".repeat(64) }], error: null };
     expect(await act("enqueuePrepJob", { company_id: "OC-901", kind: "copy_draft" })).toBe("/dashboard/owner?prep=already_queued#prep");
-    expect(await act("enqueuePrepJob", { company_id: "OC-901", kind: "copy_review" })).toContain("prep=invalid");
+    db.rpcResult = { data: null, error: { code: "OC403", message: "this kind works on a draft revision: choose one" } };
+    expect(await act("enqueuePrepJob", { company_id: "OC-901", kind: "copy_review" })).toBe(
+      "/dashboard/owner?prep=invalid&reason=this+kind+works+on+a+draft+revision%3A+choose+one#prep"
+    );
+    db.rpcResult = { data: null, error: { code: "OC409", message: "this packet was captured before an evidence change: build a new one" } };
+    expect(await act("enqueuePrepJob", { company_id: "OC-901", kind: "copy_draft" })).toContain("prep=invalid&reason=this+packet+was+captured");
+    db.rpcResult = { data: null, error: { code: "XX000", message: "connection reset (internal detail)" } };
+    expect(await act("enqueuePrepJob", { company_id: "OC-901", kind: "copy_draft" })).toBe("/dashboard/owner?prep=error#prep"); // no internal text shown
+    expect(await act("enqueuePrepJob", { company_id: "OC-901", kind: "copy_review", draft_id: "not-a-uuid" })).toBe("/dashboard/owner?prep=invalid#prep");
+    expect(db.inserts).toHaveLength(0);
   });
 
   it("hand-off claims that one job for 24 hours; a job that isn't ready says so", async () => {
@@ -185,18 +175,19 @@ describe("preparation queue actions", () => {
     db.job = { id: JOB, kind: "copy_draft", packet_sha256: "a".repeat(64), created_at: "2026-10-05T00:00:00Z" };
     const result = (over: Record<string, unknown> = {}) =>
       JSON.stringify({ contract_id: PREP_RESULT_CONTRACT, job_id: JOB, packet_sha256: "a".repeat(64), job_kind: "copy_draft", produced_by: "fixture", produced_at: "2026-10-05T01:00:00Z", status: "completed", summary: "Draft attached", ...over });
-    expect(await act("importPrepResult", { job_id: JOB, result: result({ packet_sha256: "f".repeat(64) }) })).toContain("prep=rejected");
+    expect(await act("importPrepResult", { job_id: JOB, lease_token: TOKEN, result: result({ packet_sha256: "f".repeat(64) }) })).toContain("prep=rejected");
+    expect(await act("importPrepResult", { job_id: JOB, result: result() })).toBe("/dashboard/owner?prep=invalid#prep"); // no hand-off token
     expect(db.rpc).toHaveLength(0);
     db.rpcResult = { data: "succeeded", error: null };
-    expect(await act("importPrepResult", { job_id: JOB, result: result() })).toBe("/dashboard/owner?prep=succeeded#prep");
-    expect(db.rpc.at(-1)).toEqual(["prep_complete", { p_job: JOB, p_worker: "handoff:owner", p_result_text: result() }]);
+    expect(await act("importPrepResult", { job_id: JOB, lease_token: TOKEN, result: result() })).toBe("/dashboard/owner?prep=succeeded#prep");
+    expect(db.rpc.at(-1)).toEqual(["prep_complete", { p_job: JOB, p_token: TOKEN, p_result_text: result() }]);
     db.rpcResult = { data: "stale", error: null };
-    expect(await act("importPrepResult", { job_id: JOB, result: result() })).toBe("/dashboard/owner?prep=stale#prep");
+    expect(await act("importPrepResult", { job_id: JOB, lease_token: TOKEN, result: result() })).toBe("/dashboard/owner?prep=stale#prep");
     db.rpcResult = { data: "retrying", error: null };
-    expect(await act("importPrepResult", { job_id: JOB, result: result({ status: "blocked", summary: "Site was down" }) })).toBe("/dashboard/owner?prep=retrying#prep");
-    expect(db.rpc.at(-1)?.[0]).toBe("prep_fail");
+    expect(await act("importPrepResult", { job_id: JOB, lease_token: TOKEN, result: result({ status: "blocked", summary: "Site was down" }) })).toBe("/dashboard/owner?prep=retrying#prep");
+    expect(db.rpc.at(-1)).toEqual(["prep_fail", { p_job: JOB, p_token: TOKEN, p_error: "blocked: Site was down" }]);
     db.rpcResult = { data: null, error: { message: "timeout" } };
-    expect(await act("importPrepResult", { job_id: JOB, result: result() })).toBe("/dashboard/owner?prep=error#prep");
+    expect(await act("importPrepResult", { job_id: JOB, lease_token: TOKEN, result: result() })).toBe("/dashboard/owner?prep=error#prep");
   });
 
   it("controls and pause go through the database functions with the owner named", async () => {
@@ -213,10 +204,10 @@ describe("preparation queue actions", () => {
   it("the packet download is owner-only and returns the exact stored text with its database hash", async () => {
     const { GET } = await import("@/app/dashboard/owner/prep/[jobId]/packet/route");
     const call = () => GET(new Request("http://x/"), { params: Promise.resolve({ jobId: JOB }) });
-    db.job = { id: JOB, packet_text: '{"contract_id":"oc-prep-packet/0.1"}', packet_sha256: "d".repeat(64) };
+    db.job = { id: JOB, packet_text: '{"contract_id":"oc-prep-packet/0.2"}', packet_sha256: "d".repeat(64) };
     const res = await call();
     expect(res.status).toBe(200);
-    expect(await res.text()).toBe('{"contract_id":"oc-prep-packet/0.1"}');
+    expect(await res.text()).toBe('{"contract_id":"oc-prep-packet/0.2"}');
     expect(res.headers.get("X-Packet-SHA256")).toBe("d".repeat(64));
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     for (const user of ["member", null] as const) {
