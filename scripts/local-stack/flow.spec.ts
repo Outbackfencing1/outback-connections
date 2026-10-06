@@ -307,7 +307,7 @@ test("the conversation log not tied to a quote is paged, so older entries stay r
   }
 });
 
-test("preparation queue: queue a job, hand it off, download its exact packet, import a result; no worker runs by itself", async ({ page }) => {
+test("preparation queue: queue, hand off, reclaim; an old file is refused through the refreshed form; the current one is recorded; no worker runs by itself", async ({ page }) => {
   psql(`insert into digital_services_pilot (id, company, lane, offer) values ('OC-981', 'Fixture Prep Co', 'email', 'quote_form_490') on conflict do nothing`);
   psql(`insert into digital_services_pilot_evidence (company_id, source_url, source_type, checked_at, fact_text, recorded_by) values ('OC-981', 'https://fixture.example/', 'primary_business_website', now(), 'Fixture fact for the prep packet.', 'local-stack')`);
   try {
@@ -329,21 +329,42 @@ test("preparation queue: queue a job, hand it off, download its exact packet, im
     const [jobId, packetSha] = psql(`select id || '|' || packet_sha256 from digital_services_prep_jobs where company_id = 'OC-981'`).split("|");
     expect(psql(`select status from digital_services_prep_jobs where id = '${jobId}'`)).toBe("queued"); // nothing ran it
 
-    const job = page.locator("#prep li", { hasText: "OC-981" });
-    await job.getByRole("button", { name: "Hand off to me (24 h)" }).click();
-    await expect(page).toHaveURL(/prep=claimed/);
-    const packet = await page.request.get(`/dashboard/owner/prep/${jobId}/packet`);
-    expect(packet.status()).toBe(200);
-    const text = await packet.text();
-    expect(createHash("sha256").update(text, "utf8").digest("hex")).toBe(packetSha);
-    expect(packet.headers()["x-packet-sha256"]).toBe(packetSha);
-    expect(JSON.parse(text)).toMatchObject({ contract_id: "oc-prep-packet/0.2", company: { id: "OC-981" }, evidence: [{ fact_text: "Fixture fact for the prep packet." }], constraints: { sendable: false } });
+    const handOff = async () => {
+      await page.goto("/dashboard/owner#prep");
+      await page.locator("#prep li", { hasText: "OC-981" }).getByRole("button", { name: "Hand off to me (24 h)" }).click();
+      await expect(page).toHaveURL(/prep=claimed/);
+      const res = await page.request.get(`/dashboard/owner/prep/${jobId}/assignment`);
+      expect(res.status()).toBe(200);
+      return JSON.parse(await res.text()) as { assignment_id: string; lease_generation: number; packet_text: string; packet_sha256: string };
+    };
+    // Claim 1: the assignment carries the exact packet text (hash = the database's) and this claim's identity.
+    const first = await handOff();
+    expect(createHash("sha256").update(first.packet_text, "utf8").digest("hex")).toBe(packetSha);
+    expect(first).toMatchObject({ packet_sha256: packetSha, lease_generation: 1 });
+    expect(JSON.parse(first.packet_text)).toMatchObject({ contract_id: "oc-prep-packet/0.2", company: { id: "OC-981" }, evidence: [{ fact_text: "Fixture fact for the prep packet." }], constraints: { sendable: false } });
+    const raw = await page.request.get(`/dashboard/owner/prep/${jobId}/packet`);
+    expect(await raw.text()).toBe(first.packet_text);
+    const result = (a: { assignment_id: string; lease_generation: number }, sha = packetSha) =>
+      JSON.stringify({ contract_id: "oc-prep-result/0.2", job_id: jobId, packet_sha256: sha, job_kind: "copy_draft", assignment_id: a.assignment_id, lease_generation: a.lease_generation, produced_by: "fixture worker", produced_at: new Date().toISOString(), status: "completed", summary: "Fixture draft prepared" });
+    const oldFile = result(first);
 
-    // A result for a different packet is rejected; the right one is recorded once.
-    const result = (sha: string) =>
-      JSON.stringify({ contract_id: "oc-prep-result/0.1", job_id: jobId, packet_sha256: sha, job_kind: "copy_draft", produced_by: "fixture worker", produced_at: new Date().toISOString(), status: "completed", summary: "Fixture draft prepared" });
+    // Claim 1 expires and the job is handed off again (claim 2). The refreshed
+    // form now carries claim 2's token: claim 1's file must still be refused.
+    psql(`update digital_services_prep_jobs set lease_expires_at = now() - interval '1 second' where id = '${jobId}'`);
+    const second = await handOff();
+    expect(second.lease_generation).toBe(2);
+    expect(second.assignment_id).not.toBe(first.assignment_id);
+    const before = psql(`select status || '/' || lease_generation || '/' || assignment_id || '/' || coalesce(result_sha256, '-') from digital_services_prep_jobs where id = '${jobId}'`);
     await page.goto("/dashboard/owner#prep");
-    await page.locator("#prep li", { hasText: "OC-981" }).locator("textarea[name=result]").fill(result("f".repeat(64)));
+    await page.locator("#prep li", { hasText: "OC-981" }).locator("textarea[name=result]").fill(oldFile);
+    await page.getByRole("button", { name: "Import result" }).click();
+    await expect(page).toHaveURL(/prep=superseded/);
+    await expect(page.locator("#prep p[role=alert]")).toContainText("earlier hand-off");
+    expect(psql(`select status || '/' || lease_generation || '/' || assignment_id || '/' || coalesce(result_sha256, '-') from digital_services_prep_jobs where id = '${jobId}'`)).toBe(before);
+
+    // A result for a different packet is rejected; the current one is recorded once.
+    await page.goto("/dashboard/owner#prep");
+    await page.locator("#prep li", { hasText: "OC-981" }).locator("textarea[name=result]").fill(result(second, "f".repeat(64)));
     await page.getByRole("button", { name: "Import result" }).click();
     await expect(page).toHaveURL(/prep=rejected/);
     await page.goto("/dashboard/owner#prep");
@@ -352,16 +373,18 @@ test("preparation queue: queue a job, hand it off, download its exact packet, im
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
     await page.screenshot({ path: process.env.PREP_SCREENSHOT_PHONE ?? "/tmp/owner-prep-phone.png", fullPage: true });
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.locator("#prep li", { hasText: "OC-981" }).locator("textarea[name=result]").fill(result(packetSha));
+    const current = result(second);
+    await page.locator("#prep li", { hasText: "OC-981" }).locator("textarea[name=result]").fill(current);
     await page.getByRole("button", { name: "Import result" }).click();
     await expect(page).toHaveURL(/prep=succeeded/);
     await expect(page.locator("#prep p[role=status]")).toContainText("nothing was approved, sent or published");
-    expect(psql(`select status || '/' || (result_sha256 = encode(sha256(convert_to(result_text, 'UTF8')), 'hex')) from digital_services_prep_jobs where id = '${jobId}'`)).toBe("succeeded/true");
+    expect(psql(`select status || '/' || (result_sha256 = encode(sha256(convert_to(result_text, 'UTF8')), 'hex')) || '/' || (result_text = '${current.replace(/'/g, "''")}') from digital_services_prep_jobs where id = '${jobId}'`)).toBe("succeeded/true/true");
     // A member can't download packets.
     await page.context().clearCookies();
     await as(page, "member");
     expect((await page.request.get(`/dashboard/owner/prep/${jobId}/packet`)).status()).toBe(404);
-    console.log("[flow] prep queue: queued once (idempotent), handed off, packet hash matched the database, wrong-packet result rejected, result recorded");
+    expect((await page.request.get(`/dashboard/owner/prep/${jobId}/assignment`)).status()).toBe(404);
+    console.log("[flow] prep queue: queued once, handed off twice; claim 1's file refused through the refreshed form (no state change); wrong-packet file rejected; claim 2's file recorded");
   } finally {
     psql(`delete from digital_services_prep_jobs where company_id = 'OC-981'; delete from digital_services_pilot_evidence where company_id = 'OC-981'; delete from digital_services_pilot where id = 'OC-981'`);
   }

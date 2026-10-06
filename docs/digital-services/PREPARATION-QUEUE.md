@@ -16,10 +16,11 @@ The private engine's source (`outback-digital-services/app/src/worker.ts`, `impo
 | Piece | Where |
 |---|---|
 | Tables and functions | `supabase/migrations/_drafts/digital_services_prep_queue.sql` (draft, **not applied**; apply after `digital_services_pilot.sql`) |
-| Packet/result contracts | `lib/digital-services/prep-queue.ts` (`oc-prep-packet/0.2` is built by the database; `oc-prep-result/0.1` is validated here) |
+| Packet/result contracts | `lib/digital-services/prep-queue.ts` (`oc-prep-packet/0.2` is built by the database; `oc-prep-assignment/0.1` wraps it for one hand-off; `oc-prep-result/0.2` is validated here) |
 | Owner actions | `app/dashboard/owner/prep-actions.ts` (each re-checks `getOwnerAccess()`) |
 | Dashboard section | `app/dashboard/owner/PrepSection.tsx` (`#prep` on `/dashboard/owner`) |
-| Packet download | `GET /dashboard/owner/prep/<job id>/packet` (owner only; anyone else gets a 404) |
+| Assignment download | `GET /dashboard/owner/prep/<job id>/assignment`: the exact packet text plus the live hand-off's assignment ID and generation (owner only; anyone else gets a 404; 409 when nobody holds the job) |
+| Packet download | `GET /dashboard/owner/prep/<job id>/packet`: the raw packet text (owner only) |
 
 ## Rules the database enforces
 
@@ -67,6 +68,14 @@ The private engine's source (`outback-digital-services/app/src/worker.ts`, `impo
 - The service role can only read jobs. It can't insert, update or delete them directly: queueing goes through `prep_enqueue`.
 - `anon` and `authenticated` get nothing.
 
+**Result files are bound to the hand-off that produced them**
+- Each claim gets a new assignment ID and lease generation as well as its lease token.
+- A result file must repeat the assignment ID and generation from the assignment it was made from.
+- The import form, the file and the live claim must all name the same assignment.
+- `prep_complete` / `prep_fail` take the assignment and check it against the live claim and against the file's own text. A mismatch is `wrong_assignment`, with no state change.
+- So a file made under an earlier claim is refused after the job is handed off again, even when it's submitted from a refreshed page carrying the new claim's token. This holds whether the same worker or another one reclaimed it.
+- The packet and its hash don't change between hand-offs.
+
 **Scope**
 - The queue never writes drafts, reviews, approvals or contact events.
 
@@ -74,13 +83,14 @@ The private engine's source (`outback-digital-services/app/src/worker.ts`, `impo
 
 1. On `/dashboard/owner#prep`, use **Queue a preparation job**. Enter the pilot ID, the kind, and the draft ID for review and preview jobs.
 2. Press **Hand off to me (24 h)**. This claims the job as `handoff:owner` with a 24-hour lease. The import form carries that hand-off's lease token, so a stale tab from an earlier hand-off can't record a result under a later one (reload the page after handing off again).
-3. Press **Download packet** to get the exact stored text. The `X-Packet-SHA256` header carries the database's hash.
+3. Press **Download assignment**. You get the exact stored packet text (its hash is the database's, also in `X-Packet-SHA256`), with this hand-off's `assignment_id` and `lease_generation`.
    - Give the packet to the private engine, or work it yourself.
    - The packet carries its task, the company facts, the full evidence text, the exact draft copy (for review and preview jobs) and the constraints: not sendable, no contact, no spending, no publishing.
-4. Paste the result file (`oc-prep-result/0.1`) into **Import result**. It must name:
+4. Paste the result file (`oc-prep-result/0.2`) into **Import result**. It must name:
    - this job;
    - this exact packet hash;
    - this kind;
+   - this hand-off's `assignment_id` and `lease_generation`. A file from an earlier hand-off is refused as "superseded" and changes nothing; redo the work from the current assignment;
    - who produced it, and when.
 
    It is rejected if it has any of these:
@@ -95,7 +105,7 @@ The private engine's source (`outback-digital-services/app/src/worker.ts`, `impo
 
 ## What the engine would need to work the queue
 
-- It would call `prep_claim` with the service role, its own worker name and the default 10-minute lease, then `prep_heartbeat` / `prep_complete` / `prep_fail` with the token that claim returned.
+- It would call `prep_claim` with the service role, its own worker name and the default 10-minute lease, then `prep_heartbeat` / `prep_complete` / `prep_fail` with the token and assignment ID that claim returned.
 - This is not built or scheduled. Josh has to approve it, as it would be a background job.
 - Whatever runs it, the database rules above still hold. It can't mark a job done without a lease, revive a stale job, or touch approvals or sending.
 

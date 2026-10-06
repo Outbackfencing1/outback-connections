@@ -26,6 +26,11 @@
 --     and a unique lease token. Heartbeat, complete and fail need that token
 --     and an unexpired lease, so an earlier claim of the same job (by the
 --     same worker or another) can't act under a later one.
+--   * Each claim also gets a unique assignment ID. The assignment envelope a
+--     worker downloads carries it, and a result file must repeat it and the
+--     lease generation; complete and fail refuse ('wrong_assignment', no state
+--     change) a file made for an earlier claim, even when it's paired with
+--     the current claim's token. The packet itself, and its hash, don't change.
 --   * An expired lease is reclaimable (restart recovery); each claim counts
 --     as an attempt, and a job that runs out of attempts fails.
 --   * A failure re-queues with exponential backoff (1, 2, 4 … minutes, capped
@@ -46,8 +51,9 @@
 --           drop function if exists public.prep_set_paused(boolean, text);
 --           drop function if exists public.prep_claim(text, integer, uuid);
 --           drop function if exists public.prep_heartbeat(uuid, uuid, jsonb, integer);
---           drop function if exists public.prep_complete(uuid, uuid, text);
---           drop function if exists public.prep_fail(uuid, uuid, text);
+--           drop function if exists public.prep_complete(uuid, uuid, uuid, text);
+--           drop function if exists public.prep_fail(uuid, uuid, uuid, text);
+--           drop function if exists public.ds_prep_result_assignment(text);
 --           drop function if exists public.ds_prep_job_guard();
 --           drop table if exists public.digital_services_prep_jobs;
 --           drop table if exists public.digital_services_prep_settings;
@@ -78,6 +84,7 @@ create table if not exists public.digital_services_prep_jobs (
   lease_expires_at  timestamptz,
   lease_generation  integer not null default 0 check (lease_generation >= 0),
   lease_token       uuid,
+  assignment_id     uuid,
   progress          jsonb not null default '{}'::jsonb check (jsonb_typeof(progress) = 'object'),
   last_error        text check (last_error is null or char_length(last_error) <= 500),
   result_text       text check (result_text is null or char_length(result_text) <= 500000),
@@ -91,9 +98,13 @@ create unique index if not exists uq_ds_prep_job_packet on public.digital_servic
 -- Earlier drafts of this file: same columns, and the old worker-name signatures.
 alter table public.digital_services_prep_jobs add column if not exists lease_generation integer not null default 0;
 alter table public.digital_services_prep_jobs add column if not exists lease_token uuid;
+alter table public.digital_services_prep_jobs add column if not exists assignment_id uuid;
 drop function if exists public.prep_heartbeat(uuid, text, jsonb, integer);
 drop function if exists public.prep_complete(uuid, text, text);
 drop function if exists public.prep_fail(uuid, text, text);
+-- Earlier signatures without the assignment binding.
+drop function if exists public.prep_complete(uuid, uuid, text);
+drop function if exists public.prep_fail(uuid, uuid, text);
 create index if not exists ix_ds_prep_jobs_ready on public.digital_services_prep_jobs (status, next_attempt_at, created_at);
 
 -- Hashes are computed here from the exact text; the packet, its company, kind
@@ -124,6 +135,7 @@ begin
     new.lease_expires_at := null;
     new.lease_generation := 0;
     new.lease_token := null;
+    new.assignment_id := null;
     new.result_text := null;
     new.result_sha256 := null;
     return new;
@@ -241,7 +253,7 @@ begin
     end,
     'constraints', jsonb_build_object('sendable', false, 'contact', 'none', 'spending', 'none', 'publishing', 'none',
                                       'approvals', 'owner only, on the review screen'),
-    'result_contract', 'oc-prep-result/0.1'
+    'result_contract', 'oc-prep-result/0.2'
   );
   ptext := packet::text;
   psha := encode(sha256(convert_to(ptext, 'UTF8')), 'hex');
@@ -290,7 +302,7 @@ begin
     if j.id is null then return; end if;
     if j.evidence_revision is distinct from (select evidence_revision from public.digital_services_pilot where id = j.company_id) then
       update public.digital_services_prep_jobs
-        set status = 'stale', lease_owner = null, lease_expires_at = null, lease_token = null,
+        set status = 'stale', lease_owner = null, lease_expires_at = null, lease_token = null, assignment_id = null,
             last_error = 'evidence changed since this job was queued', finished_at = now()
         where id = j.id;
       if p_job is not null then return; end if;
@@ -298,7 +310,7 @@ begin
     end if;
     if j.attempts >= j.max_attempts then
       update public.digital_services_prep_jobs
-        set status = 'failed', lease_owner = null, lease_expires_at = null, lease_token = null,
+        set status = 'failed', lease_owner = null, lease_expires_at = null, lease_token = null, assignment_id = null,
             last_error = coalesce(last_error, 'no attempts left'), finished_at = now()
         where id = j.id;
       if p_job is not null then return; end if;
@@ -308,7 +320,7 @@ begin
       update public.digital_services_prep_jobs
         set status = 'leased', attempts = attempts + 1, lease_owner = btrim(p_worker),
             lease_expires_at = now() + make_interval(secs => p_lease_seconds),
-            lease_generation = lease_generation + 1, lease_token = gen_random_uuid()
+            lease_generation = lease_generation + 1, lease_token = gen_random_uuid(), assignment_id = gen_random_uuid()
         where id = j.id
         returning *;
     return;
@@ -334,9 +346,24 @@ begin
 end;
 $$;
 
+-- The assignment a result file names (null if it names none or isn't JSON).
+create or replace function public.ds_prep_result_assignment(p_text text)
+returns text
+language plpgsql
+immutable
+set search_path = public
+as $$
+begin
+  return (p_text::jsonb) ->> 'assignment_id';
+exception when others then
+  return null;
+end;
+$$;
+
 -- Record the result text. Idempotent for the same result; refuses an expired
--- or superseded claim, a different result, or a job whose evidence changed.
-create or replace function public.prep_complete(p_job uuid, p_token uuid, p_result_text text)
+-- or superseded claim, a file made for another claim, a different result, or
+-- a job whose evidence changed.
+create or replace function public.prep_complete(p_job uuid, p_token uuid, p_assignment uuid, p_result_text text)
 returns text
 language plpgsql
 security definer
@@ -353,15 +380,21 @@ begin
   if j.status <> 'leased' or p_token is null or j.lease_token is distinct from p_token or j.lease_expires_at < now() then
     return 'lost_lease';
   end if;
+  -- The file must be the one made for this claim: the caller's assignment and
+  -- the one written in the file both equal the live claim's. Nothing changes otherwise.
+  if p_assignment is null or j.assignment_id is distinct from p_assignment
+     or ds_prep_result_assignment(p_result_text) is distinct from p_assignment::text then
+    return 'wrong_assignment';
+  end if;
   if j.evidence_revision is distinct from (select evidence_revision from public.digital_services_pilot where id = j.company_id) then
     update public.digital_services_prep_jobs
-      set status = 'stale', lease_owner = null, lease_expires_at = null, lease_token = null,
+      set status = 'stale', lease_owner = null, lease_expires_at = null, lease_token = null, assignment_id = null,
           last_error = 'evidence changed while the job was running', finished_at = now()
       where id = p_job;
     return 'stale';
   end if;
   update public.digital_services_prep_jobs
-    set status = 'succeeded', result_text = p_result_text, lease_owner = null, lease_expires_at = null, lease_token = null,
+    set status = 'succeeded', result_text = p_result_text, lease_owner = null, lease_expires_at = null, lease_token = null, assignment_id = null,
         last_error = null, finished_at = now()
     where id = p_job;
   return 'succeeded';
@@ -371,7 +404,7 @@ $$;
 -- A failed attempt: back off (1, 2, 4 … minutes, capped at 60) and re-queue,
 -- or fail for good once attempts are used up. Only this claim's token, and
 -- only while its lease is live: a late failure changes nothing.
-create or replace function public.prep_fail(p_job uuid, p_token uuid, p_error text)
+create or replace function public.prep_fail(p_job uuid, p_token uuid, p_assignment uuid, p_error text)
 returns text
 language plpgsql
 security definer
@@ -385,15 +418,18 @@ begin
   if j.status <> 'leased' or p_token is null or j.lease_token is distinct from p_token or j.lease_expires_at < now() then
     return 'lost_lease';
   end if;
+  if p_assignment is null or j.assignment_id is distinct from p_assignment then
+    return 'wrong_assignment';
+  end if;
   if j.attempts >= j.max_attempts then
     update public.digital_services_prep_jobs
-      set status = 'failed', lease_owner = null, lease_expires_at = null, lease_token = null,
+      set status = 'failed', lease_owner = null, lease_expires_at = null, lease_token = null, assignment_id = null,
           last_error = left(p_error, 500), finished_at = now()
       where id = p_job;
     return 'failed';
   end if;
   update public.digital_services_prep_jobs
-    set status = 'queued', lease_owner = null, lease_expires_at = null, lease_token = null, last_error = left(p_error, 500),
+    set status = 'queued', lease_owner = null, lease_expires_at = null, lease_token = null, assignment_id = null, last_error = left(p_error, 500),
         next_attempt_at = now() + make_interval(mins => least(60, power(2, greatest(j.attempts - 1, 0))::int))
     where id = p_job;
   return 'retrying';
@@ -428,7 +464,7 @@ begin
     update public.digital_services_prep_jobs set status = 'queued', attempts = 0, next_attempt_at = now(), finished_at = null where id = p_job;
   elsif p_action = 'cancel' and j.status in ('queued', 'paused', 'leased', 'failed') then
     update public.digital_services_prep_jobs
-      set status = 'cancelled', lease_owner = null, lease_expires_at = null, lease_token = null,
+      set status = 'cancelled', lease_owner = null, lease_expires_at = null, lease_token = null, assignment_id = null,
           last_error = left('cancelled by ' || btrim(p_by), 500), finished_at = now()
       where id = p_job;
   elsif p_action in ('pause', 'resume', 'retry', 'cancel') then
@@ -466,9 +502,10 @@ grant select on public.digital_services_prep_jobs to service_role;
 grant select on public.digital_services_prep_settings to service_role;
 revoke execute on function public.prep_enqueue(text, text, uuid, text, integer),
   public.prep_claim(text, integer, uuid), public.prep_heartbeat(uuid, uuid, jsonb, integer),
-  public.prep_complete(uuid, uuid, text), public.prep_fail(uuid, uuid, text),
-  public.prep_control(uuid, text, text), public.prep_set_paused(boolean, text) from public, anon, authenticated;
+  public.prep_complete(uuid, uuid, uuid, text), public.prep_fail(uuid, uuid, uuid, text),
+  public.prep_control(uuid, text, text), public.prep_set_paused(boolean, text),
+  public.ds_prep_result_assignment(text) from public, anon, authenticated;
 grant execute on function public.prep_enqueue(text, text, uuid, text, integer),
   public.prep_claim(text, integer, uuid), public.prep_heartbeat(uuid, uuid, jsonb, integer),
-  public.prep_complete(uuid, uuid, text), public.prep_fail(uuid, uuid, text),
+  public.prep_complete(uuid, uuid, uuid, text), public.prep_fail(uuid, uuid, uuid, text),
   public.prep_control(uuid, text, text), public.prep_set_paused(boolean, text) to service_role;

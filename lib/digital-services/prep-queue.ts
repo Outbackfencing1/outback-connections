@@ -13,7 +13,9 @@ export const PREP_JOBS_TABLE = "digital_services_prep_jobs";
 export const PREP_SETTINGS_TABLE = "digital_services_prep_settings";
 export const PREP_PAGE_SIZE = 20;
 export const PREP_PACKET_CONTRACT = "oc-prep-packet/0.2";
-export const PREP_RESULT_CONTRACT = "oc-prep-result/0.1";
+export const PREP_RESULT_CONTRACT = "oc-prep-result/0.2";
+/** What a worker downloads for one claim: the exact packet plus this claim's identity. */
+export const PREP_ASSIGNMENT_CONTRACT = "oc-prep-assignment/0.1";
 export const PREP_KINDS = ["research_review", "evidence_refresh", "preview_build", "copy_draft", "copy_review"] as const;
 export type PrepKind = (typeof PREP_KINDS)[number];
 export const PREP_KIND_LABELS: Record<PrepKind, string> = {
@@ -44,7 +46,42 @@ export const ENQUEUE_REFUSALS = [
   "this packet was captured before an evidence change: build a new one",
 ] as const;
 
-export type PrepJobFacts = { id: string; kind: PrepKind; packet_sha256: string; created_at: string };
+/**
+ * The job as it stands now. assignment_id and lease_generation identify the
+ * live claim (null/0 when nobody holds it); a result file must repeat both.
+ */
+export type PrepJobFacts = {
+  id: string;
+  kind: PrepKind;
+  packet_sha256: string;
+  created_at: string;
+  assignment_id: string | null;
+  lease_generation: number;
+};
+
+/**
+ * The assignment envelope for the live claim: the exact packet text (its hash
+ * unchanged), and the identity the result file must repeat. A file made from
+ * an earlier claim's envelope names another assignment and is refused.
+ */
+export function buildAssignment(job: PrepJobFacts & { packet_text: string }): string | null {
+  if (!job.assignment_id || job.lease_generation < 1) return null;
+  return JSON.stringify(
+    {
+      contract_id: PREP_ASSIGNMENT_CONTRACT,
+      job_id: job.id,
+      job_kind: job.kind,
+      assignment_id: job.assignment_id,
+      lease_generation: job.lease_generation,
+      packet_sha256: job.packet_sha256,
+      packet_text: job.packet_text,
+      result_contract: PREP_RESULT_CONTRACT,
+      result_must_repeat: ["job_id", "packet_sha256", "job_kind", "assignment_id", "lease_generation"],
+    },
+    null,
+    2
+  );
+}
 export type PrepResult = {
   status: "completed" | "blocked";
   produced_by: string;
@@ -54,7 +91,21 @@ export type PrepResult = {
   review: { verdict: "pass" | "changes_requested" | "hold"; reviewer: string; notes: string } | null;
 };
 
-const RESULT_KEYS = ["contract_id", "job_id", "packet_sha256", "job_kind", "produced_by", "produced_at", "status", "summary", "outputs", "review", "findings"];
+const RESULT_KEYS = [
+  "contract_id",
+  "job_id",
+  "packet_sha256",
+  "job_kind",
+  "assignment_id",
+  "lease_generation",
+  "produced_by",
+  "produced_at",
+  "status",
+  "summary",
+  "outputs",
+  "review",
+  "findings",
+];
 const APPROVAL_KEY = /(approv|consent|authori[sz]|cleared|permission|send_?ok|send_?ready|ready_to_send)/i;
 const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/i;
 
@@ -71,9 +122,11 @@ function deepProblems(v: unknown, path: string, out: string[]) {
 
 /**
  * Validate a result file against the job it claims to answer. The result must
- * name this job, this exact packet hash and this kind. Nothing is trusted
- * that the database can check itself; the result's own hash is computed by
- * the database when it's recorded.
+ * name this job, this exact packet hash, this kind, and the live claim's
+ * assignment and lease generation, so a file made for an earlier claim (by
+ * the same worker or another) is refused even after a refresh. Nothing is
+ * trusted that the database can check itself; it re-checks the assignment,
+ * and computes the result's hash when it's recorded.
  */
 export function validateResult(text: string, job: PrepJobFacts, now: Date): { ok: true; result: PrepResult } | { ok: false; errors: string[] } {
   if (text.length > 500_000) return { ok: false, errors: ["result file is larger than 500 KB"] };
@@ -90,6 +143,10 @@ export function validateResult(text: string, job: PrepJobFacts, now: Date): { ok
   if (r.job_id !== job.id) errors.push("job_id isn't this job");
   if (r.packet_sha256 !== job.packet_sha256) errors.push("packet_sha256 isn't this job's packet: the result answers a different packet");
   if (r.job_kind !== job.kind) errors.push("job_kind doesn't match the job");
+  if (!job.assignment_id) errors.push("the job isn't handed off now: hand it off and work from the new assignment");
+  else if (r.assignment_id !== job.assignment_id || r.lease_generation !== job.lease_generation) {
+    errors.push("assignment_id/lease_generation aren't the current hand-off's: this file answers an earlier hand-off");
+  }
   for (const k of Object.keys(r)) if (!RESULT_KEYS.includes(k)) errors.push(`unexpected field ${k}`);
   deepProblems(r, "$", errors);
   const produced_by = typeof r.produced_by === "string" ? r.produced_by.trim() : "";
@@ -139,6 +196,7 @@ export type PrepOutcome =
   | "already"
   | "conflict"
   | "lost_lease"
+  | "superseded"
   | "stale"
   | "retrying"
   | "failed"
@@ -154,12 +212,16 @@ export type PrepOutcome =
 export const PREP_NOTICES: Record<PrepOutcome, { ok: boolean; text: string }> = {
   queued: { ok: true, text: "Queued. Nothing runs by itself: hand it off when you're ready." },
   already_queued: { ok: true, text: "That exact packet is already queued for this company and kind; nothing was added." },
-  claimed: { ok: true, text: "Handed off to you for 24 hours. Download the packet, and import the result file here." },
+  claimed: { ok: true, text: "Handed off to you for 24 hours. Download the assignment (packet + hand-off ID), and import the result file here." },
   not_ready: { ok: false, text: "Not handed off: the job isn't ready (paused, backing off, stale, already leased, or the queue is paused)." },
   succeeded: { ok: true, text: "Result recorded. It is the worker's report: nothing was approved, sent or published." },
   already: { ok: true, text: "That exact result was already recorded; nothing changed." },
   conflict: { ok: false, text: "Not recorded: this job already has a different result." },
   lost_lease: { ok: false, text: "Not recorded: the hand-off expired or was cancelled. Hand it off again first." },
+  superseded: {
+    ok: false,
+    text: "Not recorded: that result answers an earlier hand-off of this job (or the page was out of date). Nothing changed. Download the current assignment and redo the work from it.",
+  },
   stale: { ok: false, text: "Not recorded: the company's evidence changed since this job was queued. Queue a new job." },
   retrying: { ok: true, text: "Recorded as blocked; the job will be retried after its backoff." },
   failed: { ok: false, text: "Recorded as blocked, and the job has no attempts left. Retry it to start again." },

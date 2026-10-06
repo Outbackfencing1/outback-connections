@@ -194,7 +194,9 @@ test.describe("phase 2: acceptance to production (after a restart)", () => {
     // The hand-off survived the restart; its result is recorded once.
     const { prepJob, prepSha } = load();
     expect(psql(`select status || '/' || lease_owner from digital_services_prep_jobs where id = '${prepJob}'`)).toBe("leased/handoff:owner");
-    const result = JSON.stringify({ contract_id: "oc-prep-result/0.1", job_id: prepJob, packet_sha256: prepSha, job_kind: "copy_draft", produced_by: "fixture worker", produced_at: new Date().toISOString(), status: "completed", summary: "Fixture draft prepared" });
+    // The assignment for the live hand-off survived the restart too.
+    const assignment = JSON.parse(await (await page.request.get(`/dashboard/owner/prep/${prepJob}/assignment`)).text()) as { assignment_id: string; lease_generation: number };
+    const result = JSON.stringify({ contract_id: "oc-prep-result/0.2", job_id: prepJob, packet_sha256: prepSha, job_kind: "copy_draft", assignment_id: assignment.assignment_id, lease_generation: assignment.lease_generation, produced_by: "fixture worker", produced_at: new Date().toISOString(), status: "completed", summary: "Fixture draft prepared" });
     for (const expected of ["succeeded", null]) {
       await page.goto("/dashboard/owner#prep");
       const row = page.locator("#prep li", { hasText: "OC-982" });
@@ -205,7 +207,7 @@ test.describe("phase 2: acceptance to production (after a restart)", () => {
       } else {
         // Re-importing after success isn't offered, and the database answers 'already'.
         await expect(row.locator("textarea[name=result]")).toHaveCount(0);
-        expect(psql(`select prep_complete('${prepJob}', (select coalesce(lease_token, gen_random_uuid()) from digital_services_prep_jobs where id = '${prepJob}'), '${result.replace(/'/g, "''")}')`)).toBe("already");
+        expect(psql(`select prep_complete('${prepJob}', gen_random_uuid(), '${assignment.assignment_id}', '${result.replace(/'/g, "''")}')`)).toBe("already");
       }
     }
     console.log("[lifecycle] phase 2: restart survived; accepted in writing; A$500 deposit gated; refused save visible; remaining deposit -> production; prep hand-off survived and recorded once");

@@ -17,6 +17,7 @@ import {
   PREP_KINDS,
   ENQUEUE_REFUSALS,
   validateResult,
+  type PrepJobFacts,
   type PrepKind,
   type PrepOutcome,
 } from "@/lib/digital-services/prep-queue";
@@ -30,7 +31,7 @@ async function ownerOnly(): Promise<string> {
   return access.userId;
 }
 function done(outcome: PrepOutcome, extra: Record<string, string> = {}): never {
-  if (!["invalid", "error", "unavailable", "rejected", "not_ready", "not_allowed", "conflict", "lost_lease"].includes(outcome)) revalidatePath("/dashboard/owner");
+  if (!["invalid", "error", "unavailable", "rejected", "not_ready", "not_allowed", "conflict", "lost_lease", "superseded"].includes(outcome)) revalidatePath("/dashboard/owner");
   const params = new URLSearchParams({ prep: outcome, ...extra });
   redirect(`/dashboard/owner?${params.toString()}#prep`);
 }
@@ -67,29 +68,46 @@ export async function handOffPrepJob(form: FormData): Promise<void> {
   done(Array.isArray(data) && data.length === 1 ? "claimed" : "not_ready");
 }
 
-/** Import the result file for a handed-off job. */
+/**
+ * Import the result file for a handed-off job. The file, the form and the live
+ * claim must all name the same assignment: a file made for an earlier claim is
+ * refused even when it's submitted from a refreshed form carrying the current
+ * claim's token. The database checks the binding again before any change.
+ */
 export async function importPrepResult(form: FormData): Promise<void> {
   await ownerOnly();
   const id = str(form.get("job_id"));
   const token = str(form.get("lease_token"));
+  const formAssignment = str(form.get("assignment_id"));
   const text = typeof form.get("result") === "string" ? (form.get("result") as string) : "";
-  if (!UUID.test(id) || !UUID.test(token) || !text.trim()) done("invalid");
+  if (!UUID.test(id) || !UUID.test(token) || !UUID.test(formAssignment) || !text.trim()) done("invalid");
   const admin = createAdminClient();
   if (!admin) done("unavailable");
-  const { data: job, error } = await admin.from(PREP_JOBS_TABLE).select("id, kind, packet_sha256, created_at").eq("id", id).maybeSingle();
+  const { data: job, error } = await admin
+    .from(PREP_JOBS_TABLE)
+    .select("id, kind, packet_sha256, created_at, assignment_id, lease_generation")
+    .eq("id", id)
+    .maybeSingle();
   if (error) done("error");
   if (!job) done("invalid");
-  const checked = validateResult(text, job as { id: string; kind: PrepKind; packet_sha256: string; created_at: string }, new Date());
-  if (!checked.ok) done("rejected", { reason: checked.errors.slice(0, 3).join("; ").slice(0, 300) });
-  if (checked.result.status === "blocked") {
-    const r = await admin.rpc("prep_fail", { p_job: id, p_token: token, p_error: `blocked: ${checked.result.summary}`.slice(0, 500) });
-    if (r.error) done("error");
-    done(r.data === "retrying" ? "retrying" : r.data === "failed" ? "failed" : "lost_lease");
+  const live = job as PrepJobFacts;
+  // The page the owner submitted from must still show the live claim.
+  if (!live.assignment_id || live.assignment_id !== formAssignment) done("superseded");
+  const checked = validateResult(text, live, new Date());
+  if (!checked.ok) {
+    const earlier = checked.errors.some((e) => e.startsWith("assignment_id/lease_generation"));
+    done(earlier ? "superseded" : "rejected", { reason: checked.errors.slice(0, 3).join("; ").slice(0, 300) });
   }
-  const r = await admin.rpc("prep_complete", { p_job: id, p_token: token, p_result_text: text });
+  const args = { p_job: id, p_token: token, p_assignment: formAssignment };
+  if (checked.result.status === "blocked") {
+    const r = await admin.rpc("prep_fail", { ...args, p_error: `blocked: ${checked.result.summary}`.slice(0, 500) });
+    if (r.error) done("error");
+    done(r.data === "retrying" ? "retrying" : r.data === "failed" ? "failed" : r.data === "wrong_assignment" ? "superseded" : "lost_lease");
+  }
+  const r = await admin.rpc("prep_complete", { ...args, p_result_text: text });
   if (r.error) done("error");
-  const outcome = r.data as string;
-  done((["succeeded", "already", "conflict", "lost_lease", "stale"].includes(outcome) ? outcome : "error") as PrepOutcome);
+  const outcome = r.data === "wrong_assignment" ? "superseded" : (r.data as string);
+  done((["succeeded", "already", "conflict", "lost_lease", "stale", "superseded"].includes(outcome) ? outcome : "error") as PrepOutcome);
 }
 
 export async function controlPrepJob(form: FormData): Promise<void> {

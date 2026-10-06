@@ -14,7 +14,9 @@ const QUEUE_SQL = readFileSync("supabase/migrations/_drafts/digital_services_pre
 const OWNER = "33333333-3333-4333-8333-333333333333";
 const sha = (t: string) => createHash("sha256").update(t, "utf8").digest("hex");
 
-type Claimed = { id: string; attempts: number; status: string; lease_owner: string; lease_generation: number; lease_token: string };
+type Claimed = { id: string; attempts: number; status: string; lease_owner: string; lease_generation: number; lease_token: string; assignment_id: string };
+/** A fixture result file made for one claim: it names that claim's assignment. */
+const bound = (c: Claimed | null, json: string) => JSON.stringify({ ...JSON.parse(json), assignment_id: c?.assignment_id ?? null });
 
 async function db() {
   const pg = new PGlite();
@@ -52,13 +54,15 @@ async function db() {
   const claim = (worker = "engine-1", job: string | null = null, lease = 600) =>
     call<Claimed>(`select * from prep_claim($1, $2, $3)`, [worker, lease, job]).then((r) => r[0] ?? null);
   const heartbeat = (job: string, token: string, progress = "{}") => call<{ ok: boolean }>(`select prep_heartbeat($1, $2, $3) as ok`, [job, token, progress]).then((r) => r[0].ok);
-  const complete = (job: string, token: string | null, result: string) => call<{ r: string }>(`select prep_complete($1, $2, $3) as r`, [job, token, result]).then((r) => r[0].r);
-  const fail = (job: string, token: string | null, err = "boom") => call<{ r: string }>(`select prep_fail($1, $2, $3) as r`, [job, token, err]).then((r) => r[0].r);
+  const complete = (job: string, token: string | null, result: string, assignment: string | null = null) =>
+    call<{ r: string }>(`select prep_complete($1, $2, $3, $4) as r`, [job, token, assignment, result]).then((r) => r[0].r);
+  const fail = (job: string, token: string | null, err = "boom", assignment: string | null = null) =>
+    call<{ r: string }>(`select prep_fail($1, $2, $3, $4) as r`, [job, token, assignment, err]).then((r) => r[0].r);
   const control = (job: string, action: string) => call<{ r: string }>(`select prep_control($1, $2, 'owner') as r`, [job, action]).then((r) => r[0].r);
   const job = async (id: string) =>
     (
       await pg.query<Record<string, unknown>>(
-        `select status, attempts, lease_owner, lease_generation, lease_token, last_error, result_sha256, next_attempt_at, next_attempt_at > now() as backing_off, progress, packet_text, packet_sha256, evidence_revision, created_at
+        `select status, attempts, lease_owner, lease_generation, lease_token, assignment_id, last_error, result_sha256, next_attempt_at, next_attempt_at > now() as backing_off, progress, packet_text, packet_sha256, evidence_revision, created_at
          from digital_services_prep_jobs where id = $1`,
         [id]
       )
@@ -68,6 +72,65 @@ async function db() {
   const due = (id: string) => pg.query(`update digital_services_prep_jobs set next_attempt_at = now() - interval '1 second' where id = $1`, [id]);
   return { pg, call, enqueue, addDraft, addEvidence, claim, heartbeat, complete, fail, control, job, revision, expireLease, due };
 }
+
+describe("returned files are bound to the claim that produced them", { timeout: 60_000 }, () => {
+  // Codex's reproduction on d4336cd: claim 1 produces a file; the lease
+  // expires; the job is claimed again; the owner's refreshed form now carries
+  // claim 2's token. The old file must not complete (or fail) the job.
+  const fileFor = (jobId: string, packetSha: string, c: Claimed, extra: Record<string, unknown> = {}) =>
+    JSON.stringify({
+      contract_id: PREP_RESULT_CONTRACT,
+      job_id: jobId,
+      packet_sha256: packetSha,
+      job_kind: "copy_draft",
+      assignment_id: c.assignment_id,
+      lease_generation: c.lease_generation,
+      produced_by: "fixture worker",
+      produced_at: new Date().toISOString(),
+      status: "completed",
+      summary: "Fixture draft prepared",
+      ...extra,
+    });
+  for (const reclaimer of ["handoff:owner", "engine-2"]) {
+    it(`an old file is refused after a ${reclaimer === "handoff:owner" ? "same" : "different"}-worker reclaim, even with the refreshed form's token, and changes nothing`, async () => {
+      const { enqueue, claim, complete, fail, job, expireLease } = await db();
+      const j = await enqueue();
+      const first = (await claim("handoff:owner", j.id, 86_400))!;
+      const oldFile = fileFor(j.id, j.packet_sha256, first);
+      await expireLease(j.id);
+      const second = (await claim(reclaimer, j.id, 86_400))!;
+      expect(second.assignment_id).not.toBe(first.assignment_id);
+      expect(second.lease_generation).toBe(first.lease_generation + 1);
+      const before = await job(j.id);
+      const live = { id: j.id, kind: "copy_draft" as const, packet_sha256: j.packet_sha256, created_at: new Date(before.created_at as string).toISOString(), assignment_id: second.assignment_id, lease_generation: second.lease_generation };
+      // The validator refuses it against the live claim...
+      expect(validateResult(oldFile, live, new Date())).toMatchObject({ ok: false, errors: [expect.stringContaining("earlier hand-off")] });
+      // ...and so does the database, whichever assignment the caller pairs it with.
+      expect(await complete(j.id, second.lease_token, oldFile, first.assignment_id)).toBe("wrong_assignment");
+      expect(await complete(j.id, second.lease_token, oldFile, second.assignment_id)).toBe("wrong_assignment");
+      expect(await fail(j.id, second.lease_token, "blocked: old file", first.assignment_id)).toBe("wrong_assignment");
+      expect(await job(j.id)).toEqual(before); // no state change at all
+      // The current file succeeds; the same file again is idempotent; the old one is a conflict.
+      const current = fileFor(j.id, j.packet_sha256, second);
+      expect(validateResult(current, live, new Date()).ok).toBe(true);
+      expect(await complete(j.id, second.lease_token, current, second.assignment_id)).toBe("succeeded");
+      expect(await job(j.id)).toMatchObject({ status: "succeeded", result_sha256: sha(current), assignment_id: null, lease_token: null });
+      expect(await complete(j.id, second.lease_token, current, second.assignment_id)).toBe("already");
+      expect(await complete(j.id, second.lease_token, oldFile, first.assignment_id)).toBe("conflict");
+    });
+  }
+
+  it("a file whose text names no assignment, or another one, is refused even with the live claim's token and assignment", async () => {
+    const { enqueue, claim, complete, job } = await db();
+    const j = await enqueue();
+    const c = (await claim("handoff:owner", j.id, 86_400))!;
+    const before = await job(j.id);
+    expect(await complete(j.id, c.lease_token, '{"no":"assignment"}', c.assignment_id)).toBe("wrong_assignment");
+    expect(await complete(j.id, c.lease_token, "not json", c.assignment_id)).toBe("wrong_assignment");
+    expect(await complete(j.id, c.lease_token, fileFor(j.id, j.packet_sha256, c), null)).toBe("wrong_assignment");
+    expect(await job(j.id)).toEqual(before);
+  });
+});
 
 describe("preparation queue (draft migration)", { timeout: 60_000 }, () => {
   it("builds the packet in the database with the evidence text, company facts and its own hash; enqueue is idempotent", async () => {
@@ -165,10 +228,10 @@ describe("preparation queue (draft migration)", { timeout: 60_000 }, () => {
     expect(await complete(j.id, forged, "{}")).toBe("lost_lease");
     expect(await complete(j.id, null, "{}")).toBe("lost_lease");
     expect(await fail(j.id, forged)).toBe("lost_lease");
-    expect(await complete(j.id, c!.lease_token, '{"ok":true}')).toBe("succeeded");
-    expect(await job(j.id)).toMatchObject({ status: "succeeded", result_sha256: sha('{"ok":true}'), lease_owner: null, lease_token: null });
+    expect(await complete(j.id, c!.lease_token, bound(c, '{"ok":true}'), c!.assignment_id)).toBe("succeeded");
+    expect(await job(j.id)).toMatchObject({ status: "succeeded", result_sha256: sha(bound(c, '{"ok":true}')), lease_owner: null, lease_token: null });
     // The same result again is idempotent; a different one is refused.
-    expect(await complete(j.id, c!.lease_token, '{"ok":true}')).toBe("already");
+    expect(await complete(j.id, c!.lease_token, bound(c, '{"ok":true}'), c!.assignment_id)).toBe("already");
     expect(await complete(j.id, forged, '{"ok":false}')).toBe("conflict");
   });
 
@@ -181,20 +244,20 @@ describe("preparation queue (draft migration)", { timeout: 60_000 }, () => {
       // Expired, not yet reclaimed: a late failure changes nothing.
       const before = await job(j.id);
       expect(await heartbeat(j.id, first.lease_token)).toBe(false);
-      expect(await fail(j.id, first.lease_token, "late")).toBe("lost_lease");
-      expect(await complete(j.id, first.lease_token, '{"late":true}')).toBe("lost_lease");
+      expect(await fail(j.id, first.lease_token, "late", first.assignment_id)).toBe("lost_lease");
+      expect(await complete(j.id, first.lease_token, bound(first, '{"late":true}'), first.assignment_id)).toBe("lost_lease");
       expect(await job(j.id)).toEqual(before);
       const second = (await claim(reclaimer))!;
       expect(second).toMatchObject({ id: j.id, attempts: 2, lease_owner: reclaimer, lease_generation: 2 });
       expect(second.lease_token).not.toBe(first.lease_token);
       // The old invocation, under the new live lease.
       expect(await heartbeat(j.id, first.lease_token)).toBe(false);
-      expect(await fail(j.id, first.lease_token, "late")).toBe("lost_lease");
-      expect(await complete(j.id, first.lease_token, '{"late":true}')).toBe("lost_lease");
+      expect(await fail(j.id, first.lease_token, "late", first.assignment_id)).toBe("lost_lease");
+      expect(await complete(j.id, first.lease_token, bound(first, '{"late":true}'), first.assignment_id)).toBe("lost_lease");
       expect(await job(j.id)).toMatchObject({ status: "leased", attempts: 2, last_error: null, lease_generation: 2 });
-      expect(await complete(j.id, second.lease_token, '{"on_time":true}')).toBe("succeeded");
+      expect(await complete(j.id, second.lease_token, bound(second, '{"on_time":true}'), second.assignment_id)).toBe("succeeded");
       // A late result after success: the same text is 'already', anything else 'conflict'.
-      expect(await complete(j.id, first.lease_token, '{"late":true}')).toBe("conflict");
+      expect(await complete(j.id, first.lease_token, bound(first, '{"late":true}'), first.assignment_id)).toBe("conflict");
     });
   }
 
@@ -202,14 +265,14 @@ describe("preparation queue (draft migration)", { timeout: 60_000 }, () => {
     const { enqueue, claim, fail, job, due, expireLease, control } = await db();
     const j = await enqueue(undefined, undefined, undefined, 2);
     let c = (await claim())!;
-    expect(await fail(j.id, c.lease_token, "timeout talking to the engine")).toBe("retrying");
+    expect(await fail(j.id, c.lease_token, "timeout talking to the engine", c.assignment_id)).toBe("retrying");
     expect(await job(j.id)).toMatchObject({ status: "queued", backing_off: true, last_error: "timeout talking to the engine", lease_token: null });
-    expect(await fail(j.id, c.lease_token)).toBe("lost_lease"); // a repeated failure doesn't burn another attempt
+    expect(await fail(j.id, c.lease_token, "boom", c.assignment_id)).toBe("lost_lease"); // a repeated failure doesn't burn another attempt
     expect(await claim()).toBeNull(); // still backing off
     await due(j.id);
     c = (await claim())!;
     expect(c).toMatchObject({ attempts: 2 });
-    expect(await fail(j.id, c.lease_token)).toBe("failed");
+    expect(await fail(j.id, c.lease_token, "boom", c.assignment_id)).toBe("failed");
     expect((await job(j.id)).status).toBe("failed");
     // Owner retry gives a failed job a fresh set of attempts.
     expect(await control(j.id, "retry")).toBe("done");
@@ -248,7 +311,7 @@ describe("preparation queue (draft migration)", { timeout: 60_000 }, () => {
     await addEvidence();
     expect(await claim()).toBeNull();
     expect((await job(a.id)).status).toBe("stale");
-    expect(await complete(b.id, cb.lease_token, "{}")).toBe("stale");
+    expect(await complete(b.id, cb.lease_token, bound(cb, "{}"), cb.assignment_id)).toBe("stale");
     expect(await job(b.id)).toMatchObject({ status: "stale", lease_token: null });
     expect(await control(a.id, "retry")).toBe("not_allowed");
   });
@@ -296,6 +359,8 @@ describe("preparation queue (draft migration)", { timeout: 60_000 }, () => {
       job_id: j.id,
       packet_sha256: row.packet_sha256,
       job_kind: "copy_review",
+      assignment_id: c.assignment_id,
+      lease_generation: c.lease_generation,
       produced_by: "fixture-reviewer (stand-in for the private engine)",
       produced_at: new Date().toISOString(),
       status: "completed",
@@ -303,9 +368,10 @@ describe("preparation queue (draft migration)", { timeout: 60_000 }, () => {
       outputs: [],
       review: { verdict: unsupported.length ? "changes_requested" : "pass", reviewer: "fixture-reviewer", notes: `draft ${d.sha256}` },
     });
-    const checked = validateResult(result, { id: j.id, kind: "copy_review", packet_sha256: row.packet_sha256, created_at: new Date(row.created_at).toISOString() }, new Date());
+    const live = { id: j.id, kind: "copy_review" as const, packet_sha256: row.packet_sha256, created_at: new Date(row.created_at).toISOString(), assignment_id: c.assignment_id, lease_generation: c.lease_generation };
+    const checked = validateResult(result, live, new Date());
     expect(checked).toMatchObject({ ok: true, result: { review: { verdict: "pass" } } });
-    expect(await complete(j.id, c.lease_token, result)).toBe("succeeded");
+    expect(await complete(j.id, c.lease_token, result, c.assignment_id)).toBe("succeeded");
     expect(await job(j.id)).toMatchObject({ status: "succeeded", result_sha256: sha(result) });
     // A worker's pass is not an approval, and nothing was sent.
     expect((await pg.query(`select 1 from digital_services_pilot_approvals`)).rows).toHaveLength(0);

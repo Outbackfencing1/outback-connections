@@ -30,6 +30,7 @@ type Job = {
   lease_expires_at: string | null;
   lease_generation: number;
   lease_token: string | null;
+  assignment_id: string | null;
   progress: Record<string, unknown>;
   last_error: string | null;
   result_sha256: string | null;
@@ -52,7 +53,7 @@ async function loadPrep(admin: SupabaseClient | null, page: number) {
       admin
         .from(PREP_JOBS_TABLE)
         .select(
-          "id, company_id, kind, draft_id, packet_sha256, evidence_revision, status, attempts, max_attempts, next_attempt_at, lease_owner, lease_expires_at, lease_generation, lease_token, progress, last_error, result_sha256, created_at, finished_at",
+          "id, company_id, kind, draft_id, packet_sha256, evidence_revision, status, attempts, max_attempts, next_attempt_at, lease_owner, lease_expires_at, lease_generation, lease_token, assignment_id, progress, last_error, result_sha256, created_at, finished_at",
           { count: "exact" }
         )
         .order("created_at", { ascending: false })
@@ -171,8 +172,8 @@ export async function PrepSection({ admin, outcome, reason, page }: { admin: Sup
                         </form>
                       )}
                       {j.status === "leased" && leaseLive && (
-                        <a className={`${button} underline`} href={`/dashboard/owner/prep/${j.id}/packet`}>
-                          Download packet
+                        <a className={`${button} underline`} href={`/dashboard/owner/prep/${j.id}/assignment`}>
+                          Download assignment (hand-off {j.lease_generation})
                         </a>
                       )}
                       {(
@@ -196,6 +197,7 @@ export async function PrepSection({ admin, outcome, reason, page }: { admin: Sup
                       <form action={importPrepResult} className="mt-2 grid min-w-0 gap-1">
                         <input type="hidden" name="job_id" value={j.id} />
                         <input type="hidden" name="lease_token" value={j.lease_token ?? ""} />
+                        <input type="hidden" name="assignment_id" value={j.assignment_id ?? ""} />
                         <label className="grid min-w-0 gap-1 text-xs">
                           Result file (oc-prep-result/0.1 JSON)
                           <textarea name="result" required rows={3} className={field} />
