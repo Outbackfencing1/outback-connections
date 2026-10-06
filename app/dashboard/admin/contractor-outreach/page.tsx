@@ -2,10 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listingHref } from "@/lib/format";
-import OutreachRowActions, {
-  OUTREACH_STATUSES,
-  type OutreachStatus,
-} from "./OutreachRowActions";
+import OutreachRowActions from "./OutreachRowActions";
+import { OUTREACH_STATUSES, type OutreachStatus } from "@/lib/outreach-statuses";
 
 export const metadata = {
   title: "Contractor outreach — Outback Connections",

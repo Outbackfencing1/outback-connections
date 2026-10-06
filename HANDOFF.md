@@ -1,6 +1,6 @@
 # HANDOFF
 
-Date: 2026-10-04 (previous: 2026-09-06)
+Date: 2026-10-06 (previous: 2026-10-04)
 Branch: `main`. Live: https://www.outbackconnections.com.au
 
 Everything from the 6 Sep session is on `main` and deployed (PR #18, 7 Sep;
@@ -9,6 +9,40 @@ Pushing to `main` deploys production. All migrations in
 `supabase/migrations/` are applied to the live project.
 
 ---
+
+## 6 Oct 2026: clean-up made bounded; outreach page crash (branch `ccr-privacy-recovery`, draft PR, not merged)
+
+Not deployed and not run against production. Production still has staff posts
+with phone/email in public columns (Codex's 6 Oct count: 65 active, 40 closed).
+
+- `/api/cron/adopt-staff-posts` now runs `lib/staff-post-cleanup.ts`: closed
+  rows first (archive, then clear; 25 per run), then quote requests left on
+  adopted originals, then 10 active rows. It stops starting rows after 35s
+  (maxDuration 60) and every store call is capped at 8s, so it always
+  returns a receipt: counts, `errors` (stage + message, phone/email
+  redacted), `more_work` and `remaining`. Expect several daily runs (or
+  repeated manual runs) to finish the backlog.
+- Each step is repeatable: ingest is keyed, the archive key is unique,
+  closes/clears are conditional on the state the run saw. Adopt order is
+  ingest, archive, move quote requests, close, so an interrupted row stays
+  open and the next run repeats it. Two overlapping runs don't duplicate;
+  the loser counts rows as `skipped`.
+- Rows linked to a business are no longer candidates (protects a staff
+  member's own claimed business). Genuine owner posts were never in scope.
+- This route accepts the bearer header only; `?k=` returns 401. Manual run:
+  `curl -H "Authorization: Bearer $CRON_SECRET" .../api/cron/adopt-staff-posts?dry=1`
+  (keep the secret out of URLs, chat and screenshots).
+- Contractor outreach page: the status list moved to `lib/outreach-statuses.ts`.
+  A server page importing it from the `use client` row actions returned 500
+  for staff and admins (reproduced on a local build of main 922fd6d with
+  `scripts/fake-supabase/`; the fix returns 200, member sees "Admins only").
+- Proof is local: `tests/staff-post-cleanup.test.ts` (in-memory store with
+  latency, failures, lost responses, overlapping runs) and the fake-Supabase
+  page check. No migration needed.
+
+**To finish (needs Josh):** merge, deploy, run `?dry=1` with the header,
+then let the daily run (or a few manual header runs) clear the backlog, and
+re-count with a SELECT.
 
 ## 4 Oct 2026: the staff-post clean-up was failing; fixed (branch `ccr-a7a02618-x1gnjy`)
 
@@ -37,7 +71,7 @@ Fixed, no migration:
 - Each run also sweeps closed staff posts that still carry phone/email (the
   40 above) the same way.
 - Quote requests on an adopted original move to the new row.
-- **After deploy:** hit `/api/cron/adopt-staff-posts?dry=1&k=<CRON_SECRET>`
+- **After deploy:** call `/api/cron/adopt-staff-posts?dry=1` with the bearer header (since 6 Oct `?k=` is refused on this route)
   (expect ~92 adopt, ~0 hold, 40 to clear), then let the 7:30am run go, or
   call it once without `dry`. Re-ingest is idempotent, so the 53 existing
   copies are updated, not duplicated.
