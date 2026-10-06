@@ -1,6 +1,6 @@
 # HANDOFF
 
-Date: 2026-10-04 (previous: 2026-09-06)
+Date: 2026-10-06 (previous: 2026-10-04)
 Branch: `main`. Live: https://www.outbackconnections.com.au
 
 Everything from the 6 Sep session is on `main` and deployed (PR #18, 7 Sep;
@@ -9,6 +9,206 @@ Pushing to `main` deploys production. All migrations in
 `supabase/migrations/` are applied to the live project.
 
 ---
+
+## 6 Oct 2026: Codex's three preparation-queue fixes (PR #23, still draft)
+
+From Codex's independent review (`codex-overnight-independent-review-2026-10-05`).
+All in the draft migration `supabase/migrations/_drafts/digital_services_prep_queue.sql`
+(**not applied anywhere**) and the owner dashboard code.
+
+1. **Stale captures refused at enqueue.** The database now builds every
+   packet (`prep_enqueue`) from one locked snapshot of the company row, its
+   evidence and the draft. The insert guard refuses (`OC409`) a packet whose
+   evidence revision isn't current; it no longer relabels one. The service
+   role can no longer insert jobs directly. Regression: evidence changing
+   mid-enqueue (a test trigger) refuses the enqueue and queues nothing.
+2. **Every lease mutation fenced.** Each claim gets a new `lease_generation`
+   and a unique `lease_token`. Heartbeat, complete and fail take the token
+   (signatures changed from worker name to token) and need an unexpired
+   lease; `prep_fail` on an expired lease now changes nothing. Tested with
+   reclaim by the same and another worker, and late heartbeats, failures and
+   results. The dashboard import form carries the hand-off's token.
+3. **Complete packets.** `oc-prep-packet/0.2` carries the company facts (name,
+   lane, offer, uncertainties), every evidence item's fact text and
+   limitations, and for review/preview jobs the exact draft subject, body,
+   offer and verified SHA-256. Missing facts refuse the packet. One held
+   **fixture** draft is run end to end in PGlite (packet, a stand-in reviewer
+   working only from the packet, validated import, no approval written). The
+   private engine stage is not connected to this repository.
+
+Gates on this branch: `npm test` 316/316, `tsc`, `lint` (one existing
+warning), `build`, all exit 0. Not run: the local-stack Playwright specs
+(updated for the new fixtures, but they need a local Supabase stack), and any
+hosted test (needs the draft migrations on an approved isolated database).
+
+---
+
+## Overnight 5 to 6 Oct 2026: preparation queue (branch `ccr-a7a02618-x1gnjy-digital-services`, PR #23 draft)
+
+Josh authorised the overnight work order (Codex's
+`codex-overnight-work-orders-2026-10-05`, worker `claude-code`).
+
+**Inputs.** The five research artifacts were read from
+`codex-overnight-artifact-{input,schema,exclusions,v1,v2}-2026-10-05` and kept
+outside the checkout. Each was verified by SHA-256 and byte count.
+
+**Commits**, each with tests, tsc, lint and build green:
+
+| Commit | Content |
+|---|---|
+| 481232c | The research-contract adapter |
+| b428f9f | The owner review screen, plus evidence revisions in the pilot draft migration |
+| 39d476f | Codex review fixes for 4545459 |
+| 0055132 | The local journey with restarts; enquiry-linked quotes; phone-width fixes |
+| fd1a251 | Sender/reply hardening and the sync-health gate |
+| b6b75de | The preparation queue |
+| (final) | Delivery checklists and this handoff |
+
+Summary per unit: `docs/digital-services/PILOT-READINESS.md` ("Overnight queue").
+
+**Not done, by rule:**
+- no sending;
+- no Gmail calls;
+- no spending;
+- no production migration;
+- no main merge;
+- no publishing.
+
+Smoke stays paused.
+
+**Prospect data.** Prospect-specific positions are in `oc_planning.agent_updates`
+`claude-code-overnight-delivery-positions-2026-10-05`, not in this repo:
+- Dimi is held and not in the launch cohort.
+- JCS is a form upgrade with no pricing or delivery claims.
+- Q CLEAN's observations are bounded.
+
+**Morning check** (each command was run at the freeze; results are in the PR body):
+
+```sh
+git fetch origin ccr-a7a02618-x1gnjy-digital-services && git checkout <final commit>
+npm ci && npm test && npx tsc --noEmit && npm run lint && npm run build
+# private files, outside the checkout (counts only):
+node --experimental-strip-types scripts/review-research-handoff.mjs <v2.json> \
+  --request <research-input.json> --schema <schema.json> --exclusions <research-exclusions.json> \
+  --now 2026-10-05T23:00:00+11:00 --summary   # expect 8 / 18 / 7, 0 row errors
+# local stack (no hosted services):
+POSTGREST_BIN=/path/to/postgrest scripts/local-stack/start.sh
+set -a; source /var/tmp/oc-local-stack/app.env; set +a; npm run build
+npx next start -p 3200 & npx playwright test -c scripts/local-stack/playwright.local.config.ts scripts/local-stack/flow.spec.ts
+kill %1; scripts/local-stack/lifecycle.sh
+```
+
+**Josh's one decision.** Should the draft migrations be applied to a
+**disposable Supabase branch**, so the review screen, sales controls and
+preparation queue can be tried with real owner sign-in? They are:
+enquiries, pilot, sales and prep queue. Production stays untouched until he says otherwise.
+
+## 5 Oct 2026: digital services, marketplace side (branch `ccr-a7a02618-x1gnjy-digital-services`)
+
+Handover: `oc_planning.plan_versions` `claude-code-build-handover` rev 2 on
+master rev 12. Engine source, the ten review JSONs and the Cowork drafts are
+only on Josh's PC, so engine import/repairs/adapter are blocked on that
+handoff (`docs/digital-services/ENGINE-HANDOFF.md`). Done here, not merged,
+not published:
+
+- `/digital-services` ("Websites & digital tools"): the three launch offers at
+  the decided prices, honest terms wording, enquiry form. Off unless
+  `DIGITAL_SERVICES_PUBLIC=on`; nav/footer/sitemap entries follow the switch.
+- Intake (`lib/digital-services/intake.ts`): strict validation, honeypot,
+  idempotency key (retries save one row; a race is caught by the unique index),
+  per-IP limit, save first, then an owner alert with reference + link only; an
+  alert failure is recorded on the row and never loses the lead. Missing table
+  or key shows a visible "not open yet" message.
+- `/dashboard/owner`: Josh only (`DIGITAL_SERVICES_OWNER_USER_ID`; admin is not
+  enough; logged-out → sign in, others → 404). Readiness checks, the pilot
+  view, enquiry queue with Unicode/apostrophe/@ search and status updates.
+- Draft migration `supabase/migrations/_drafts/digital_services_enquiries.sql`
+  (not applied), tested on PGlite.
+- `docs/digital-services/`: `PILOT-READINESS.md`, `TERMS-PROPOSED.md`,
+  `ENGINE-HANDOFF.md`.
+
+Josh's decisions are bundled at the end of `TERMS-PROPOSED.md`.
+
+### Later on 5 Oct: first-customer priority (master rev 14, handover rev 3)
+
+**Enquiry flow:**
+- The owner status change now says "saved" only when the database returns the updated row. A refused write or a missing row shows a red "Not saved" notice, and the queue isn't revalidated.
+- Proven end to end on a **local** stack (`scripts/local-stack/`: Postgres 16 + PostgREST + a gateway that mimics Supabase, persona sign-ins):
+  - the four personas behave correctly;
+  - no JavaScript means no save and no URL leak;
+  - the form saves one row, a failed alert keeps the lead, and a replayed submit creates no duplicate;
+  - Joshua's queue status changes save, and failures are shown.
+- Not a hosted test. Hosted end-to-end needs the enquiry migration applied (approval needed).
+
+**Pilot records:** the pilot draft migration now has revisioned email drafts with database-computed hashes, approvals bound to the exact revision, and contact, reply and suppression events. A first contact is refused unless:
+- the reservation matches the lane;
+- the company isn't suppressed and hasn't replied;
+- the contact basis is confirmed;
+- all four approvals exist on the latest revision;
+- a sender is named and isn't help@.
+
+Only one first contact per company is possible. `lib/digital-services/dispatch-guard.ts` applies the same rules in the server. Three cleaners are prepared and held; the records are private (`oc_planning.agent_updates` event `claude-code-three-cleaner-pilot-pack-2026-10-05`).
+
+**Sale:**
+- `docs/digital-services/FIRST-CUSTOMER-KIT.md`: scope/terms checklist, quote record, asset intake, delivery checklist.
+- Draft migration `digital_services_sales.sql`: quotes have no "paid" status. Payments need bank or provider evidence, and evidence can't be counted twice.
+
+**Outreach sender:** named via `DIGITAL_SERVICES_OUTREACH_SENDER`. It counts as verified only with `DIGITAL_SERVICES_OUTREACH_SENDER_VERIFIED_ON`, set after the owned-inbox send/reply test. help@ is refused.
+
+**Not done (access):**
+- evidence refresh for the three sites (network policy blocks them);
+- the owned-inbox test (no Outback Connections Workspace mailbox is connected);
+- hosted smoke (paused until the trace-safety fix is on `main`; separate draft PR).
+
+**Release order (once approved):**
+1. Enquiry migration.
+2. Pilot migration, in the same session as `select set_config('app.ds_owner_user_id', '<owner auth id>', false);`. Without it the migration refuses to apply.
+3. Sales migration.
+4. Environment variables: `DIGITAL_SERVICES_OWNER_USER_ID`, `RESEND_API_KEY`, the sender variables after the owned-inbox test.
+5. Privacy wording approved.
+6. `DIGITAL_SERVICES_PUBLIC=on`.
+
+### Later still on 5 Oct: owner controls, sender adapter, revision 3
+
+- **Owner controls** (`/dashboard/owner` → "Quotes, payments and delivery"; owner-gated actions in `app/dashboard/owner/sales-actions.ts`):
+  - draft quote (price from the offer);
+  - quote status (sent / accepted in writing / withdrawn; no "paid");
+  - payment evidence (unique);
+  - delivery stage;
+  - an append-only conversation log, also on each enquiry.
+  - The sales draft migration now refuses production until the quote is accepted and the payment due before production is evidenced, refuses launch/hand-over until fully paid, and fixes a quote's price/GST/terms/scope once sent.
+  - Local e2e proves the whole sequence (6/6 flow tests).
+- **Sender/reply adapter:** `lib/digital-services/outreach/` (Gmail REST; scopes gmail.send + gmail.readonly).
+  - Order of operations: guard → `send_attempt` with our own Message-ID → send → `contacted` or `send_failed`.
+  - An unknown outcome stays unresolved and blocks another attempt until `reconcileAttempt()` finds it in the mailbox.
+  - `syncReplies()` records replies, opt-outs and bounces idempotently.
+  - Not wired to any route. `DIGITAL_SERVICES_OUTREACH_SENDING` must be `on` as well.
+  - Josh's connection steps: `docs/digital-services/OUTREACH-SENDER.md` (find the Workspace admin, add a free alias, send-as, owned-inbox test, Internal OAuth client, refresh token, Vercel vars).
+- **Seller/GST settled** from existing records: GST-registered operator, prices "+ GST", quotes `exclusive`. Not re-asked.
+- **Pilot revision 3:** private record `claude-code-three-cleaner-pilot-rev3-2026-10-05`. The older local A$1,490 pitch Codex reported is superseded.
+  - The two form prospects' previews are repaired in this branch (deploys only on merge).
+  - All three are still held: 0/12 approvals, evidence refresh blocked, no connected sender.
+- **GLM research:** a dry-run validator, `scripts/review-research.mjs` (see `docs/digital-services/RESEARCH-IMPORT.md`).
+  - The ten-cleaner file is on Josh's laptop and isn't validated yet: attach it, or have Codex run the script locally.
+  - Nothing imports it.
+- **Ten engine reviews (all HOLD):** their repair and re-review live in the private engine, which isn't in this repository. Not touched here.
+
+### Codex's validation of c3c5b37, fixed in this branch
+
+- **Sender:**
+  - A `send_handoff` marker is written before Gmail is called.
+  - `closeAttemptNotSent(company, refusal)` closes only never-handed-off attempts, or ones with a definite 4xx refusal. An empty Sent search on a handed-off, unknown-outcome attempt returns `uncertain` and keeps blocking resends.
+  - `syncReplies()` returns `incomplete` with each unsaved event. Genuine duplicates count as `already`, and failed events are retried next run.
+- **Research:**
+  - The checker no longer crashes on an object-shaped exclusions file (`--exclusions`).
+  - A different contract is an adapter gap (exit 3), not 23 rejections.
+  - Holds and exclusions are preserved.
+  - The real GLM adapter still needs the files attached to the session.
+- **Pilot:** revision 4 (private record `claude-code-three-cleaner-pilot-rev4-2026-10-05`).
+  - The website prospect's false premise is removed; its value is weak, so it's recommended not to be one of the first three.
+  - One form prospect's draft drops its untested claims.
+  - The other form prospect's evidence limits are kept visible.
+  - Approving a revision records the approval only; it sends nothing.
 
 ## 4 Oct 2026: the staff-post clean-up was failing; fixed (branch `ccr-a7a02618-x1gnjy`)
 

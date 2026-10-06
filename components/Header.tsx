@@ -7,6 +7,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/dashboard/actions";
 import { getCountsByPillar, type Pillar } from "@/lib/category-counts";
+import { digitalServicesPublic } from "@/lib/digital-services/flags";
 
 const primaryLinks: { href: string; label: string; pillar: Pillar }[] = [
   { href: "/services", label: "Services", pillar: "services" },
@@ -23,6 +24,8 @@ export default async function Header() {
   const links = primaryLinks.filter(
     (l) => l.pillar === "services" || counts[l.pillar].total > 0
   );
+  // Modest entry for the digital-services offer; shown only once it's switched on.
+  const showDigital = digitalServicesPublic();
 
   return (
     <header className="sticky top-0 z-40 border-b bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/70">
@@ -45,6 +48,14 @@ export default async function Header() {
                 {l.label}
               </Link>
             ))}
+            {showDigital && (
+              <Link
+                href="/digital-services"
+                className="rounded px-2 py-2 text-sm font-medium text-neutral-800 hover:text-green-800"
+              >
+                Websites
+              </Link>
+            )}
             <Link
               href="/post"
               className="rounded-lg bg-green-700 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-800"
@@ -90,6 +101,11 @@ export default async function Header() {
               {l.label}
             </Link>
           ))}
+          {showDigital && (
+            <Link href="/digital-services" className="rounded px-2 py-2 font-medium text-neutral-800">
+              Websites
+            </Link>
+          )}
           <Link
             href="/post"
             className="rounded-lg bg-green-700 px-3 py-2 text-xs font-semibold text-white"

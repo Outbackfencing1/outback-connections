@@ -4,6 +4,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { authoriseCron } from "@/lib/cron-auth";
+import { purgeOutcome } from "@/lib/digital-services/flags";
 
 export const dynamic = "force-dynamic";
 
@@ -29,5 +30,23 @@ export async function GET(req: NextRequest) {
   if (enqError) console.error("[cron] purge_old_enquiries failed:", enqError.message);
   else console.info("[cron] purged", enq, "listing_enquiries rows older than 12 months");
 
-  return NextResponse.json({ ok: true, deleted: data, enquiries_deleted: enqError ? null : enq });
+  // Digital-services enquiries: same 12-month rule. Before launch the
+  // migration may not be applied (missing function: fine). Any other failure
+  // fails the run, so Vercel records it and the purge is retried.
+  const { data: ds, error: dsError } = await admin.rpc("purge_old_digital_services_enquiries");
+  const dsOutcome = purgeOutcome(dsError);
+  if (dsOutcome === "purged") console.info("[cron] purged", ds, "digital_services_enquiries rows older than 12 months");
+  else if (dsOutcome === "not_installed") console.info("[cron] digital_services_enquiries purge not installed yet (pre-launch)");
+  else console.error("[cron] purge_old_digital_services_enquiries failed:", dsError?.message);
+
+  return NextResponse.json(
+    {
+      ok: dsOutcome !== "failed",
+      deleted: data,
+      enquiries_deleted: enqError ? null : enq,
+      digital_services_enquiries_deleted: dsOutcome === "purged" ? ds : null,
+      digital_services_purge: dsOutcome,
+    },
+    { status: dsOutcome === "failed" ? 500 : 200 }
+  );
 }
