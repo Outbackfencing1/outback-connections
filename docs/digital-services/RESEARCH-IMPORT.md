@@ -139,3 +139,35 @@ The report assigns no application IDs and adds no emails. It never clears a hold
 | v2 | 33 | 8 | 18 | 7 | 0 | 0 | stable |
 
 Records imported: 0. Proposed rows are not accepted outreach: contact basis and value are still unresolved for every row.
+
+## Owner research work units (staging)
+
+Draft migration `supabase/migrations/_drafts/digital_services_research_staging.sql`,
+screen **Owner dashboard → Research work units** (`#research`), actions in
+`app/dashboard/owner/research-actions.ts`. Owner only: members, other admins and
+logged-out callers are sent back before anything is read; the assignment
+download (`/dashboard/owner/research/<id>/assignment`) is a 404 for them.
+
+**Connection: file hand-off only.** No researcher or model is connected. *Start*
+records that the owner handed the assignment file over; it invokes nobody.
+Progress is the owner's own checkpoint.
+
+| Step | What is stored |
+|---|---|
+| Create | niche (cleaning or detailing), country, cohort limit 1–25, the exact request, schema and exclusions texts with database SHA-256s. The request must pin the exclusions file's raw hash and match the niche. Same request ID + same files → `already_exists`; other files → refused. |
+| Start / Pause / Resume / Close / Checkpoint | an append-only event each. |
+| Stage a return | the raw text as an immutable version (`unique (assignment, raw sha)`; the same text again is `already_staged`). It is reviewed by the handoff adapter against the issued files **and** every current row staged for other requests. A return that isn't JSON, names another request or exclusions file, breaks the schema or exceeds the cohort limit is kept in the exception queue with its reasons and stages no candidate. A changed return is a new version; the older rows are marked superseded and can no longer be decided. |
+| Candidates | keyed `(request_id, candidate_key, version)`, so the same key in two requests is two rows. Always `sendable = false`, contact basis `not_established`. |
+| Decide | hold / reject / accept, append-only. Accept needs a proposed row and an **existing** pilot company ID; no ID is created. |
+
+**Reconciliation before anything is proposed:** legacy identities in the
+exclusions snapshot (domain, registrable domain, name), the snapshot's
+optional `previous_research` rows, and other requests' staged rows. A domain
+match to an excluded earlier row is excluded; a name match in another locality
+is held as ambiguous; any other earlier match is held ("already researched").
+Wrong-niche rows (detailers in a cleaning request) are excluded.
+
+Not connected: no worker fetches assignments, nothing imports an accepted row
+into outreach, and the earlier-research population ("prior75") was not found
+in any source this build could read, so it enters only through the snapshot's
+`previous_research` or as staged returns.

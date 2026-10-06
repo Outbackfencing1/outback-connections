@@ -9,6 +9,7 @@ import {
   HANDOFF_CONTRACT,
   laneOf,
   loadExclusionSnapshot,
+  loadPriorResearch,
   loadHandoffRequest,
   registrableDomain,
   reportDigest,
@@ -317,6 +318,43 @@ describe("research handoff: row-level adapter errors and eligibility", () => {
     expect(byKey(r, "candidate-002")).toMatchObject({ outcome: "held", matches: [{ prospect_id: "OC-903", by: "name" }] });
     expect(byKey(r, "candidate-003")).toMatchObject({ outcome: "excluded", matches: [{ prospect_id: "OC-903", by: "alias" }] });
     expect(byKey(r, "candidate-004").eligibility).toContain("duplicate_of OC-999 is not in the exclusions snapshot");
+  });
+
+  it("prior research (the snapshot's previous_research and earlier staged returns) is reconciled, never re-proposed", () => {
+    const doc = {
+      ...exclusionsDoc(),
+      previous_research: [
+        { request_id: "synthetic-request-00", candidate_key: "candidate-001", business: "Synthetic 1 Cleaning", owned_domain: "synthetic-1-cleaning.example", locality: "Testville NSW", disposition: "research_hold" },
+        { request_id: "synthetic-request-00", candidate_key: "candidate-002", business: "Old Two", website: "https://www.synthetic-2-cleaning.example/", locality: "Elsewhere NSW", disposition: "excluded" },
+        // Same candidate_key as this request's own row 3, but another request: keys are only unique per request.
+        { request_id: "synthetic-request-00", candidate_key: "candidate-003", business: "Unrelated Old Business", owned_domain: "unrelated.example", locality: "Testville NSW", disposition: "qualified_research" },
+        { request_id: "synthetic-request-00", candidate_key: "candidate-009", business: "Synthetic 5 Cleaning", owned_domain: "other-five.example", locality: "Faraway WA", disposition: "qualified_research" },
+        // This request's own earlier rows are a repeated return, not prior research.
+        { request_id: REQUEST_ID, candidate_key: "candidate-006", business: "Synthetic 6 Cleaning", owned_domain: "synthetic-6-cleaning.example", locality: "Testville NSW", disposition: "qualified_research" },
+      ],
+    };
+    const text = exclusionsText(doc);
+    const sha = sha256Hex(text);
+    const snapshot = loadExclusionSnapshot(text, sha);
+    expect(snapshot.previous_research).toHaveLength(5);
+    const staged = loadPriorResearch([{ request_id: "synthetic-request-02", candidate_key: "c-77", business: "Synthetic 4 Cleaning", locality: "Testville NSW", disposition: "held" }], "staged");
+    const r = reviewHandoff(
+      output([candidate(1), candidate(2), candidate(3), candidate(4), candidate(5), candidate(6)], { exclusions_sha256: sha }),
+      ctx({ request: loadHandoffRequest(requestDoc({ exclusions_sha256: sha })), schema: schemaFor(REQUEST_ID, sha), exclusions: snapshot, prior: staged })
+    );
+    expect(r.exclusions).toMatchObject({ previous_research: 6 });
+    expect(byKey(r, "candidate-001")).toMatchObject({ outcome: "held", prior_matches: [{ request_id: "synthetic-request-00", candidate_key: "candidate-001", by: "domain" }] });
+    expect(byKey(r, "candidate-002")).toMatchObject({ outcome: "excluded", prior_matches: [{ by: "domain", disposition: "excluded" }] });
+    expect(byKey(r, "candidate-003")).toMatchObject({ outcome: "proposed_for_owner_review", prior_matches: [] });
+    expect(byKey(r, "candidate-004")).toMatchObject({ outcome: "held", prior_matches: [{ request_id: "synthetic-request-02", by: "name_locality" }] });
+    expect(byKey(r, "candidate-005")).toMatchObject({ outcome: "held", prior_matches: [{ by: "name_only" }] });
+    expect(byKey(r, "candidate-005").eligibility.join(" ")).toMatch(/identity ambiguous/);
+    expect(byKey(r, "candidate-006")).toMatchObject({ outcome: "proposed_for_owner_review", prior_matches: [] });
+    // A malformed or doubled prior row is refused rather than silently ignored.
+    const bad = (rows: unknown) => () => loadExclusionSnapshot(exclusionsText({ ...exclusionsDoc(), previous_research: rows }), sha256Hex(exclusionsText({ ...exclusionsDoc(), previous_research: rows })));
+    expect(bad([{ request_id: "a", candidate_key: "b" }])).toThrow(/no usable identity/);
+    expect(bad([{ request_id: "a", candidate_key: "b", business: "X" }, { request_id: "a", candidate_key: "b", business: "Y" }])).toThrow(/appears twice/);
+    expect(bad({ request_id: "a" })).toThrow(/must be an array/);
   });
 
   it("duplicate candidate keys reject every row that shares the key", () => {

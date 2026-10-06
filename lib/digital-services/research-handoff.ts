@@ -245,7 +245,49 @@ export type ExclusionIdentity = {
   alias_ids: string[];
   dated_aliases: { source: string; date: string }[];
 };
-export type ExclusionSnapshot = { sha256: string; bytes: number; created_at: string | null; identities: ExclusionIdentity[] };
+/**
+ * A row from an earlier research return (any request). Prior research is not
+ * an application identity: it has no OC ID until the owner accepts it, so it
+ * is matched by real domain, or name plus locality, and never invents one.
+ */
+export type PriorResearch = {
+  request_id: string;
+  candidate_key: string;
+  business: string;
+  name_key: string;
+  domain: string | null;
+  locality: string | null;
+  disposition: string;
+};
+export type ExclusionSnapshot = {
+  sha256: string;
+  bytes: number;
+  created_at: string | null;
+  identities: ExclusionIdentity[];
+  /** The snapshot's previous_research rows (empty when it has none). */
+  previous_research: PriorResearch[];
+};
+
+/** Reads prior research rows (from a snapshot or from earlier staged returns). */
+export function loadPriorResearch(rows: unknown, where = "previous_research"): PriorResearch[] {
+  if (rows === undefined || rows === null) return [];
+  if (!Array.isArray(rows)) throw new Error(`${where}: must be an array`);
+  const seen = new Set<string>();
+  return rows.map((r, i): PriorResearch => {
+    if (!isObj(r)) throw new Error(`${where}[${i}]: not an object`);
+    const request_id = str(r.request_id);
+    const candidate_key = str(r.candidate_key);
+    const business = str(r.business) ?? str(r.business_name);
+    if (!request_id || !candidate_key) throw new Error(`${where}[${i}]: needs request_id and candidate_key`);
+    const compound = `${request_id}\u0000${candidate_key}`;
+    if (seen.has(compound)) throw new Error(`${where}[${i}]: ${request_id}/${candidate_key} appears twice`);
+    seen.add(compound);
+    const domain = hostOf(str(r.owned_domain) ?? str(r.website) ?? str(r.primary_url));
+    const name_key = business ? normName(business) : "";
+    if (!domain && !name_key) throw new Error(`${where}[${i}]: no usable identity (a domain or a name)`);
+    return { request_id, candidate_key, business: business ?? "", name_key, domain, locality: str(r.locality), disposition: str(r.disposition) ?? str(r.outcome) ?? "unknown" };
+  });
+}
 
 const IDENTITY_FLAGS = ["suppressed", "paused", "bounced", "contacted", "research_held", "cowork_reserved", "reserved_cleaner_lane"];
 
@@ -324,7 +366,8 @@ export function loadExclusionSnapshot(raw: string | Uint8Array, expectedSha256: 
       if (!hit.reserved) throw new Error(`exclusions.cowork_reservations[${i}]: ${id} is reserved but its identity isn't marked cowork_reserved`);
     }
   }
-  return { sha256: sha, bytes: bytes.length, created_at: str(doc.created_at), identities };
+  const previous_research = loadPriorResearch(doc.previous_research, "exclusions.previous_research");
+  return { sha256: sha, bytes: bytes.length, created_at: str(doc.created_at), identities, previous_research };
 }
 
 // ---------------------------------------------------------------------------
@@ -354,6 +397,8 @@ export type CandidateReview = {
   value: string[];
   identity: { domain: string | null; registrable: string | null; name_key: string };
   matches: { prospect_id: string; by: "domain" | "registrable_domain" | "name" | "alias" }[];
+  /** Earlier research rows (other requests) that look like the same business. */
+  prior_matches: { request_id: string; candidate_key: string; by: "domain" | "registrable_domain" | "name_locality" | "name_only"; disposition: string }[];
   offer_fit: string | null;
   identity_confidence: string | null;
   fit_confidence: string | null;
@@ -380,7 +425,7 @@ export type RefreshReview = {
 export type HandoffReport = {
   contract_id: string;
   request_id: string | null;
-  exclusions: { sha256: string; identities: number } | null;
+  exclusions: { sha256: string; identities: number; previous_research: number } | null;
   adapter_errors: string[];
   run: { status: string | null; started_at: string | null; finished_at: string | null; model: string | null } | null;
   candidates: CandidateReview[];
@@ -435,6 +480,8 @@ export type HandoffContext = {
   request: HandoffRequest;
   schema: unknown;
   exclusions: ExclusionSnapshot;
+  /** Rows from earlier staged returns, reconciled alongside the snapshot's previous_research. */
+  prior?: PriorResearch[];
   /** ISO time the review is "as of"; evidence age is measured from here. */
   now: string;
 };
@@ -450,7 +497,7 @@ export function reviewHandoff(output: unknown, ctx: HandoffContext): HandoffRepo
   const base: HandoffReport = {
     contract_id: HANDOFF_CONTRACT,
     request_id: isObj(output) ? str(output.request_id) : null,
-    exclusions: { sha256: exclusions.sha256, identities: exclusions.identities.length },
+    exclusions: { sha256: exclusions.sha256, identities: exclusions.identities.length, previous_research: exclusions.previous_research.length + (ctx.prior?.length ?? 0) },
     adapter_errors: [],
     run: null,
     candidates: [],
@@ -584,6 +631,38 @@ export function reviewHandoff(output: unknown, ctx: HandoffContext): HandoffRepo
       if (!x) eligibility.push(`duplicate_of ${id} is not in the exclusions snapshot`);
       else if (!matches.some((m) => m.prospect_id === x.prospect_id)) matches.push({ prospect_id: x.prospect_id, by: "alias" });
     }
+    // Earlier research (legacy snapshot rows and earlier staged returns). The
+    // same request's own rows are a repeated return, handled by versioning.
+    const prior_matches: CandidateReview["prior_matches"] = [];
+    const sameLocality = (a: string | null, b: string | null) => !!a && !!b && normName(a) === normName(b);
+    for (const pr of [...exclusions.previous_research, ...(ctx.prior ?? [])]) {
+      if (pr.request_id === request.request_id) continue;
+      if (prior_matches.some((m) => m.request_id === pr.request_id && m.candidate_key === pr.candidate_key)) continue;
+      const by =
+        identityHost && pr.domain && identityHost === pr.domain
+          ? "domain"
+          : identityHost && pr.domain && !isSharedPlatform(identityHost) && registrableDomain(identityHost) === registrableDomain(pr.domain)
+            ? "registrable_domain"
+            : name_key && pr.name_key === name_key
+              ? sameLocality(str(r.locality), pr.locality)
+                ? "name_locality"
+                : "name_only"
+              : null;
+      if (by) prior_matches.push({ request_id: pr.request_id, candidate_key: pr.candidate_key, by, disposition: pr.disposition });
+    }
+    for (const m of prior_matches) {
+      const where = `${m.request_id}/${m.candidate_key}`;
+      if ((m.by === "domain" || m.by === "registrable_domain") && /exclu/i.test(m.disposition)) {
+        eligibility.push(`excluded in earlier research ${where} (${m.by})`);
+        outcome = stricter(outcome, "excluded");
+      } else if (m.by === "name_only") {
+        eligibility.push(`same name as earlier research ${where} in another locality: identity ambiguous, reconcile before use`);
+        outcome = stricter(outcome, "held");
+      } else {
+        eligibility.push(`already researched as ${where} (${m.by}, ${m.disposition}): reconcile, don't re-propose`);
+        outcome = stricter(outcome, "held");
+      }
+    }
     for (const m of matches) {
       if (m.by === "name") {
         eligibility.push(`same name as existing identity ${m.prospect_id}: reconcile before use`);
@@ -612,6 +691,7 @@ export function reviewHandoff(output: unknown, ctx: HandoffContext): HandoffRepo
       value,
       identity: { domain: identityHost, registrable: identityHost ? registrableDomain(identityHost) : null, name_key },
       matches,
+      prior_matches,
       offer_fit: str(r.offer_fit),
       identity_confidence: str(r.identity_confidence),
       fit_confidence: str(r.fit_confidence),
