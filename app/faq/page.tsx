@@ -3,7 +3,8 @@ import Link from "next/link";
 export const metadata = {
   title: "FAQ — Outback Connections",
   description:
-    "Common questions about how the marketplace works. Plain answers.",
+    "How to get a quote from a fencing contractor, where the listings come from, and how a business claims, fixes or removes its entry. Plain answers.",
+  alternates: { canonical: "/faq" },
 };
 
 export default function FaqPage() {
@@ -19,52 +20,91 @@ export default function FaqPage() {
       </p>
 
       <div className="mt-8 space-y-8">
+        <Q q="How do I get a quote?">
+          Find a contractor near you (search by{" "}
+          <Link href="/services/fencing-contractor" className="underline">
+            postcode or region
+          </Link>
+          ), open their entry and press <strong>Get a quote</strong>. No
+          account needed: say what needs doing and how to reach you. If the
+          business has claimed its listing, your request goes straight to
+          them. If not, a person on our team passes it on. You get a
+          reference number either way.
+        </Q>
+
         <Q q="Is it really free?">
-          Yes. Free to browse, free to post, free to contact people. No lead
-          fees. No paid placement. No premium tiers.
+          Yes. Free to browse, free to ask for quotes, free to post. No lead
+          fees, no paid placement, no premium tiers.
+        </Q>
+
+        <Q q="Where do the listings come from?">
+          Most entries were found online: on Facebook, Yellow Pages,
+          TrueLocal, Google Maps or the business&apos;s own website. They
+          carry an Unclaimed badge and say where we found them, because the
+          business didn&apos;t post them. We never publish the phone numbers
+          or emails we found. Other listings are posted by their owners.
+        </Q>
+
+        <Q q="I'm a contractor. Is my business on here?">
+          Search{" "}
+          <Link href="/services/fencing-contractor" className="underline">
+            the directory
+          </Link>{" "}
+          for your business. If you&apos;re there, press <strong>Claim it
+          free</strong> on your entry: create an account, then we check the
+          claim and hand the listing over. Add your contact details to it
+          and quote requests come straight to you. Want it changed or taken
+          down instead? Email{" "}
+          <a
+            href="mailto:help@outbackconnections.com.au?subject=Fix%20or%20remove%20my%20business%20listing"
+            className="underline"
+          >
+            help@outbackconnections.com.au
+          </a>{" "}
+          and we&apos;ll fix or remove it. If you&apos;re not listed,{" "}
+          <Link href="/post" className="underline">
+            post your business
+          </Link>
+          .
         </Q>
 
         <Q q="How do I post?">
-          Sign up with your email, click the link we send you, and your
-          account is created. After 7 days you can post. Go to{" "}
+          Sign up with your email and confirm it. Farmers can post a job
+          they need done straight away; business listings can go up once
+          your account is 24 hours old. Go to{" "}
           <Link href="/post" className="underline">
             Post a listing
           </Link>{" "}
-          and pick the kind. Forms take a few minutes. Listings stay up
-          for 30 days then expire unless you re-post.
+          and pick the kind. Listings stay up for 30 days, then expire
+          unless you renew them.
         </Q>
 
-        <Q q="Why the 7-day waiting period before posting?">
-          To kill drive-by scammers. Most scam signups are bots that don&apos;t
-          stick around. Real people with patience get through; ad-spam bots
-          generally don&apos;t.
+        <Q q="Why the 24-hour wait before posting a business listing?">
+          To stop drive-by scammers. Most scam signups are bots that
+          don&apos;t stick around a day.
         </Q>
 
-        <Q q="How do I contact someone?">
-          Open the listing while signed in. The poster&apos;s email and
-          phone number appear at the bottom — clickable mailto: and tel:
-          links. Reach out directly. We&apos;re not in the conversation
-          and don&apos;t take a cut.
-        </Q>
-
-        <Q q="Why no messaging system?">
-          Messaging systems are how marketplaces tax connections — once
-          you&apos;re locked in, they can charge fees, throttle replies,
-          and harvest data. We&apos;d rather be useless to scrape and let
-          you talk directly.
+        <Q q="How do I contact someone directly?">
+          On listings posted by their owners, sign in and the
+          poster&apos;s email and phone appear at the bottom. Reach out
+          directly; we&apos;re not in the conversation and don&apos;t take
+          a cut. Unclaimed entries have no contact details on our site:
+          use Get a quote, or the link to where we found them.
         </Q>
 
         <Q q="Why no reviews?">
-          Reviews on a small marketplace are easy to fake, easy to weaponise,
-          and require a trust-and-safety team we don&apos;t have. Maybe
-          later, properly, with a lawyer and a right-of-reply process.
-          For now, the only signal is that the poster was willing to put
-          their real contact details on the line.
+          Reviews on a small directory are easy to fake, easy to weaponise,
+          and need a trust-and-safety team we don&apos;t have. Maybe later,
+          properly, with a lawyer and a right-of-reply process.
         </Q>
 
-        <Q q="How do I know a poster is legit?">
-          You don&apos;t, automatically. Use your own judgment: ask for
-          references, check ABNs at{" "}
+        <Q q="What do the badges mean?">
+          <strong>Unclaimed</strong>: we found the business online and it
+          hasn&apos;t confirmed the details. <strong>Claimed by the
+          owner</strong>: the business has claimed its entry.{" "}
+          <strong>ABN verified</strong>: we matched its ABN on the
+          Australian Business Register. None of them is a guarantee of
+          quality: ask for references, check ABNs at{" "}
           <a
             href="https://abr.business.gov.au/"
             target="_blank"
@@ -74,20 +114,15 @@ export default function FaqPage() {
             abr.business.gov.au
           </a>
           , get quotes in writing, and for big jobs sign a contract.
-          We&apos;re a noticeboard, not a vetting service.
-        </Q>
-
-        <Q q="What's the Verified badge?">
-          Coming in Phase 2. It&apos;ll mean: phone number verified, ABN
-          verified, account at least 30 days old, no flags. Identity check
-          only — not a guarantee of quality.
         </Q>
 
         <Q q="What if I see a scam listing?">
-          Open it, scroll to the bottom, click &quot;Flag this listing&quot;.
-          Pick a reason. We get the flag and review it manually. If
-          enough flags pile up on one listing or one poster, we hide it
-          and may close the account.
+          Sign in, open it, scroll to the bottom and click &quot;Flag this
+          listing&quot;. We review every flag by hand. Something else wrong?{" "}
+          <Link href="/report" className="underline">
+            Report it
+          </Link>
+          .
         </Q>
 
         <Q q="How do I delete my account?">
