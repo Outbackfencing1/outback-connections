@@ -1,6 +1,6 @@
 # HANDOFF
 
-Date: 2026-10-06 (previous: 2026-10-04)
+Date: 2026-10-10 (previous: 2026-10-06)
 Branch: `main`. Live: https://www.outbackconnections.com.au
 
 Everything from the 6 Sep session is on `main` and deployed (PR #18, 7 Sep;
@@ -9,6 +9,56 @@ Pushing to `main` deploys production. All migrations in
 `supabase/migrations/` are applied to the live project.
 
 ---
+
+## 10 Oct 2026: safe PRs merged, smoke back on, honesty + SEO pass (branch `claude/site-truth-pass`)
+
+Merged to `main` (squash) and deployed, each checked READY with smoke green
+on the production deploy and no runtime errors after:
+- **#24** (2b92791) smoke never records traces on authenticated runs. Then the
+  Smoke workflow was **re-enabled** (it had been paused since 5 Oct after a
+  trace leaked the bypass secret; the secret was rotated then). Prod smoke
+  7 passed / 1 skipped.
+- **#21** (bd58b7a) renew/unsubscribe confirm before acting. Its gate: smoke
+  on its own preview with its own spec, 8/8 green; Codex had approved.
+  **Still to do (Josh):** one real renewal and one real unsubscribe on test
+  records, per the PR's gate 3.
+- **#25** (8ff5c68) quote form POSTs to `/api/enquiries` without JS. Live
+  check: listing pages render `<form action="/api/enquiries" method="post">`.
+- **#27** conflicted with #25 only in this file. Resolved locally on
+  `ccr-marketplace-usability` (c6038ea, kept both entries); all four gates
+  green on the merged result (89 tests). Needs Josh to push that branch,
+  then merge #27.
+
+This branch is stacked on c6038ea, so merge #27 first, then this. It has:
+- Outreach page 500 fix ported unchanged from #26 (`lib/outreach-statuses.ts`).
+  #26's clean-up hardening and #28 stay open for a decision: the clean-up
+  backlog finished on its own on 9 Oct.
+- Copy truth pass: footer (Unclaimed entries were found online), About (no
+  "three pillars"/"no scraping"; where entries come from; how quotes reach
+  unclaimed businesses), JSON-LD provider = the business, Organization and
+  site descriptions, "Added" not "Posted" on scraped/imported rows
+  (`postedVerb()`), "Claim it free" -> sign-up with next=, a no-legal-
+  complaint "fix or remove my business" email route, and /report no longer
+  promises acknowledgements or auto-hiding the code doesn't do.
+- SEO: empty or filtered category pages and the hidden /jobs, /freight,
+  /sale are noindex,follow (`browseRobots()`; a failed count never
+  noindexes); sitemap lists only categories with live rows; auth pages
+  noindex.
+- Search: `checkPostcodeInput()` (typos explained, not searched); a full
+  postcode shows "N in 2800 · M around <region>".
+- eslint ignores `.claude/**` (nested agent worktrees broke local lint).
+
+**Not touched, needs Josh or a lawyer:** Privacy/Terms still say "Working
+draft", and Terms 8 claims intermediary safe harbour ("Listings are
+authored... by users") although 300 entries were written by us. The
+"UNCLAIMED -- it was not posted" sentence in every scraped description
+comes from `ingest_scraped_business()`; changing it needs a migration and a
+re-write of existing rows.
+
+Audit note (10 Oct): the gate's "human" numbers are mostly bots and our own
+agents (one crawler, outdated browser strings, "Vercel MCP Fetch"); about
+11 plausible human searches in 7 days and none on a phone. A separate
+session is fixing `lib/bot-detect.ts` and adding referrer/UTM capture.
 
 ## 6 Oct 2026: marketplace usability repairs (branch `ccr-marketplace-usability`, draft PR, not merged)
 
