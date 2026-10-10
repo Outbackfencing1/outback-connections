@@ -17,8 +17,9 @@ export async function liveListingCount(filter: {
       .gt("expires_at", new Date().toISOString());
     if (filter.categoryId) query = query.eq("category_id", filter.categoryId);
     const { count, error } = await query;
-    if (error) return null;
-    return count ?? 0;
+    // A missing count (no Content-Range) is unknown, not zero.
+    if (error || typeof count !== "number") return null;
+    return count;
   } catch {
     return null;
   }
