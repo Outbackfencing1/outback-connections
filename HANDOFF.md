@@ -131,6 +131,30 @@ This branch is stacked on c6038ea, so merge #27 first, then this. It has:
   postcode shows "N in 2800 · M around <region>".
 - eslint ignores `.claude/**` (nested agent worktrees broke local lint).
 
+Live data changes made 10 Oct (SQL via MCP, at Josh's request):
+- Claim approved: Outback Fencing & Steel Supplies (claim by
+  clipgun@outbackfencingsupplies.com.au, reviewer Josh via `approve_claim`).
+  The listing has no contact email yet, so quotes still go to the team inbox
+  until Josh adds one on the listing.
+- Test quote ENQ-PN7WB3BW sent through the live form on that listing: row
+  saved, Resend accepted the team email (no `[email]` errors). Marked `spam`
+  with a note so the gate doesn't count it.
+- Re-categorised 8 non-fencers out of fencing-contractor and fixed the
+  "is a fencing contractor" wording in their descriptions:
+  - Earthworks: MAC Earthmoving, NJ Jagoe, Archgate Building & Bobcat.
+  - Rural supplies: Australian Concrete Fence Posts.
+  - Other rural service: Aztec Hire, Hough Hire, Coast'n Country
+    Scaffolding, Geoffrey Pollack Bricklaying.
+
+  **The 2 Nov refresh will revert these** if the import file still lists
+  them as fencing contractors: `ingest_scraped_business()` resets
+  `category_id` and the description on unclaimed rows. Drop them from the
+  fencing import, or correct their category in the file.
+- Duplicate West Shear Rural Contracting: LST-LKC3B9YD closed with
+  `canonical_listing_id` pointing to LST-KUHQSLHW (308 redirect checked);
+  its business is marked `duplicate` with `canonical_business_id`.
+- PRs #26, #17 and #28 were closed with notes. Their branches are kept.
+
 **Not touched, needs Josh or a lawyer:** Privacy/Terms still say "Working
 draft", and Terms 8 claims intermediary safe harbour ("Listings are
 authored... by users") although 300 entries were written by us. The
