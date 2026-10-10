@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { liveListingCount } from "@/lib/live-counts";
+import { browseRobots, hasFilterParams } from "@/lib/seo";
 import { createClient } from "@/lib/supabase/server";
 import { getCategoryCounts } from "@/lib/category-counts";
 import ListingCard from "@/components/browse/ListingCard";
@@ -6,12 +8,25 @@ import Pagination from "@/components/browse/Pagination";
 import FilterBar from "@/components/browse/FilterBar";
 import { logSearch } from "@/lib/analytics";
 
-export const metadata = {
-  alternates: { canonical: "/jobs" },
-  title: "Jobs — Outback Connections",
-  description:
-    "Browse rural jobs across Australia: station hands, fencing, harvest, mustering, dairy. Free to browse.",
-};
+// Noindex while the section is empty (it's hidden from the nav then) or
+// filtered; see browseRobots().
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const [liveCount, resolvedSearchParams] = await Promise.all([
+    liveListingCount({ kinds: ["job"] }),
+    searchParams,
+  ]);
+  return {
+    alternates: { canonical: "/jobs" },
+    title: "Jobs — Outback Connections",
+    description:
+      "Browse rural jobs across Australia: station hands, fencing, harvest, mustering, dairy. Free to browse.",
+    robots: browseRobots({ liveCount, filtered: hasFilterParams(resolvedSearchParams) }),
+  };
+}
 
 export const dynamic = "force-dynamic";
 

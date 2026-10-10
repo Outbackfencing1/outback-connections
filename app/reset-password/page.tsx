@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 export const metadata = {
   title: "Reset password — Outback Connections",
   description: "Reset your Outback Connections password.",
+  robots: { index: false, follow: true },
 };
 
 export const dynamic = "force-dynamic";

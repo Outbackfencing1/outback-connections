@@ -259,3 +259,29 @@ export function jsonLdScript(data: unknown): string {
   // Escape closing-tag sequences inside the JSON, per OWASP advice.
   return JSON.stringify(data).replace(/</g, "\\u003c");
 }
+
+type SearchParamsLike = Record<string, string | string[] | undefined>;
+
+/** True when any search param other than those in `ignore` has a value. */
+export function hasFilterParams(params: SearchParamsLike, ignore: string[] = ["page"]): boolean {
+  return Object.entries(params).some(([key, v]) => {
+    if (ignore.includes(key)) return false;
+    const value = Array.isArray(v) ? v[0] : v;
+    return typeof value === "string" && value.trim() !== "";
+  });
+}
+
+/**
+ * Robots for a browse page: noindex (links still followed) when it has no
+ * live listings or a filter is applied, so search engines index the clean
+ * page with real entries instead of empty shells and endless filter variants.
+ * An unknown count (database error) never noindexes: a blip must not drop a
+ * real page from the index.
+ */
+export function browseRobots(args: {
+  liveCount: number | null;
+  filtered?: boolean;
+}): { index: false; follow: true } | undefined {
+  if (args.filtered || args.liveCount === 0) return { index: false, follow: true };
+  return undefined;
+}
