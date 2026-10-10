@@ -21,10 +21,6 @@
       "schedule": "0 4 * * *"
     },
     {
-      "path": "/api/cron/adzuna-sync",
-      "schedule": "0 5 * * *"
-    },
-    {
       "path": "/api/cron/shopify-sales-sync",
       "schedule": "0 20 * * 0"
     },
