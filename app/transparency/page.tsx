@@ -3,6 +3,7 @@ import { unstable_cache } from "next/cache";
 import { createAnonClient } from "@/lib/supabase/anon";
 
 export const metadata = {
+  alternates: { canonical: "/transparency" },
   title: "Transparency — Outback Connections",
   description:
     "Aggregate moderation statistics for the past 30 days: listings hidden, complaints received, complaints upheld vs dismissed.",

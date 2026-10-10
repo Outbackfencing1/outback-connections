@@ -2,6 +2,7 @@ import Link from "next/link";
 import { checkPostingGuard } from "@/lib/posting";
 
 export const metadata = {
+  alternates: { canonical: "/post" },
   title: "Post a listing — Outback Connections",
   description: "Post a job, freight, or rural service. Free forever.",
 };

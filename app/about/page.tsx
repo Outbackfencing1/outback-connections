@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
+  alternates: { canonical: "/about" },
   title: "About — Outback Connections",
   description:
     "Who runs Outback Connections, what it is, what it isn't, and how it's funded. Plain English, no spin.",

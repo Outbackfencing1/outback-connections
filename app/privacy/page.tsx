@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
+  alternates: { canonical: "/privacy" },
   title: "Privacy notice — Outback Connections",
   description:
     "What we collect, why, how long we keep it, and how to delete it. APP-compliant working draft.",

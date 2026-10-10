@@ -5,7 +5,7 @@ import ListingCard from "@/components/browse/ListingCard";
 import Pagination from "@/components/browse/Pagination";
 import FilterBar from "@/components/browse/FilterBar";
 import { logSearch } from "@/lib/analytics";
-import { breadcrumbJsonLd, browseRobots, hasFilterParams, humanCategory, jsonLdScript } from "@/lib/seo";
+import { breadcrumbJsonLd, browseRobots, hasFilterParams, humanCategory, jsonLdScript, socialMeta } from "@/lib/seo";
 import { regionCounts, regionsForPostcodes, regionSlug } from "@/lib/regions";
 import { liveListingCount } from "@/lib/live-counts";
 import { checkPostcodeInput, postcodeFilterValue } from "@/lib/postcode-input";
@@ -40,15 +40,24 @@ export async function generateMetadata({
     .eq("slug", slug)
     .eq("pillar", "services")
     .maybeSingle();
-  const human = cat ? humanCategory(cat.label) : slug.replace(/-/g, " ");
-  const liveCount = cat
-    ? await liveListingCount({ kinds: ["service_offering", "service_request"], categoryId: cat.id })
-    : null;
+  // Unknown slug: the page 404s, so no title built from the slug and no
+  // self-canonical.
+  if (!cat) {
+    return { title: "Not found — Outback Connections", robots: { index: false, follow: true } };
+  }
+  const human = humanCategory(cat.label);
+  const liveCount = await liveListingCount({
+    kinds: ["service_offering", "service_request"],
+    categoryId: cat.id,
+  });
+  const title = `${human} — Outback Connections`;
+  const description = `${human} across rural Australia. Free directory, no lead fees: browse by region or postcode and ask for a quote without an account.`;
   return {
-    title: `${human} — Outback Connections`,
-    description: `${human} across rural Australia. Free directory, no lead fees: browse by region or postcode and get a quote direct.`,
+    title,
+    description,
     alternates: { canonical: `/services/${slug}` },
     robots: browseRobots({ liveCount, filtered: hasFilterParams(resolvedSearchParams) }),
+    ...socialMeta({ title, description, path: `/services/${slug}` }),
   };
 }
 

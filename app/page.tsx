@@ -3,16 +3,21 @@ import { createClient } from "@/lib/supabase/server";
 import { getCountsByPillar, type PillarStats } from "@/lib/category-counts";
 import { kindLabel, listingHref, postedVerb, relativeTime } from "@/lib/format";
 import FencingFinder from "@/components/home/FencingFinder";
+import { socialMeta } from "@/lib/seo";
 
 const RECENT_MIN_TO_SHOW = 5;
 const RECENT_LIMIT = 5;
 const PILLAR_COUNT_MIN = 10;
 
+const HOME_TITLE = "Find a fencing contractor near you — Outback Connections";
+const HOME_DESCRIPTION =
+  "Find a fencing contractor near you in rural NSW and ask for a quote, no account needed. A free rural directory with no lead fees, run by Outback Fencing & Steel Supplies in Orange.";
+
 export const metadata = {
   alternates: { canonical: "/" },
-  title: "Outback Connections — rural Australia's free marketplace",
-  description:
-    "Find a fencing contractor near you in rural NSW and ask for a quote, no account needed. A free rural directory with no lead fees, run by Outback Fencing & Steel Supplies in Orange.",
+  title: HOME_TITLE,
+  description: HOME_DESCRIPTION,
+  ...socialMeta({ title: HOME_TITLE, description: HOME_DESCRIPTION, path: "/" }),
 };
 
 export const dynamic = "force-dynamic";
@@ -106,17 +111,18 @@ export default async function HomePage() {
       {/* Hero — single primary CTA, supporting actions in smaller text. */}
       <section className="mx-auto max-w-3xl px-4 py-12 sm:py-16">
         <h1 className="text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl md:text-5xl">
-          Jobs, freight, and the bloke who&apos;s handy with a bore pump.
+          Find a fencing contractor near you.
         </h1>
         <p className="mt-5 text-base text-neutral-700 sm:text-lg">
-          Free rural marketplace. No lead fees ever.
+          A free rural directory, starting with fencers across NSW. Ask for
+          a quote without an account. No lead fees, ever.
         </p>
         <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center">
           <Link
-            href="/services"
+            href="/services/fencing-contractor"
             className="inline-flex items-center justify-center rounded-xl bg-green-700 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-800 focus:ring-offset-2"
           >
-            Browse listings
+            Find a fencer
           </Link>
           <p className="text-sm text-neutral-700">
             Or{" "}

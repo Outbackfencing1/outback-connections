@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
+  alternates: { canonical: "/report" },
   title: "Report — Outback Connections",
   description:
     "Report scams, illegal content, defamation, copyright infringement, or serious safety concerns.",

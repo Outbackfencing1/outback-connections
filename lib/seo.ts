@@ -1,4 +1,5 @@
 // lib/seo.ts — small helpers for detail-page metadata + JSON-LD.
+import type { Metadata } from "next";
 
 export function buildTitle(args: {
   listingTitle: string;
@@ -42,7 +43,46 @@ export function buildDirectoryDescription(args: {
 /** "Fencing contractor (construction)" -> "Fencing contractors" */
 export function humanCategory(label: string): string {
   const base = label.replace(/\s*\(.*\)\s*$/, "").trim();
+  // "Bore / pump / water" and "Truck tyre & specialty repair" read badly
+  // with an s on the end; leave compound labels alone.
+  if (/[/&]/.test(base)) return base;
   return /s$/i.test(base) ? base : `${base}s`;
+}
+
+export const SOCIAL_IMAGE = {
+  url: "/opengraph-image",
+  width: 1200,
+  height: 630,
+  alt: "Outback Connections: find a fencing contractor near you",
+};
+
+/**
+ * Open Graph + Twitter card for a page, so a link shared on Facebook (or
+ * used in an ad) shows the page's own title and description with the site
+ * card image, instead of a bare URL.
+ */
+export function socialMeta(args: {
+  title: string;
+  description: string;
+  path: string;
+}): Pick<Metadata, "openGraph" | "twitter"> {
+  return {
+    openGraph: {
+      type: "website",
+      siteName: "Outback Connections",
+      locale: "en_AU",
+      title: args.title,
+      description: args.description,
+      url: args.path,
+      images: [SOCIAL_IMAGE],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: args.title,
+      description: args.description,
+      images: [SOCIAL_IMAGE.url],
+    },
+  };
 }
 
 export function buildDescription(rawDescription: string): string {

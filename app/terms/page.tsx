@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
+  alternates: { canonical: "/terms" },
   title: "Terms of service — Outback Connections",
   description:
     "Platform terms covering user content, indemnities, defamation handling, liability cap, and dispute resolution.",

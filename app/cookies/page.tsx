@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
+  alternates: { canonical: "/cookies" },
   title: "Cookies notice — Outback Connections",
   description:
     "What cookies we set, why, and how to control them.",

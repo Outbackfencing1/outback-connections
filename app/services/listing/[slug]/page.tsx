@@ -20,6 +20,7 @@ import {
   serviceJsonLd,
   localBusinessJsonLd,
   breadcrumbJsonLd,
+  socialMeta,
 } from "@/lib/seo";
 import { logEvent } from "@/lib/analytics";
 import { responseLine } from "@/lib/enquiry-outcome";
@@ -45,7 +46,10 @@ export async function generateMetadata({
     .maybeSingle();
 
   if (!data) {
-    return { title: "Service listing not found — Outback Connections" };
+    return {
+      title: "Service listing not found — Outback Connections",
+      robots: { index: false, follow: true },
+    };
   }
   const cat = Array.isArray(data.category) ? data.category[0] : data.category;
   const title = buildTitle({
@@ -71,8 +75,7 @@ export async function generateMetadata({
     title,
     description,
     alternates: { canonical: `/services/listing/${slug}` },
-    openGraph: { title, description, type: "article" },
-    twitter: { card: "summary", title, description },
+    ...socialMeta({ title, description, path: `/services/listing/${slug}` }),
   };
 }
 

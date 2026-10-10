@@ -89,6 +89,16 @@ test("search: a typo postcode is explained and kept out of the index", async ({ 
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
 });
 
+test("share cards: pages carry Open Graph tags and the card image loads", async ({ page, request }) => {
+  await page.goto("/");
+  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", /fencing contractor/i);
+  const image = await page.locator('meta[property="og:image"]').first().getAttribute("content");
+  expect(image).toBeTruthy();
+  const res = await request.get(new URL(image!).pathname + new URL(image!).search);
+  expect(res.status()).toBe(200);
+  expect(res.headers()["content-type"]).toContain("image/png");
+});
+
 test("regional landing page renders", async ({ page }) => {
   await page.goto("/services/fencing-contractor");
   const regionNav = page.getByRole("navigation", { name: /browse by region/i });

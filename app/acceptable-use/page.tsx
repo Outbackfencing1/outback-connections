@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
+  alternates: { canonical: "/acceptable-use" },
   title: "Acceptable use — Outback Connections",
   description:
     "What you can and can't post on Outback Connections. Plain English, with examples.",

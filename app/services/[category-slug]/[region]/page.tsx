@@ -6,7 +6,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ListingCard from "@/components/browse/ListingCard";
-import { breadcrumbJsonLd, humanCategory, jsonLdScript } from "@/lib/seo";
+import { breadcrumbJsonLd, browseRobots, humanCategory, jsonLdScript, socialMeta } from "@/lib/seo";
+import { liveListingCount } from "@/lib/live-counts";
 import { getRegionBySlug, regionLabel } from "@/lib/regions";
 import { logSearch } from "@/lib/analytics";
 
@@ -24,16 +25,29 @@ export async function generateMetadata({ params }: { params: Params }) {
   const supabase = createClient();
   const { data: cat } = await supabase
     .from("categories")
-    .select("label")
+    .select("id, label")
     .eq("slug", p["category-slug"])
     .eq("pillar", "services")
     .maybeSingle();
-  if (!region || !cat) return { title: "Not found — Outback Connections" };
+  if (!region || !cat) {
+    return { title: "Not found — Outback Connections", robots: { index: false, follow: true } };
+  }
+  const liveCount = await liveListingCount({
+    kinds: ["service_offering", "service_request"],
+    categoryId: cat.id,
+    postcodes: region.postcodes,
+  });
+  const path = `/services/${p["category-slug"]}/${p.region}`;
   const title = `${humanCategory(cat.label)} in ${regionLabel(region)} — Outback Connections`;
+  // Most entries here are unclaimed (found online), so "contact them
+  // directly" isn't true; the quote form is the way in.
+  const description = `${humanCategory(cat.label)} around ${region.region_name}, ${region.state}. Free rural directory, no lead fees: ask for a quote without an account.`;
   return {
     title,
-    description: `${humanCategory(cat.label)} around ${region.region_name}, ${region.state}. Free rural directory, no lead fees. Contact them directly.`,
-    alternates: { canonical: `/services/${p["category-slug"]}/${p.region}` },
+    description,
+    alternates: { canonical: path },
+    robots: browseRobots({ liveCount }),
+    ...socialMeta({ title, description, path }),
   };
 }
 
@@ -101,7 +115,7 @@ export default async function ServiceRegionPage({ params }: { params: Params }) 
       <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">{heading}</h1>
       <p className="mt-2 max-w-2xl text-sm text-neutral-700">
         {rows.length > 0
-          ? `${rows.length} listed around ${region.region_name}. Free to browse; contact them directly. Unclaimed entries were found online and haven't been confirmed by the business yet.`
+          ? `${rows.length} listed around ${region.region_name}. Open any entry to ask for a quote, no account needed. Unclaimed entries were found online and haven't been confirmed by the business yet.`
           : `Nothing listed around ${region.region_name} yet.`}
       </p>
 

@@ -9,7 +9,7 @@ export default async function NotFound() {
   // Same rule as the header nav: an empty section isn't offered.
   const counts = await getCountsByPillar();
   return (
-    <main className="mx-auto max-w-3xl px-4 py-16">
+    <div className="mx-auto max-w-3xl px-4 py-16">
       <div className="rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm sm:p-10">
         <p className="text-sm font-medium text-green-800">404</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">
@@ -56,6 +56,6 @@ export default async function NotFound() {
           </Link>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { browseRobots, hasFilterParams } from "@/lib/seo";
+import { browseRobots, hasFilterParams, humanCategory, socialMeta } from "@/lib/seo";
 import { checkPostcodeInput, postcodeFilterValue } from "@/lib/postcode-input";
 import { postedVerb } from "@/lib/format";
 
@@ -66,5 +66,28 @@ describe("postedVerb", () => {
     expect(postedVerb("manual")).toBe("Posted");
     expect(postedVerb("claimed")).toBe("Posted");
     expect(postedVerb(null)).toBe("Posted");
+  });
+});
+
+describe("humanCategory on compound labels", () => {
+  it("doesn't pluralise labels with a slash or ampersand", () => {
+    expect(humanCategory("Bore / pump / water")).toBe("Bore / pump / water");
+    expect(humanCategory("Truck tyre & specialty repair")).toBe("Truck tyre & specialty repair");
+    expect(humanCategory("Earthworks (dams, roads, clearing)")).toBe("Earthworks");
+  });
+});
+
+describe("socialMeta", () => {
+  it("gives Facebook and Twitter the page's own title, URL and the card image", () => {
+    const m = socialMeta({ title: "T", description: "D", path: "/services/fencing-contractor" });
+    expect(m.openGraph).toMatchObject({
+      title: "T",
+      description: "D",
+      url: "/services/fencing-contractor",
+      siteName: "Outback Connections",
+      locale: "en_AU",
+    });
+    expect(JSON.stringify(m.openGraph)).toContain("/opengraph-image");
+    expect(m.twitter).toMatchObject({ card: "summary_large_image", title: "T" });
   });
 });

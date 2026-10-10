@@ -2,12 +2,17 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCategoryCounts } from "@/lib/category-counts";
 import ListingCard from "@/components/browse/ListingCard";
+import { socialMeta } from "@/lib/seo";
+
+const SERVICES_TITLE = "Rural services — Outback Connections";
+const SERVICES_DESCRIPTION =
+  "Rural services across NSW, starting with fencing contractors. Browse by category, region or postcode and ask for a quote without an account.";
 
 export const metadata = {
   alternates: { canonical: "/services" },
-  title: "Services — Outback Connections",
-  description:
-    "Rural specialists: bore pumps, helicopter mustering, drone spraying, mobile diesel mechanics, contract croppers, shearing teams, welders.",
+  title: SERVICES_TITLE,
+  description: SERVICES_DESCRIPTION,
+  ...socialMeta({ title: SERVICES_TITLE, description: SERVICES_DESCRIPTION, path: "/services" }),
 };
 
 export const dynamic = "force-dynamic";

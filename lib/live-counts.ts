@@ -7,6 +7,8 @@ import { createAnonClient } from "./supabase/anon";
 export async function liveListingCount(filter: {
   kinds: string[];
   categoryId?: string;
+  /** Limit to these postcodes (a region page). */
+  postcodes?: string[];
 }): Promise<number | null> {
   try {
     let query = createAnonClient()
@@ -16,6 +18,7 @@ export async function liveListingCount(filter: {
       .eq("status", "active")
       .gt("expires_at", new Date().toISOString());
     if (filter.categoryId) query = query.eq("category_id", filter.categoryId);
+    if (filter.postcodes) query = query.in("postcode", filter.postcodes);
     const { count, error } = await query;
     // A missing count (no Content-Range) is unknown, not zero.
     if (error || typeof count !== "number") return null;
