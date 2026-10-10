@@ -89,6 +89,17 @@ nobody listed") still uses the user-agent rule only, which is better after the
 re-flag but not verified. Bump `MIN_CURRENT_BROWSER_MAJOR` about 13 a year (with
 a migration that updates `is_bot_user_agent` and re-runs the backfill).
 
+## 5 Oct 2026: quote form works without JavaScript (branch `claude/project-thread-9407ck`)
+
+The "Get a quote" form had no `method`, so if JavaScript failed the browser
+submitted it as a GET: the farmer's name, phone, email and message went into
+the URL (history, logs) and nothing was saved. Now the form POSTs to
+`/api/enquiries`, which calls the same `submitEnquiry()` action and 303s back
+to the listing with only `?enquiry=sent&ref=ENQ-…` or an error code
+(`lib/enquiry-fallback.ts`). The form opens with `<details>`, so it works with
+JS off too. Tests: `tests/enquiry-fallback.test.ts`; the smoke now checks the
+form's method and action. No migration.
+
 ## 4 Oct 2026: the staff-post clean-up was failing; fixed (branch `ccr-a7a02618-x1gnjy`)
 
 Live check (read-only) before the fix: the 2 and 3 Oct runs of
@@ -125,10 +136,19 @@ Also in this branch: `safeNextPath` refuses any control character (`/\t/evil.com
 resolved off-site after sign-in); the two public legal-concern forms get a
 honeypot and a loose hourly cap (3 per email, 20 overall, refusals point to
 help@); staff see a warning on the job, freight and for-sale forms (those
-stay open to them for Outback Fencing's own ads). Left for later: the renew
-and unsubscribe links act on GET (mail scanners can trigger them);
-`CRON_SECRET` is accepted as `?k=` (lands in logs); a staff account's own
-real business would still be re-filed as unclaimed (only admins are exempt).
+stay open to them for Outback Fencing's own ads). The renew and unsubscribe
+links now land on a confirm page and act only on POST (mail scanners that
+prefetch links can't renew or unsubscribe), and every outcome is a visible
+page (the dashboard never read `?renew=`). The unsubscribe endpoint accepts
+RFC 8058 one-click POSTs, but no email sends `List-Unsubscribe` /
+`List-Unsubscribe-Post` headers and nothing issues unsubscribe tokens yet:
+add both (DKIM covering the headers) before any marketing email goes out.
+PR #21 merge gate (Josh, 4 Oct): Codex approves, smoke green on the PR
+preview (needs `VERCEL_AUTOMATION_BYPASS_SECRET` in GitHub Actions), and one
+real unsubscribe + one real renewal on test records after deploy. Left for later: `CRON_SECRET` is accepted as `?k=` (lands in
+logs; kept because Josh triggers dry runs from a browser); a staff account's
+own real business would still be re-filed as unclaimed (only admins are
+exempt; needs a decision on how to mark staff-owned businesses).
 
 ## 2 Oct 2026: staff posts through the public form get re-filed daily
 

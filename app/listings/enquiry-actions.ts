@@ -17,6 +17,7 @@ import { listingHref } from "@/lib/format";
 import { logEvent } from "@/lib/analytics";
 import { regionsForPostcodes } from "@/lib/regions";
 import { validateEnquiry } from "@/lib/enquiries";
+import type { EnquiryFailureCode } from "@/lib/enquiry-fallback";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
@@ -25,7 +26,7 @@ const RATE_MAX = 5;
 
 export type EnquiryResult =
   | { ok: true; reference: string; direct: boolean }
-  | { ok: false; errors: Record<string, string> };
+  | { ok: false; errors: Record<string, string>; code: EnquiryFailureCode };
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -45,7 +46,7 @@ async function requestMeta(): Promise<{ ip: string | null; ua: string | null }> 
 
 export async function submitEnquiry(formData: FormData): Promise<EnquiryResult> {
   const listingId = str(formData, "listing_id");
-  if (!/^[0-9a-f-]{36}$/i.test(listingId)) return { ok: false, errors: { _: "Bad request." } };
+  if (!/^[0-9a-f-]{36}$/i.test(listingId)) return { ok: false, errors: { _: "Bad request." }, code: "bad" };
 
   const v = validateEnquiry({
     name: str(formData, "name"),
@@ -56,12 +57,12 @@ export async function submitEnquiry(formData: FormData): Promise<EnquiryResult> 
     consent: str(formData, "consent") === "on" || str(formData, "consent") === "true",
     website: str(formData, "website"),
   });
-  if (!v.ok) return v;
+  if (!v.ok) return { ...v, code: "invalid" };
   // Bots fill the hidden field. Pretend it worked; write nothing.
   if (v.honeypot) return { ok: true, reference: "ENQ-OK", direct: false };
 
   const admin = createAdminClient();
-  if (!admin) return { ok: false, errors: { _: "Enquiries aren't configured on this environment." } };
+  if (!admin) return { ok: false, errors: { _: "Enquiries aren't configured on this environment." }, code: "config" };
 
   const { ip, ua } = await requestMeta();
 
@@ -75,7 +76,7 @@ export async function submitEnquiry(formData: FormData): Promise<EnquiryResult> 
       .eq("consent_ip", ip)
       .gte("created_at", since);
     if (!error && (count ?? 0) >= RATE_MAX) {
-      return { ok: false, errors: { _: "That's a few enquiries in a short time. Try again in an hour, or email help@outbackconnections.com.au." } };
+      return { ok: false, errors: { _: "That's a few enquiries in a short time. Try again in an hour, or email help@outbackconnections.com.au." }, code: "rate" };
     }
   }
 
@@ -89,7 +90,7 @@ export async function submitEnquiry(formData: FormData): Promise<EnquiryResult> 
     .eq("id", listingId)
     .maybeSingle();
   if (!listing || listing.status !== "active" || new Date(listing.expires_at) <= new Date()) {
-    return { ok: false, errors: { _: "That listing isn't live any more." } };
+    return { ok: false, errors: { _: "That listing isn't live any more." }, code: "gone" };
   }
   const cat = Array.isArray(listing.category) ? listing.category[0] : listing.category;
   const biz = Array.isArray(listing.business) ? listing.business[0] : listing.business;
@@ -121,7 +122,7 @@ export async function submitEnquiry(formData: FormData): Promise<EnquiryResult> 
     .maybeSingle();
   if (error || !inserted) {
     console.error("[enquiry] insert failed:", error?.message);
-    return { ok: false, errors: { _: "Couldn't send that. Please try again, or email help@outbackconnections.com.au." } };
+    return { ok: false, errors: { _: "Couldn't send that. Please try again, or email help@outbackconnections.com.au." }, code: "failed" };
   }
   const reference = inserted.anonymised_id as string;
 

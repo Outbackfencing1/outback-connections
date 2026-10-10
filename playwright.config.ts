@@ -45,7 +45,10 @@ export default defineConfig({
   use: {
     baseURL,
     userAgent: "OutbackConnectionsSmoke/1.0 (+https://www.outbackconnections.com.au) HeadlessChrome",
-    trace: "retain-on-failure",
+    // A trace records request headers and cookies, so it would capture the
+    // bypass secret or SMOKE_COOKIE, and CI uploads traces as an artifact.
+    // Authenticated runs never trace; the workflow also passes --trace=off.
+    trace: process.env.VERCEL_AUTOMATION_BYPASS_SECRET || process.env.SMOKE_COOKIE ? "off" : "retain-on-failure",
     extraHTTPHeaders,
     storageState: { cookies, origins: [] },
   },
