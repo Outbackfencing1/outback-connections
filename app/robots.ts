@@ -1,8 +1,9 @@
 // app/robots.ts
 import type { MetadataRoute } from "next";
 
-// Private areas no crawler should index (auth, dashboard, API).
-const DISALLOW = ["/api/", "/auth/", "/dashboard/", "/signin", "/signup", "/verify/"];
+// Private areas no crawler should index (auth, dashboard, API), and /go/,
+// the tracked redirects to the operator's store.
+const DISALLOW = ["/api/", "/auth/", "/dashboard/", "/go/", "/signin", "/signup", "/verify/"];
 
 // AI-answer + search engines we explicitly welcome. Listing them by name makes
 // the allow intent unambiguous (some default to not-crawling unless named).

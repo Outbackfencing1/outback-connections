@@ -3,16 +3,10 @@
 // Connections is run by Outback Fencing & Steel Supplies; this card says so
 // in plain words and only appears on fencing listings. It is the one
 // commercial element on the page and is labelled as such.
+// Both buttons go through /go/trade, which logs the click (trade_cta_click)
+// and redirects to the store with the UTM tags.
 import Link from "next/link";
-
-const FENCING_CATEGORIES = new Set(["fencing-contractor", "fencing-labour", "fencing"]);
-
-const STORE_URL = "https://outbackfencingsupplies.com.au";
-const PRODUCT_PATH = "/products/20v-cordless-c-ring-gun";
-
-export function isFencingCategory(slug: string | null | undefined): boolean {
-  return !!slug && FENCING_CATEGORIES.has(slug);
-}
+import { isFencingCategory, tradeOfferHref } from "@/lib/trade-offer";
 
 export default function TradeOfferCard({
   categorySlug,
@@ -23,9 +17,8 @@ export default function TradeOfferCard({
   placement: "listing" | "claim";
 }) {
   if (!isFencingCategory(categorySlug)) return null;
-  const utm = `utm_source=outbackconnections&utm_medium=trade_cta&utm_campaign=fencing_contractors&utm_content=${placement}`;
-  const productUrl = `${STORE_URL}${PRODUCT_PATH}?${utm}`;
-  const storeUrl = `${STORE_URL}/?${utm}`;
+  const productUrl = tradeOfferHref("clipgun", placement, categorySlug);
+  const storeUrl = tradeOfferHref("store", placement, categorySlug);
 
   return (
     <aside
@@ -47,7 +40,7 @@ export default function TradeOfferCard({
         <a
           href={productUrl}
           target="_blank"
-          rel="noopener noreferrer"
+          rel="nofollow noopener noreferrer"
           className="rounded-lg bg-green-700 px-4 py-2 font-semibold text-white hover:bg-green-800"
         >
           See the clipgun →
@@ -55,7 +48,7 @@ export default function TradeOfferCard({
         <a
           href={storeUrl}
           target="_blank"
-          rel="noopener noreferrer"
+          rel="nofollow noopener noreferrer"
           className="rounded-lg border border-green-700 bg-white px-4 py-2 font-semibold text-green-800 hover:bg-green-100"
         >
           Ask about trade pricing

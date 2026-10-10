@@ -57,4 +57,46 @@ describe("formatWeeklyDigest", () => {
     expect(text).not.toContain("ASKED FOR");
     expect(text).not.toContain("answered the follow-up");
   });
+
+  it("says what was left out of the human count, and where people came from", () => {
+    const { text } = formatWeeklyDigest({
+      ...base,
+      verifiedSince: "2026-10-11",
+      gate: {
+        ...base.gate,
+        unverified_searches_7d: 40,
+        internal_searches_7d: 12,
+        sources_30d: [
+          { source: "facebook", medium: "jess_organic", sessions: 7 },
+          { source: "google.com", medium: "referral", sessions: 3 },
+          { source: "(direct)", medium: "(none)", sessions: 2 },
+        ],
+      },
+      thisWeek: week({ trade_cta_clicks: 2 }),
+      lastWeek: week({ human_sessions: 25, enquiries: 1, trade_cta_clicks: 0 }),
+    });
+    expect(text).toContain("Verified people only: bot check passed, page script ran, not our team.");
+    expect(text).not.toContain("Verified counting has not started yet");
+    expect(text).toContain("Not counted, last 7 days: 40 searches where the page script never ran, 12 from our own team");
+    expect(text).toContain("Trade pricing clicks: 2, up 2 on last week");
+    expect(text).toContain("WHERE PEOPLE CAME FROM");
+    expect(text).toContain("facebook / jess_organic: 7");
+    expect(text).toContain("(direct) / (none): 2");
+  });
+
+  it("says when verified counting hasn't started", () => {
+    const { text } = formatWeeklyDigest({ ...base, gate: { ...base.gate, unverified_searches_7d: 9 } });
+    expect(text).toContain("Verified people only");
+    expect(text).toContain("Verified counting has not started yet");
+  });
+
+  it("copes with the pre-migration gate shape, and says the numbers are not verified", () => {
+    const { text } = formatWeeklyDigest(base);
+    expect(text).toContain("User-agent check only (migration 20261010120000 not applied)");
+    expect(text).not.toContain("Verified people only");
+    expect(text).not.toContain("Not counted, last 7 days");
+    expect(text).not.toContain("Trade pricing clicks");
+    expect(text).not.toContain("WHERE PEOPLE CAME FROM");
+    expect(text).not.toContain("NaN");
+  });
 });

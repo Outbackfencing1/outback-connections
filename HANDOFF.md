@@ -10,6 +10,85 @@ Pushing to `main` deploys production. All migrations in
 
 ---
 
+## 10 Oct 2026: "human" traffic numbers made trustworthy (branch `claude/human-traffic-definition`)
+
+A read-only check of the searches the traction gate counted as human found
+almost all of them were crawlers sending frozen desktop browser strings, our
+own agents (Vercel MCP fetches, the Claude browser pane), Google's crawler
+phone, and our own testing. None came from a phone. The gate number was not
+usable for the conversion-or-distribution decision. This branch fixes how it
+is measured. It does not change the gate targets.
+
+**Human, before:** the user agent did not match a list of crawler names.
+
+**Human, now (verified):** all three of
+1. The user agent passes `lib/bot-detect.ts`. On top of the old list it flags
+   our agents, `GoogleOther`, pre-2010 Gecko builds, and desktop Chrome or
+   Firefox older than `MIN_CURRENT_BROWSER_MAJOR` (140, over a year old).
+   Phones are never version-checked, because old Android phones and Samsung
+   Internet run older Chrome versions.
+2. The same daily session (hash of ip + browser + day, as before) sent a
+   `human_ping`: `components/HumanPing.tsx` (root layout) posts to
+   `/api/visit` once per page, on the first real tap, click, key, mouse move
+   or wheel. It never fires for `navigator.webdriver` browsers (our
+   Playwright smoke) or for scripted events. It uses no cookie, no storage
+   and no third party.
+3. The session isn't internal: no staff or admin account was signed in
+   during it, and the browser doesn't carry `oc_internal`. `/api/visit` sets
+   that cookie the first time it sees a signed-in staff/admin account, so
+   Josh's and Ali's browsers stay out of the count after signing out. Only
+   staff browsers ever get it. To exclude another device, sign in on it once.
+
+Also new:
+- **Where visitors come from.** The first ping of a visit from outside the
+  site stores `entry`, `referrer` (host name only, never the full URL),
+  `utm_source` / `utm_medium` / `utm_campaign` (cleaned: no emails or phone
+  numbers) and `landing` (first path segment) in `events.properties`. The
+  ping skips this when the browser sends Global Privacy Control or Do Not
+  Track. Shown as "Where people came from" on `/dashboard/admin/analytics`
+  and in the Monday digest. Jess's `utm_source=facebook&utm_medium=jess_organic`
+  links will show up there.
+- **Trade-pricing clicks.** Both `TradeOfferCard` buttons go through
+  `/go/trade`. It logs `trade_cta_click` and 302s to a fixed store URL with
+  the same UTM tags as before, and never redirects to a URL it is given. `/go/`
+  is in robots.txt and the links are `nofollow`.
+- The gate block and the digest also show what was left out: searches whose
+  browser never ran the script, and searches from our team. Contact reveals
+  now leave out staff accounts.
+
+Migration `20261010120000_human_traffic_definition.sql` adds
+`public.is_bot_user_agent()` (the SQL twin of `lib/bot-detect.ts`; a test
+fails if they drift), re-flags `is_bot` on stored rows with it, and
+redefines `admin_gate_metrics()`. Rollback is in the file header and is exact.
+**It is NOT applied to the live project yet.**
+
+To ship, in order:
+1. Two-way schema proof on a disposable Supabase branch: apply the
+   migration, call `admin_gate_metrics(8)`, run the rollback, call it
+   again. Neither this session nor CI has done this. The new function body
+   was run read-only against live as a plain SELECT.
+2. Apply the migration to live (MCP or CLI), then merge the PR. The page and
+   the digest cope with either order, but in the gap the old gate counts
+   unverified rows.
+3. After deploy, open the live site on a phone, tap once, and check that a
+   `human_ping` row arrives (`select created_at, properties from events where
+   event_type = 'human_ping' order by created_at desc limit 5`).
+
+Expect the gate to read 0 at first. Weeks before the first ping can't be
+verified, and that is the honest reading. Give it two or three weeks before
+judging the gate.
+
+Decision for Josh: the cookies notice (`/cookies`) says "No analytics … we
+don't track which pages you visit". That was already loose, since the server
+has logged listing views and searches since June. This branch adds the
+referring site and campaign tags. Draft wording is in the PR body. Legal copy
+is versioned (`/legal/archive`), so it is left for you to approve.
+
+Follow-ups, not done here: `admin_demand_by_region()` (the digest's "asked for,
+nobody listed") still uses the user-agent rule only, which is better after the
+re-flag but not verified. Bump `MIN_CURRENT_BROWSER_MAJOR` about 13 a year (with
+a migration that updates `is_bot_user_agent` and re-runs the backfill).
+
 ## 4 Oct 2026: the staff-post clean-up was failing; fixed (branch `ccr-a7a02618-x1gnjy`)
 
 Live check (read-only) before the fix: the 2 and 3 Oct runs of

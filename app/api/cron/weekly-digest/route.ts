@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const gate = gateRes.data as { weeks?: DigestWeek[]; gate?: DigestData["gate"] };
+  const gate = gateRes.data as { weeks?: DigestWeek[]; gate?: DigestData["gate"]; verified_since?: string | null };
   if (!gate?.gate) return NextResponse.json({ ok: false, error: "gate_shape" }, { status: 500 });
   // A week that started in the last 24 hours has nothing in it yet; report the
   // last completed week instead (matters when the cron is run by hand on Monday).
@@ -68,6 +68,7 @@ export async function GET(req: NextRequest) {
   const data: DigestData = {
     generatedAt: iso(now),
     gate: gate.gate,
+    verifiedSince: gate.verified_since ?? null,
     thisWeek: weeks[weeks.length - 1] ?? null,
     lastWeek: weeks.length >= 2 ? weeks[weeks.length - 2] : null,
     enquiries: {

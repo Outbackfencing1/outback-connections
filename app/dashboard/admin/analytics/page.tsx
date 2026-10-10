@@ -49,9 +49,16 @@ type GateWeek = {
   source_clicks: number;
   enquiries: number;
   directory_adds: number;
+  // Added 10 Oct 2026 (migration 20261010120000); optional so the page still
+  // renders if the code ships before the migration.
+  unverified_searches?: number;
+  trade_cta_clicks?: number;
 };
 
+type TrafficSource = { source: string; medium: string; sessions: number };
+
 type GateMetrics = {
+  verified_since?: string | null;
   weeks: GateWeek[];
   gate: {
     target_searches_per_week: number;
@@ -62,6 +69,10 @@ type GateMetrics = {
     first_party_posts_30d: number;
     enquiries_30d: number;
     bot_share_30d_pct: number;
+    unverified_searches_7d?: number;
+    internal_searches_7d?: number;
+    trade_cta_clicks_30d?: number;
+    sources_30d?: TrafficSource[];
   };
 };
 
@@ -255,11 +266,16 @@ function Table({ cols, rows }: { cols: string[]; rows: string[][] }) {
 // ------------------------------------------------------------
 // Traction gate (Josh, 4 Jul 2026): 25 organic human searches/week,
 // 5 claim submissions and 10 first-party posts within 30 days of the
-// Facebook push. Humans only (crawlers flagged by user agent). A "search"
-// is a browse load with a query or a filter set; bare loads are shown too.
+// Facebook push. A "search" is a browse load with a query or a filter set;
+// bare loads are shown too. Since 10 Oct 2026 "human" means verified: the
+// user agent passes lib/bot-detect.ts, the same daily session sent a
+// human_ping (components/HumanPing.tsx), and no staff or admin was signed
+// in on it. See migration 20261010120000_human_traffic_definition.
 // ------------------------------------------------------------
 function GateBlock({ gate }: { gate: GateMetrics }) {
   const g = gate.gate;
+  // The pre-10-Oct function has no unverified count: say which definition is live.
+  const verified = g.unverified_searches_7d !== undefined;
   const chip = (label: string, value: number, target: number) => (
     <div
       className={`rounded-xl border p-4 ${
@@ -277,10 +293,34 @@ function GateBlock({ gate }: { gate: GateMetrics }) {
     <section className="mt-6">
       <h2 className="text-lg font-semibold text-neutral-900">Traction gate</h2>
       <p className="mt-1 text-xs text-neutral-600">
-        Humans only. Crawlers were {g.bot_share_30d_pct}% of browse loads in the last 30 days.
+        {verified ? (
+          <>
+            Verified people only. A visit counts once the browser passes the bot check, our page
+            script has run and someone tapped, clicked, typed or moved the mouse, and nobody from
+            our team was signed in on that browser.{" "}
+            {gate.verified_since
+              ? `Verified counting started ${gate.verified_since}; weeks before that read 0.`
+              : "Verified counting starts when the page script goes live; until then these read 0."}{" "}
+          </>
+        ) : (
+          <>
+            User-agent check only: the verified definition (migration
+            20261010120000_human_traffic_definition) is not applied yet, so these numbers still
+            include bots that pretend to be browsers and our own team.{" "}
+          </>
+        )}
         A search is a browse load with a category, region, postcode, filter or query chosen;
         bare loads of /services, /jobs or /freight are not counted.
       </p>
+      {verified && (
+        <p className="mt-1 text-xs text-neutral-600">
+          Not counted, last 7 days: {g.unverified_searches_7d} searches from browsers that never
+          ran the page script (mostly bots that pretend to be browsers),{" "}
+          {g.internal_searches_7d ?? 0} from our own team. Crawlers that say what they are, and
+          out-of-date desktop browsers, were {g.bot_share_30d_pct}% of browse loads in the last
+          30 days.
+        </p>
+      )}
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
         {chip("Human searches, last 7 days", g.human_searches_7d, g.target_searches_per_week)}
         {chip("Claims, last 30 days", g.claims_30d, g.target_claims_30d)}
@@ -289,6 +329,10 @@ function GateBlock({ gate }: { gate: GateMetrics }) {
           <p className="text-xs font-semibold uppercase tracking-wide text-neutral-600">Quote requests, last 30 days</p>
           <p className="mt-1 text-2xl font-bold text-neutral-900">{g.enquiries_30d ?? 0}</p>
         </div>
+        <div className="rounded-xl border border-neutral-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-neutral-600">Trade pricing clicks, last 30 days</p>
+          <p className="mt-1 text-2xl font-bold text-neutral-900">{g.trade_cta_clicks_30d ?? 0}</p>
+        </div>
       </div>
       <div className="mt-4 overflow-x-auto rounded-xl border border-neutral-200">
         <table className="min-w-full divide-y divide-neutral-200 text-sm">
@@ -296,11 +340,13 @@ function GateBlock({ gate }: { gate: GateMetrics }) {
             <tr>
               <th className="px-3 py-2">Week of</th>
               <th className="px-3 py-2">Searches</th>
+              <th className="px-3 py-2">Not verified</th>
               <th className="px-3 py-2">Browse loads</th>
               <th className="px-3 py-2">People</th>
               <th className="px-3 py-2">Listing views</th>
               <th className="px-3 py-2">Contact reveals</th>
               <th className="px-3 py-2">Source clicks</th>
+              <th className="px-3 py-2">Trade clicks</th>
               <th className="px-3 py-2">Quote requests</th>
               <th className="px-3 py-2">Signups</th>
               <th className="px-3 py-2">Claims</th>
@@ -313,11 +359,13 @@ function GateBlock({ gate }: { gate: GateMetrics }) {
               <tr key={w.week_start}>
                 <td className="px-3 py-2 font-medium text-neutral-900">{w.week_start}</td>
                 <td className="px-3 py-2">{w.human_searches}</td>
+                <td className="px-3 py-2 text-neutral-500">{w.unverified_searches ?? "—"}</td>
                 <td className="px-3 py-2 text-neutral-600">{w.human_browse_loads}</td>
                 <td className="px-3 py-2">{w.human_sessions}</td>
                 <td className="px-3 py-2">{w.listing_views}</td>
                 <td className="px-3 py-2">{w.contact_reveals}</td>
                 <td className="px-3 py-2">{w.source_clicks}</td>
+                <td className="px-3 py-2">{w.trade_cta_clicks ?? "—"}</td>
                 <td className="px-3 py-2">{w.enquiries ?? 0}</td>
                 <td className="px-3 py-2">{w.signups}</td>
                 <td className="px-3 py-2">{w.claims}</td>
@@ -329,10 +377,53 @@ function GateBlock({ gate }: { gate: GateMetrics }) {
         </table>
       </div>
       <p className="mt-2 text-xs text-neutral-500">
-        &quot;People&quot; is distinct daily visitors (hash of address + browser + day; no cookie).
-        Source clicks are people leaving to the business&apos;s own page, the directory&apos;s
-        version of an enquiry.
+        &quot;People&quot; is distinct verified daily visitors (hash of address + browser + day;
+        no cookie). &quot;Not verified&quot; is searches that passed the bot check but whose
+        browser never ran the page script. Source clicks are people leaving to the
+        business&apos;s own page, the directory&apos;s version of an enquiry. Trade clicks are
+        the trade-pricing buttons on fencing listings and claim pages.
       </p>
+      <SourcesTable sources={g.sources_30d ?? []} />
     </section>
+  );
+}
+
+// Where verified visits came from: the landing page of each, last 30 days.
+// Recorded by components/HumanPing.tsx (the referring site's host name and
+// the utm_ tags only; never the full referring address).
+function SourcesTable({ sources }: { sources: TrafficSource[] }) {
+  return (
+    <div className="mt-6">
+      <h3 className="text-sm font-semibold text-neutral-900">Where people came from, last 30 days</h3>
+      <p className="mt-1 text-xs text-neutral-600">
+        First page of each verified visit. Source is the link&apos;s utm_source tag if it had
+        one, otherwise the site that sent them. &quot;(direct)&quot; means typed in, a bookmark,
+        or an app that hides where it came from.
+      </p>
+      {sources.length === 0 ? (
+        <p className="mt-2 text-sm text-neutral-500">No verified visits yet.</p>
+      ) : (
+        <div className="mt-2 overflow-x-auto rounded-xl border border-neutral-200">
+          <table className="min-w-full divide-y divide-neutral-200 text-sm">
+            <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-600">
+              <tr>
+                <th className="px-3 py-2">Source</th>
+                <th className="px-3 py-2">Medium</th>
+                <th className="px-3 py-2">Visits</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100">
+              {sources.map((r) => (
+                <tr key={`${r.source}|${r.medium}`}>
+                  <td className="px-3 py-2 font-medium text-neutral-900">{r.source}</td>
+                  <td className="px-3 py-2 text-neutral-700">{r.medium}</td>
+                  <td className="px-3 py-2 text-neutral-700">{r.sessions}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
