@@ -36,11 +36,14 @@ export default function ListingCard({ listing }: { listing: Listing }) {
       href={listingHref(listing.kind, listing.slug)}
       className="block rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm transition hover:border-green-700 hover:shadow-md"
     >
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-base font-semibold text-neutral-900 sm:text-lg">
+      {/* Phones: title on its own lines, badges wrap below it. From sm up:
+          title left, badges right. Long or unbroken names wrap, never push
+          the card (or the page) sideways. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
+        <h3 className="min-w-0 text-base font-semibold text-neutral-900 [overflow-wrap:anywhere] sm:text-lg">
           {listing.title}
         </h3>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
           {isSyndicated && (
             <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-sky-800">
               via Adzuna

@@ -19,6 +19,10 @@ export default async function PostHubPage() {
       <p className="mt-2 text-neutral-700">
         Pick the right kind of listing. Free forever, no lead fees.
       </p>
+      <p className="mt-1 text-sm text-neutral-600">
+        Posting needs a free account. Asking a listed business for a quote
+        doesn&apos;t.
+      </p>
 
       {!guard.ok && <PostingGate guard={guard} />}
 

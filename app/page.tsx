@@ -125,7 +125,7 @@ export default async function HomePage() {
             <Link href="/post/sale" className="font-medium text-green-800 underline">
               sell hay, stock or gear
             </Link>
-            . Free, takes 3 minutes.
+            . Free with an account, takes 3 minutes.
           </p>
         </div>
         <p className="mt-4 text-xs text-neutral-500">
@@ -176,7 +176,7 @@ export default async function HomePage() {
             cta="Browse services"
           />
           <PillarCard
-            href="/post"
+            href={pillarCounts.jobs.total > 0 ? "/jobs" : "/post/job"}
             icon={<HammerIcon />}
             heading="I&rsquo;ve got work that needs doing"
             blurb="Post a job — station hands, harvest, fencing, dairy, truckies."
@@ -185,7 +185,7 @@ export default async function HomePage() {
                 ? formatCountLine("jobs", pillarCounts.jobs)
                 : null
             }
-            cta="Post a job"
+            cta={pillarCounts.jobs.total > 0 ? "Browse jobs" : "Post a job"}
           />
           <PillarCard
             href={pillarCounts.freight.total > 0 ? "/freight" : "/post/freight"}
@@ -277,7 +277,7 @@ export default async function HomePage() {
             Get on it.
           </h2>
           <p className="mt-2 text-sm text-neutral-700 sm:text-base">
-            Free forever. Takes 3 minutes.
+            Free forever with an account. Takes 3 minutes.
           </p>
           <Link
             href="/post"

@@ -1,6 +1,6 @@
 # HANDOFF
 
-Date: 2026-10-04 (previous: 2026-09-06)
+Date: 2026-10-06 (previous: 2026-10-04)
 Branch: `main`. Live: https://www.outbackconnections.com.au
 
 Everything from the 6 Sep session is on `main` and deployed (PR #18, 7 Sep;
@@ -9,6 +9,25 @@ Pushing to `main` deploys production. All migrations in
 `supabase/migrations/` are applied to the live project.
 
 ---
+
+## 6 Oct 2026: marketplace usability repairs (branch `ccr-marketplace-usability`, draft PR, not merged)
+
+- Browse cards (`ListingCard`): on phones the title gets its own lines and
+  badges wrap below; long or unbroken names wrap. The category page header
+  ("Post in this category") wraps too. Measured with the real CSS on a local
+  build (`scripts/fake-supabase/cards.spec.ts`): main scrolled sideways to
+  855px at 320 and 390px wide; now page width equals viewport at 320, 390
+  and 1280. Detail pages use the same header pattern and weren't changed or
+  measured here.
+- Logged-out "Request a service" keeps `?category=` through sign-in
+  (`signInHref()`); off-site `next` values still fall back to /dashboard.
+- 404 shows Jobs/Freight/For sale only when they have listings (the header
+  nav's rule). Home's jobs card goes to /jobs only when it has listings,
+  else /post/job.
+- Copy: posting says it needs a free account; the post hub says asking a
+  listed business for a quote doesn't (quote requests need no sign-in).
+- `scripts/fake-supabase/` is also added by the clean-up PR; this branch's
+  `server.mjs` is a superset (adds browse fixtures). Take this one if both merge.
 
 ## 5 Oct 2026: quote form works without JavaScript (branch `claude/project-thread-9407ck`)
 

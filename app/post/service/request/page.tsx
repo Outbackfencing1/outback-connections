@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { checkPostingGuard } from "@/lib/posting";
+import { signInHref } from "@/lib/safe-next";
 import PostServiceForm from "@/components/posting/PostServiceForm";
 import { postServiceRequest } from "./actions";
 
@@ -22,7 +23,9 @@ export default async function PostServiceRequestPage({
   const wanted = typeof sp.category === "string" ? sp.category : "";
   const guard = await checkPostingGuard({ skipAccountAge: true });
   if (!guard.ok && guard.reason === "not_signed_in") {
-    redirect("/signin?next=/post/service/request");
+    // Keep the category (e.g. fencing from a directory page) through sign-in.
+    const qs = wanted ? `?${new URLSearchParams({ category: wanted })}` : "";
+    redirect(signInHref(`/post/service/request${qs}`));
   }
   if (!guard.ok) {
     return (
