@@ -10,7 +10,7 @@ Pushing to `main` deploys production. All migrations in
 
 ---
 
-## 10 Oct 2026: "human" traffic numbers made trustworthy (branch `claude/human-traffic-definition`)
+## 10 Oct 2026: "human" traffic numbers made trustworthy (branch `claude/launch-ready`)
 
 A read-only check of the searches the traction gate counted as human found
 almost all of them were crawlers sending frozen desktop browser strings, our
@@ -93,7 +93,7 @@ nobody listed") still uses the user-agent rule only, which is better after the
 re-flag but not verified. Bump `MIN_CURRENT_BROWSER_MAJOR` about 13 a year (with
 a migration that updates `is_bot_user_agent` and re-runs the backfill).
 
-## 10 Oct 2026: safe PRs merged, smoke back on, honesty + SEO pass (branch `claude/site-truth-pass`)
+## 10 Oct 2026: safe PRs merged, smoke back on, honesty + SEO pass (branch `claude/launch-ready`)
 
 Merged to `main` (squash) and deployed, each checked READY with smoke green
 on the production deploy and no runtime errors after:
@@ -107,12 +107,13 @@ on the production deploy and no runtime errors after:
   records, per the PR's gate 3.
 - **#25** (8ff5c68) quote form POSTs to `/api/enquiries` without JS. Live
   check: listing pages render `<form action="/api/enquiries" method="post">`.
-- **#27** conflicted with #25 only in this file. Resolved locally on
-  `ccr-marketplace-usability` (c6038ea, kept both entries); all four gates
-  green on the merged result (89 tests). Needs Josh to push that branch,
-  then merge #27.
+- **#27** conflicted with #25 only in this file. Resolved locally
+  (c6038ea, kept both entries), pushed by Josh, smoke green on its preview,
+  merged as fd20007.
 
-This branch is stacked on c6038ea, so merge #27 first, then this. It has:
+All of the following ships as one branch, `claude/launch-ready` (the
+earlier `claude/site-truth-pass` / PR #29 and `claude/human-traffic-definition`
+were rebased into it after #27's squash merge). It has:
 - Outreach page 500 fix ported unchanged from #26 (`lib/outreach-statuses.ts`).
   #26's clean-up hardening and #28 stay open for a decision: the clean-up
   backlog finished on its own on 9 Oct.
