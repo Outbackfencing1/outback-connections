@@ -10,6 +10,17 @@ Pushing to `main` deploys production. All migrations in
 
 ---
 
+## 5 Oct 2026: quote form works without JavaScript (branch `claude/project-thread-9407ck`)
+
+The "Get a quote" form had no `method`, so if JavaScript failed the browser
+submitted it as a GET: the farmer's name, phone, email and message went into
+the URL (history, logs) and nothing was saved. Now the form POSTs to
+`/api/enquiries`, which calls the same `submitEnquiry()` action and 303s back
+to the listing with only `?enquiry=sent&ref=ENQ-…` or an error code
+(`lib/enquiry-fallback.ts`). The form opens with `<details>`, so it works with
+JS off too. Tests: `tests/enquiry-fallback.test.ts`; the smoke now checks the
+form's method and action. No migration.
+
 ## 4 Oct 2026: the staff-post clean-up was failing; fixed (branch `ccr-a7a02618-x1gnjy`)
 
 Live check (read-only) before the fix: the 2 and 3 Oct runs of
