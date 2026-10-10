@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import LockdownBanner from "@/components/LockdownBanner";
+import HumanPing from "@/components/HumanPing";
 import { organizationJsonLd, jsonLdScript, socialMeta } from "@/lib/seo";
 
 const baseUrl =
@@ -42,6 +43,7 @@ export default function RootLayout({
           <main className="flex-1">{children}</main>
           <Footer />
         </div>
+        <HumanPing />
       </body>
     </html>
   );
