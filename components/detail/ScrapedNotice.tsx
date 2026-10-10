@@ -39,6 +39,14 @@ export default function ScrapedNotice({
     `&body=${encodeURIComponent(
       `I'd like to claim this listing: ${title}.\n\nMy name:\nMy role at the business:\nBest contact number:\n`
     )}`;
+  // No form and no legal complaint needed: a person reads help@ and makes
+  // the change.
+  const fixOrRemoveHref =
+    `mailto:help@outbackconnections.com.au` +
+    `?subject=${encodeURIComponent(`Fix or remove listing: ${title}`)}` +
+    `&body=${encodeURIComponent(
+      `Listing: ${title}\n\nPlease (fix / remove) it.\nWhat should change:\nMy name and role at the business:\n`
+    )}`;
 
   return (
     <div className="rounded-xl border border-amber-300 bg-amber-50 p-5">
@@ -77,9 +85,13 @@ export default function ScrapedNotice({
         to confirm the details and manage the listing.
       </p>
       <p className="mt-3 text-xs text-amber-800">
-        Listed something that shouldn&apos;t be here?{" "}
+        Want this entry changed or taken down?{" "}
+        <a href={fixOrRemoveHref} className="underline">
+          Email us
+        </a>{" "}
+        and we&apos;ll fix or remove it. Something else wrong?{" "}
         <Link href="/report" className="underline">
-          Tell us
+          Report it
         </Link>
         .
       </p>

@@ -20,13 +20,20 @@ export default function ClaimButton({
   const [msg, setMsg] = useState<string | null>(null);
 
   if (!signedIn) {
+    // Most owners arrive without an account, so lead with a free sign-up
+    // that comes back here; existing users get the sign-in link.
+    const next = encodeURIComponent(signInRedirect);
     return (
-      <Link
-        href={`/signin?next=${encodeURIComponent(signInRedirect)}`}
-        className="font-medium underline"
-      >
-        Sign in to claim it
-      </Link>
+      <span>
+        <Link href={`/signup?next=${next}`} className="font-medium underline">
+          Claim it free
+        </Link>{" "}
+        (a couple of minutes, or{" "}
+        <Link href={`/signin?next=${next}`} className="underline">
+          sign in
+        </Link>{" "}
+        if you have an account)
+      </span>
     );
   }
 

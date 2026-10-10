@@ -101,8 +101,10 @@ export default async function Footer() {
         <p className="mt-4 text-xs leading-relaxed text-neutral-500">
           Outback Connections is a free public-facing marketplace operated
           by Outback Fencing &amp; Steel Supplies Pty Ltd (ABN 76 674 671
-          820), 76 Astill Drive, Orange NSW 2800. Listings are
-          user-submitted and reflect users&apos; own claims. Outback
+          820), 76 Astill Drive, Orange NSW 2800. Entries marked
+          Unclaimed were found online and were not posted by the business;
+          other listings are posted by their owners and reflect their own
+          claims. Outback
           Connections is not a broker, employment agency, freight
           forwarder, recruiter, or licensed advisor of any kind. Use of
           this platform is at your own risk; see our{" "}

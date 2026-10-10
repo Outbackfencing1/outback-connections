@@ -12,11 +12,31 @@ export default function AboutPage() {
       <h1 className="text-3xl font-bold tracking-tight">About</h1>
 
       <p className="mt-4 text-neutral-800">
-        Outback Connections is a free marketplace for rural Australia.
-        Three pillars: jobs, freight, and services. Post what you&apos;ve
-        got or what you need. Anyone can browse; sign in to post or to
-        contact a listing.
+        Outback Connections is a free directory for rural Australia,
+        starting with fencing contractors in New South Wales. Anyone can
+        browse and ask a listed business for a quote without an account.
+        Businesses can claim their entry for free. Jobs, freight and
+        for-sale sections open as people post in them.
       </p>
+
+      <section className="mt-10 space-y-3">
+        <h2 className="text-xl font-bold">Where the listings come from</h2>
+        <p className="text-neutral-800">
+          Most entries were found online: on Facebook, Yellow Pages,
+          TrueLocal, Google Maps or the business&apos;s own website. Each
+          one says where we found it and carries an Unclaimed badge,
+          because the business didn&apos;t post it. The owner can claim it
+          for free, or email{" "}
+          <a
+            href="mailto:help@outbackconnections.com.au?subject=Fix%20or%20remove%20my%20business%20listing"
+            className="underline"
+          >
+            help@outbackconnections.com.au
+          </a>{" "}
+          and we&apos;ll fix or remove it. Other listings are posted by
+          their owners.
+        </p>
+      </section>
 
       <section className="mt-10 space-y-3">
         <h2 className="text-xl font-bold">Who runs it</h2>
@@ -43,7 +63,7 @@ export default function AboutPage() {
         </p>
         <p className="text-neutral-800">
           This is funded by Outback Fencing. No lead fees, no paid
-          placement, no ads. Free forever for the people using it.
+          placement, no third-party ads. Free forever for the people using it.
         </p>
       </section>
 
@@ -56,16 +76,19 @@ export default function AboutPage() {
             trust-and-safety team. Maybe later, properly — with a lawyer.
           </li>
           <li>
-            <strong>No messaging system.</strong> You contact each other
-            directly by email or phone. We never charge for a connection.
+            <strong>No messaging system.</strong> A quote request goes to
+            the business if it has claimed its listing; otherwise a person
+            on our team passes it on. We never charge for a connection.
           </li>
           <li>
             <strong>No paid tiers, no boosted listings.</strong> Everyone
             shows up on equal footing.
           </li>
           <li>
-            <strong>No scraping your contact details.</strong> They&apos;re
-            hidden from the public web — you only see them after signing in.
+            <strong>No publishing contact details we found online.</strong>{" "}
+            Phone numbers and emails from public sources stay private to our
+            team. On listings posted by their owners, contact details show
+            only to signed-in users.
           </li>
         </ul>
       </section>
@@ -73,8 +96,8 @@ export default function AboutPage() {
       <section className="mt-10 space-y-3">
         <h2 className="text-xl font-bold">We&apos;re new</h2>
         <p className="text-neutral-800">
-          Launched in 2026. We don&apos;t have hundreds of listings yet,
-          and we don&apos;t have testimonials. If the platform earns your
+          Launched in 2026. Most entries are fencing contractors in NSW
+          for now, and we don&apos;t have testimonials. If the platform earns your
           trust over time, word will get around. We&apos;d rather start
           small and honest than fake our way to critical mass.
         </p>

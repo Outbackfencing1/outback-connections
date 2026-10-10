@@ -142,9 +142,11 @@ export function serviceJsonLd(args: {
     name: args.title,
     description: args.description,
     serviceType: args.category,
+    // The provider is the business the entry is about (its name is the
+    // listing title), not us. Found-online rows were never posted by anyone.
     provider: {
       "@type": "LocalBusiness",
-      name: "Posted via Outback Connections",
+      name: args.title,
     },
     areaServed: {
       "@type": "Place",
@@ -176,7 +178,7 @@ export function organizationJsonLd(baseUrl: string): Record<string, unknown> {
     name: "Outback Connections",
     url: baseUrl,
     description:
-      "Australia's free rural marketplace — jobs, freight and services across the bush.",
+      "Free rural directory for Australia, starting with fencing contractors in NSW. Ask for a quote without an account.",
     parentOrganization: {
       "@type": "Organization",
       name: "Outback Fencing & Steel Supplies Pty Ltd",

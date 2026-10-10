@@ -11,7 +11,7 @@ import EnquiryForm from "@/components/detail/EnquiryForm";
 import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
-import { kindLabel, relativeTime } from "@/lib/format";
+import { kindLabel, postedVerb, relativeTime } from "@/lib/format";
 import {
   buildDescription,
   buildDirectoryDescription,
@@ -244,7 +244,7 @@ export default async function ServiceDetailPage({
       <p className="mt-2 text-sm text-neutral-600">
         {cat?.label ?? "—"} ·{" "}
         {listing.state ? `${listing.postcode} ${listing.state}` : `Postcode ${listing.postcode}`}{" "}
-        · Posted {relativeTime(listing.created_at)} ·{" "}
+        · {postedVerb(listing.data_source)} {relativeTime(listing.created_at)} ·{" "}
         Expires {new Date(listing.expires_at).toLocaleDateString("en-AU")}
       </p>
       {responded && (
