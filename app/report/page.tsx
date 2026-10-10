@@ -16,11 +16,17 @@ export default function ReportPage() {
       </p>
       <h1 className="mt-3 text-3xl font-bold tracking-tight">Report something</h1>
       <p className="mt-3 max-w-prose text-sm text-neutral-700">
-        Pick the category that fits best. Each route logs the report and
-        sends an acknowledgement email with a reference number.
+        Pick the category that fits best. The concerns form gives you a
+        reference number and emails you an acknowledgement. Flags are
+        logged against the listing. Email reports go straight to a person.
       </p>
 
       <ul className="mt-8 space-y-4">
+        <ReportCard
+          href="mailto:help@outbackconnections.com.au?subject=Fix%20or%20remove%20my%20business%20listing"
+          title="This is my business: fix or remove it"
+          blurb="Found your business here and want the details changed or the entry taken down? Email us the listing link and say what you'd like. You don't need to make a legal complaint."
+        />
         <ReportCard
           href="/legal/concerns-notice"
           title="Defamation, copyright, or illegal content"
@@ -29,7 +35,7 @@ export default function ReportPage() {
         <ReportCard
           href="/legal/concerns-notice"
           title="Privacy breach or doxxing"
-          blurb="Personal information of yours that's been published on a listing without your consent. We treat these urgently — usually hidden within hours pending review."
+          blurb="Personal information of yours that's been published on a listing without your consent. Choose 'Other concern' on the form and say it's a privacy issue. A person reads every notice and treats privacy reports as urgent."
         />
         <ReportCard
           inlineFlag
@@ -51,11 +57,14 @@ export default function ReportPage() {
       <section className="mt-12 rounded-xl border border-neutral-200 bg-neutral-50 p-5 text-sm text-neutral-800">
         <h2 className="font-semibold text-neutral-900">What we do with reports</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>Every report is logged with a reference number.</li>
           <li>
-            For defamation, illegal content, and privacy breaches, the
-            target listing is hidden pending review and the owner gets
-            7 days to respond.
+            Notices sent through the concerns form get a reference number
+            and an emailed acknowledgement.
+          </li>
+          <li>
+            For a defamation or illegal-content notice about a specific
+            listing, the listing is hidden straight away while we review
+            it, and the owner gets 7 days to respond.
           </li>
           <li>
             For scams: we hide listings on receipt of credible reports

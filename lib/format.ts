@@ -17,6 +17,15 @@ export function relativeTime(date: string | Date): string {
   return `${years} year${years === 1 ? "" : "s"} ago`;
 }
 
+/**
+ * Verb for a listing's timestamp. Entries we found online (scraped) or bulk
+ * imported were added by us, not posted by the business, so saying "Posted"
+ * would read as if the owner put them up.
+ */
+export function postedVerb(dataSource: string | null | undefined): "Added" | "Posted" {
+  return dataSource === "scraped" || dataSource === "imported" ? "Added" : "Posted";
+}
+
 export function teaser(text: string, max = 120): string {
   const trimmed = text.replace(/\s+/g, " ").trim();
   if (trimmed.length <= max) return trimmed;

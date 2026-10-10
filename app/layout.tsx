@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(baseUrl),
   title: "Outback Connections | Rural Australia's Marketplace",
   description:
-    "Find rural jobs, freight, and equipment across Australia. Built by Outback Fencing & Steel Supplies.",
+    "A free rural directory for Australia: find a fencing contractor and ask for a quote. Built by Outback Fencing & Steel Supplies.",
   icons: { icon: "/favicon.ico" },
 };
 

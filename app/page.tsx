@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCountsByPillar, type PillarStats } from "@/lib/category-counts";
-import { kindLabel, listingHref, relativeTime } from "@/lib/format";
+import { kindLabel, listingHref, postedVerb, relativeTime } from "@/lib/format";
 import FencingFinder from "@/components/home/FencingFinder";
 
 const RECENT_MIN_TO_SHOW = 5;
@@ -12,7 +12,7 @@ export const metadata = {
   alternates: { canonical: "/" },
   title: "Outback Connections — rural Australia's free marketplace",
   description:
-    "Jobs, freight, and the bloke who's handy with a bore pump. A free rural marketplace — no lead fees, no rip-offs, direct contact between parties.",
+    "Find a fencing contractor near you in rural NSW and ask for a quote, no account needed. A free rural directory with no lead fees, run by Outback Fencing & Steel Supplies in Orange.",
 };
 
 export const dynamic = "force-dynamic";
@@ -58,6 +58,7 @@ type RecentListing = {
   postcode: string;
   state: string | null;
   created_at: string;
+  data_source: string | null;
   category: { label: string } | null;
 };
 
@@ -67,7 +68,7 @@ async function getRecentListings(): Promise<RecentListing[]> {
   const { data } = await supabase
     .from("listings")
     .select(
-      `slug, kind, title, postcode, state, created_at, category:categories(label)`
+      `slug, kind, title, postcode, state, created_at, data_source, category:categories(label)`
     )
     .eq("status", "active")
     .gt("expires_at", nowIso)
@@ -81,6 +82,7 @@ async function getRecentListings(): Promise<RecentListing[]> {
     postcode: row.postcode,
     state: row.state,
     created_at: row.created_at,
+    data_source: row.data_source ?? null,
     category: Array.isArray(row.category) ? row.category[0] ?? null : row.category,
   }));
 }
@@ -327,7 +329,7 @@ function RecentCard({ listing }: { listing: RecentListing }) {
         {listing.category?.label ?? "—"} · {location}
       </p>
       <p className="mt-1 text-xs text-neutral-500">
-        Posted {relativeTime(listing.created_at)}
+        {postedVerb(listing.data_source)} {relativeTime(listing.created_at)}
       </p>
     </Link>
   );
