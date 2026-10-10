@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { liveListingCount } from "@/lib/live-counts";
+import { browseRobots, hasFilterParams } from "@/lib/seo";
 import { createClient } from "@/lib/supabase/server";
 import { getCategoryCounts } from "@/lib/category-counts";
 import Pagination from "@/components/browse/Pagination";
@@ -7,12 +9,25 @@ import { logSearch } from "@/lib/analytics";
 import { relativeTime, teaser } from "@/lib/format";
 import { priceLine, quantityLine } from "@/lib/sale";
 
-export const metadata = {
-  alternates: { canonical: "/sale" },
-  title: "For sale — Outback Connections",
-  description:
-    "Livestock, hay, grain, machinery and gear for sale across rural Australia. Free to browse, no commission, contact the seller directly.",
-};
+// Noindex while the section is empty (it's hidden from the nav then) or
+// filtered; see browseRobots().
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const [liveCount, resolvedSearchParams] = await Promise.all([
+    liveListingCount({ kinds: ["for_sale"] }),
+    searchParams,
+  ]);
+  return {
+    alternates: { canonical: "/sale" },
+    title: "For sale — Outback Connections",
+    description:
+      "Livestock, hay, grain, machinery and gear for sale across rural Australia. Free to browse, no commission, contact the seller directly.",
+    robots: browseRobots({ liveCount, filtered: hasFilterParams(resolvedSearchParams) }),
+  };
+}
 
 export const dynamic = "force-dynamic";
 

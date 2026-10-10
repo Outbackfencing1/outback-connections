@@ -76,6 +76,19 @@ test("honesty: an unclaimed row says so and never shows a contact block", async 
   await expect(page.getByText(/from the people who run this site/i)).toBeVisible();
 });
 
+test("honesty: the footer says some entries were found online", async ({ page }) => {
+  await page.goto("/about");
+  await expect(page.getByText(/were found online and were not posted by the business/i)).toBeVisible();
+  await expect(page.getByText(/user-submitted and reflect/i)).toHaveCount(0);
+});
+
+test("search: a typo postcode is explained and kept out of the index", async ({ page }) => {
+  const res = await page.goto("/services/fencing-contractor?postcode=abc");
+  expect(res?.status()).toBe(200);
+  await expect(page.getByText(/postcodes are numbers/i)).toBeVisible();
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+});
+
 test("regional landing page renders", async ({ page }) => {
   await page.goto("/services/fencing-contractor");
   const regionNav = page.getByRole("navigation", { name: /browse by region/i });

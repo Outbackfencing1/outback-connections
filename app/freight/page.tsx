@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { liveListingCount } from "@/lib/live-counts";
+import { browseRobots, hasFilterParams } from "@/lib/seo";
 import { createClient } from "@/lib/supabase/server";
 import ListingCard from "@/components/browse/ListingCard";
 import Pagination from "@/components/browse/Pagination";
@@ -6,12 +8,25 @@ import FilterBar from "@/components/browse/FilterBar";
 import { logSearch } from "@/lib/analytics";
 import { getCategoryCounts } from "@/lib/category-counts";
 
-export const metadata = {
-  alternates: { canonical: "/freight" },
-  title: "Freight — Outback Connections",
-  description:
-    "Rural freight: livestock, hay, grain, machinery. Farmers needing freight, truckies with available runs. Free to browse.",
-};
+// Noindex while the section is empty (it's hidden from the nav then) or
+// filtered; see browseRobots().
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const [liveCount, resolvedSearchParams] = await Promise.all([
+    liveListingCount({ kinds: ["freight"] }),
+    searchParams,
+  ]);
+  return {
+    alternates: { canonical: "/freight" },
+    title: "Freight — Outback Connections",
+    description:
+      "Rural freight: livestock, hay, grain, machinery. Farmers needing freight, truckies with available runs. Free to browse.",
+    robots: browseRobots({ liveCount, filtered: hasFilterParams(resolvedSearchParams) }),
+  };
+}
 
 export const dynamic = "force-dynamic";
 

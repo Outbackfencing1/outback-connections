@@ -8,6 +8,7 @@ export const metadata = {
   title: "Sign up — Outback Connections",
   description:
     "Create a free Outback Connections account with a password, or a one-time email link.",
+  robots: { index: false, follow: true },
 };
 
 export const dynamic = "force-dynamic";

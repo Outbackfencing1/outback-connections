@@ -5,8 +5,10 @@ import ListingCard from "@/components/browse/ListingCard";
 import Pagination from "@/components/browse/Pagination";
 import FilterBar from "@/components/browse/FilterBar";
 import { logSearch } from "@/lib/analytics";
-import { breadcrumbJsonLd, humanCategory, jsonLdScript } from "@/lib/seo";
-import { regionCounts } from "@/lib/regions";
+import { breadcrumbJsonLd, browseRobots, hasFilterParams, humanCategory, jsonLdScript } from "@/lib/seo";
+import { regionCounts, regionsForPostcodes, regionSlug } from "@/lib/regions";
+import { liveListingCount } from "@/lib/live-counts";
+import { checkPostcodeInput, postcodeFilterValue } from "@/lib/postcode-input";
 
 export const dynamic = "force-dynamic";
 
@@ -25,22 +27,28 @@ function getStr(p: SearchParams, key: string): string {
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ "category-slug": string }>;
+  searchParams: Promise<SearchParams>;
 }) {
-  const resolvedParams = await params;
+  const [resolvedParams, resolvedSearchParams] = await Promise.all([params, searchParams]);
   const slug = resolvedParams["category-slug"];
   const { data: cat } = await createClient()
     .from("categories")
-    .select("label")
+    .select("id, label")
     .eq("slug", slug)
     .eq("pillar", "services")
     .maybeSingle();
   const human = cat ? humanCategory(cat.label) : slug.replace(/-/g, " ");
+  const liveCount = cat
+    ? await liveListingCount({ kinds: ["service_offering", "service_request"], categoryId: cat.id })
+    : null;
   return {
     title: `${human} — Outback Connections`,
     description: `${human} across rural Australia. Free directory, no lead fees: browse by region or postcode and get a quote direct.`,
     alternates: { canonical: `/services/${slug}` },
+    robots: browseRobots({ liveCount, filtered: hasFilterParams(resolvedSearchParams) }),
   };
 }
 
@@ -66,7 +74,9 @@ export default async function ServiceCategoryPage({
     notFound();
   }
 
-  const postcode = getStr(resolvedSearchParams, "postcode").trim();
+  const postcodeRaw = getStr(resolvedSearchParams, "postcode").trim();
+  const postcodeInput = checkPostcodeInput(postcodeRaw);
+  const postcode = postcodeFilterValue(postcodeInput);
   const direction = getStr(resolvedSearchParams, "direction").trim();
   const page = Math.max(1, parseInt(getStr(resolvedSearchParams, "page") || "1", 10) || 1);
 
@@ -108,6 +118,20 @@ export default async function ServiceCategoryPage({
   ]);
   const total = count ?? 0;
   const regions = await regionCounts((allPostcodes ?? []).map((r) => r.postcode));
+
+  // A full postcode also gets "N around <region>", since exact-prefix search
+  // misses neighbouring postcodes in the same area.
+  let nearby: { slug: string; region_name: string; count: number } | null = null;
+  let unplacedPostcode = false;
+  if (postcodeInput.kind === "postcode") {
+    const reg = (await regionsForPostcodes([postcodeInput.value])).get(postcodeInput.value);
+    if (!reg) unplacedPostcode = true;
+    else {
+      const slug = regionSlug(reg.region_name, reg.state);
+      nearby = regions.find((r) => r.slug === slug) ?? { slug, region_name: reg.region_name, count: 0 };
+    }
+  }
+
   if (page === 1) {
     await logSearch({
       vertical: "service",
@@ -169,7 +193,7 @@ export default async function ServiceCategoryPage({
       <div className="mt-6">
         <FilterBar
           action={`/services/${cat.slug}`}
-          postcode={postcode}
+          postcode={postcodeRaw}
           resetHref={`/services/${cat.slug}`}
         >
           <label className="block">
@@ -185,13 +209,43 @@ export default async function ServiceCategoryPage({
             </select>
           </label>
         </FilterBar>
+        {postcodeInput.kind === "invalid" && (
+          <p className="mt-3 text-sm text-amber-900">
+            Postcodes are numbers, like 2800. Showing everything in{" "}
+            {cat.label} instead.
+          </p>
+        )}
+        {nearby && (
+          <p className="mt-3 text-sm text-neutral-700">
+            {total} in {postcode}
+            {nearby.count > 0 && (
+              <>
+                {" "}·{" "}
+                <Link
+                  href={`/services/${cat.slug}/${nearby.slug}`}
+                  className="font-medium text-green-800 underline"
+                >
+                  {nearby.count} around {nearby.region_name}
+                </Link>
+              </>
+            )}
+          </p>
+        )}
+        {unplacedPostcode && total === 0 && (
+          <p className="mt-3 text-sm text-amber-900">
+            We couldn&apos;t match {postcode} to a region. Check the
+            postcode, or browse by region above.
+          </p>
+        )}
       </div>
 
       <div className="mt-6">
         {!listings || listings.length === 0 ? (
           <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center">
             <p className="text-sm text-neutral-700">
-              No active listings in {cat.label} right now.
+              {postcode
+                ? `Nothing in ${cat.label} listed for postcode ${postcode} yet.`
+                : `No active listings in ${cat.label} right now.`}
             </p>
             <p className="mt-2 text-xs text-neutral-500">
               Check back soon — or{" "}

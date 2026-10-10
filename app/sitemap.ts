@@ -1,6 +1,6 @@
 // app/sitemap.ts
 // Public sitemap, generated from current data: static pages + every active
-// listing (jobs / freight / services) + active service categories. Uses a
+// listing (jobs / freight / services) + service categories with live rows. Uses a
 // read-only anon client (public data only); falls back to the static routes
 // if the DB is unreachable so the build never breaks.
 import type { MetadataRoute } from "next";
@@ -95,17 +95,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .eq("active", true)
       .limit(1000);
 
-    const categoryEntries: Row[] = (cats ?? [])
-      .filter((c) => c.slug)
-      .map((c) => ({
-        url: `${BASE}/services/${c.slug}`,
-        lastModified: now,
-        changeFrequency: "weekly" as const,
-        priority: 0.6,
-      }));
-
     // Regional landing pages: one per (services category, region) with live rows.
-    const { data: svc } = await sb
+    const { data: svc, error: svcError } = await sb
       .from("listings")
       .select("postcode, category:categories!inner(slug, pillar)")
       .eq("status", "active")
@@ -120,6 +111,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       if (!reg || !r.category?.slug || r.category.pillar !== "services") continue;
       regionPages.add(`${r.category.slug}/${regionSlug(reg.region_name, reg.state)}`);
     }
+    // Only categories with live rows: an empty category page is noindexed
+    // (browseRobots), so listing it here would contradict that. If the count
+    // query failed, fall back to every active category.
+    const liveCategorySlugs = svcError
+      ? null
+      : new Set(svcRows.map((r) => r.category?.slug).filter((s): s is string => !!s));
+    const categoryEntries: Row[] = (cats ?? [])
+      .filter((c) => c.slug && (!liveCategorySlugs || liveCategorySlugs.has(c.slug)))
+      .map((c) => ({
+        url: `${BASE}/services/${c.slug}`,
+        lastModified: now,
+        changeFrequency: "weekly" as const,
+        priority: 0.6,
+      }));
     const regionEntries: Row[] = Array.from(regionPages).map((path) => ({
       url: `${BASE}/services/${path}`,
       lastModified: now,
