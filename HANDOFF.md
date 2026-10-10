@@ -63,10 +63,14 @@ redefines `admin_gate_metrics()`. Rollback is in the file header and is exact.
 **It is NOT applied to the live project yet.**
 
 To ship, in order:
-1. Two-way schema proof on a disposable Supabase branch: apply the
-   migration, call `admin_gate_metrics(8)`, run the rollback, call it
-   again. Neither this session nor CI has done this. The new function body
-   was run read-only against live as a plain SELECT.
+1. ~~Two-way schema proof~~ **Done 10 Oct** (Claude, inside one
+   transaction on live that ended in ROLLBACK, so nothing persisted):
+   migration applied cleanly; `admin_gate_metrics(8)` returned the old keys
+   (`gate`, `weeks`) plus `verified_since`, so the deployed page keeps
+   working; human searches 7d 192 -> 0 (no pings yet), 67 unverified, 8
+   internal; documented rollback brought the payload back byte-identical
+   (same md5) and the is_bot counts back exactly (events 1700, searches
+   1238). Afterwards `is_bot_user_agent` did not exist on live.
 2. Apply the migration to live (MCP or CLI), then merge the PR. The page and
    the digest cope with either order, but in the gap the old gate counts
    unverified rows.
