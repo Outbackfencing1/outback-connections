@@ -5,10 +5,12 @@ import ContactBlock from "@/components/detail/ContactBlock";
 import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
+import EnquiryForm from "@/components/detail/EnquiryForm";
 import VendorTrustSection from "@/components/detail/VendorTrustSection";
 import { relativeTime } from "@/lib/format";
 import { buildDescription, buildTitle, breadcrumbJsonLd, jsonLdScript } from "@/lib/seo";
 import { logEvent } from "@/lib/analytics";
+import { enquiryNoticeFrom } from "@/lib/enquiry-fallback";
 import {
   CONDITION_LABELS,
   DELIVERY_LABELS,
@@ -52,8 +54,15 @@ type SaleDetail = {
   harvest_season?: string | null;
 };
 
-export default async function SaleDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function SaleDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { slug } = await params;
+  const enquiryNotice = enquiryNoticeFrom(await searchParams);
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
   const viewer = userData.user;
@@ -213,6 +222,35 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ slu
           inspect goods, or take a commission. Inspect before you pay.
         </p>
       </section>
+
+      {!isOwner && !d?.sold_at && (
+        <section className="mt-6">
+          <EnquiryForm
+            listingId={listing.id}
+            businessName={listing.title}
+            claimed={true}
+            returnTo={`/sale/${listing.slug}`}
+            notice={enquiryNotice}
+            heading={
+              isWanted
+                ? `Got what this buyer is chasing? Message them`
+                : `Enquire or make an offer on ${listing.title}`
+            }
+            ctaLabel={isWanted ? "Message buyer" : "Message seller"}
+            promptLabel={
+              isWanted
+                ? "What stock, hay, grain or gear do you have available?"
+                : "Quantity, inspection time, or offer details"
+            }
+            postcodeLabel="Your postcode"
+            placeholder={
+              isWanted
+                ? "e.g. Have 2 decks of shedded 2026 lucerne hay near Molong, can load B-double this week."
+                : "e.g. Interested in 40 bales / 1 deck, can inspect Thursday morning and arrange our own flat top."
+            }
+          />
+        </section>
+      )}
 
       <VendorTrustSection
         userId={listing.user_id}

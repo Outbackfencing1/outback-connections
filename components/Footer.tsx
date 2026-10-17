@@ -23,6 +23,7 @@ export default function Footer() {
               <li><Link href="/jobs" className="hover:text-neutral-900">Work &amp; Skills Board</Link></li>
               <li><Link href="/sale" className="hover:text-neutral-900">Livestock, Harvest &amp; Gear</Link></li>
               <li><Link href="/freight" className="hover:text-neutral-900">Freight &amp; Backloads</Link></li>
+              <li><Link href="/profiles" className="hover:text-neutral-900">Trusted People &amp; Vendors</Link></li>
               <li><Link href="/post/job?direction=available_for_work" className="hover:text-neutral-900">List your skills</Link></li>
               <li><Link href="/post" className="hover:text-neutral-900">Post a listing</Link></li>
               <li><Link href="/about" className="hover:text-neutral-900">About</Link></li>

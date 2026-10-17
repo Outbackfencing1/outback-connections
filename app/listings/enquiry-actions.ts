@@ -94,7 +94,10 @@ export async function submitEnquiry(formData: FormData): Promise<EnquiryResult> 
   }
   const cat = Array.isArray(listing.category) ? listing.category[0] : listing.category;
   const biz = Array.isArray(listing.business) ? listing.business[0] : listing.business;
-  const claimed = !!biz && biz.claim_status !== "unclaimed";
+  const claimed =
+    listing.data_source === "manual" ||
+    listing.data_source === "claimed" ||
+    (!!biz && biz.claim_status !== "unclaimed");
 
   let regionState: string | null = null;
   if (v.value.postcode) {

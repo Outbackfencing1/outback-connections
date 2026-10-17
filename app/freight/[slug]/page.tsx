@@ -6,10 +6,12 @@ import ScrapedNotice from "@/components/detail/ScrapedNotice";
 import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
+import EnquiryForm from "@/components/detail/EnquiryForm";
 import VendorTrustSection from "@/components/detail/VendorTrustSection";
 import { kindLabel, relativeTime } from "@/lib/format";
 import { buildDescription, buildTitle, localBusinessJsonLd, breadcrumbJsonLd, jsonLdScript } from "@/lib/seo";
 import { logEvent } from "@/lib/analytics";
+import { enquiryNoticeFrom } from "@/lib/enquiry-fallback";
 
 export const dynamic = "force-dynamic";
 
@@ -50,10 +52,13 @@ export async function generateMetadata({
 
 export default async function FreightDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { slug } = await params;
+  const enquiryNotice = enquiryNoticeFrom(await searchParams);
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
   const viewer = userData.user;
@@ -208,6 +213,23 @@ export default async function FreightDetailPage({
           />
         )}
       </section>
+
+      {!isOwner && (
+        <section className="mt-6">
+          <EnquiryForm
+            listingId={listing.id}
+            businessName={listing.title}
+            claimed={!isUnclaimedScraped}
+            returnTo={`/freight/${listing.slug}`}
+            notice={enquiryNotice}
+            heading={`Message ${listing.title} about this freight run`}
+            ctaLabel="Message carrier / shipper"
+            promptLabel="Route, dates, deck space or load details"
+            postcodeLabel="Pickup / delivery postcode"
+            placeholder="e.g. Have 28 round bales of lucerne near Orange needing a drop deck heading to Wagga next week."
+          />
+        </section>
+      )}
 
       <VendorTrustSection
         userId={listing.user_id}

@@ -13,7 +13,12 @@ export type EnquiryNotice =
   | { kind: "sent"; reference: string; direct: boolean }
   | { kind: "error"; message: string };
 
-const LISTING_PREFIX = "/services/listing/";
+const LISTING_PREFIXES = [
+  "/services/listing/",
+  "/jobs/",
+  "/sale/",
+  "/freight/",
+] as const;
 const SLUG = /^[a-z0-9-]{1,200}$/;
 const REFERENCE = /^[A-Za-z0-9-]{3,40}$/;
 export const ENQUIRY_ANCHOR = "get-a-quote";
@@ -32,11 +37,16 @@ function isCode(v: string): v is EnquiryFailureCode {
   return Object.prototype.hasOwnProperty.call(MESSAGES, v);
 }
 
-/** Only a service listing path on this site. Anything else goes home. */
+/** Only a valid listing detail path on this site. Anything else goes home. */
 export function enquiryReturnPath(value: string | null | undefined): string {
-  if (!value || !value.startsWith(LISTING_PREFIX)) return "/";
-  const slug = value.slice(LISTING_PREFIX.length);
-  return SLUG.test(slug) ? value : "/";
+  if (!value) return "/";
+  for (const prefix of LISTING_PREFIXES) {
+    if (value.startsWith(prefix)) {
+      const slug = value.slice(prefix.length);
+      return SLUG.test(slug) ? value : "/";
+    }
+  }
+  return "/";
 }
 
 export type EnquiryOutcome =

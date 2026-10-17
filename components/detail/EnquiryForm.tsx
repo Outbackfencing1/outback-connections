@@ -21,6 +21,12 @@ type Props = {
   returnTo: string;
   /** Outcome of a no-JS submit, read from the redirect. */
   notice?: EnquiryNotice | null;
+  heading?: string;
+  subtext?: string;
+  ctaLabel?: string;
+  promptLabel?: string;
+  postcodeLabel?: string;
+  placeholder?: string;
 };
 
 type Done = { reference: string; direct: boolean };
@@ -28,7 +34,19 @@ type Done = { reference: string; direct: boolean };
 const input =
   "mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm";
 
-export default function EnquiryForm({ listingId, businessName, claimed, returnTo, notice }: Props) {
+export default function EnquiryForm({
+  listingId,
+  businessName,
+  claimed,
+  returnTo,
+  notice,
+  heading,
+  subtext,
+  ctaLabel = "Get a quote",
+  promptLabel = "What needs doing?",
+  postcodeLabel = "Postcode of the job",
+  placeholder = "Roughly how much, where, and when. E.g. 2km boundary fence near Cargo, wanting it done before October.",
+}: Props) {
   const [open, setOpen] = useState(notice?.kind === "error");
   const [errors, setErrors] = useState<Record<string, string>>(
     notice?.kind === "error" ? { _: notice.message } : {}
@@ -62,19 +80,22 @@ export default function EnquiryForm({ listingId, businessName, claimed, returnTo
     );
   }
 
+  const cardHeading = heading ?? `Need a quote from ${businessName}?`;
+  const cardSubtext =
+    subtext ??
+    (claimed
+      ? "Tell them the details and they'll get back to you. No account needed."
+      : "Tell us the details and we'll pass it on. No account needed, and your details only go to this listing.");
+
   return (
     <div id={ENQUIRY_ANCHOR} className="group rounded-xl border border-green-200 bg-white p-5">
       <div className="group-has-[details[open]]:hidden">
-        <p className="font-semibold text-neutral-900">Need a quote from {businessName}?</p>
-        <p className="mt-1 text-sm text-neutral-700">
-          {claimed
-            ? "Tell them the job and they'll get back to you. No account needed."
-            : "Tell us the job and we'll pass it on. No account needed, and your details only go to this business."}
-        </p>
+        <p className="font-semibold text-neutral-900">{cardHeading}</p>
+        <p className="mt-1 text-sm text-neutral-700">{cardSubtext}</p>
       </div>
       <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
         <summary className="mt-3 inline-block cursor-pointer list-none rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 [&::-webkit-details-marker]:hidden [details[open]>&]:hidden">
-          Get a quote
+          {ctaLabel}
         </summary>
         <form method="post" action="/api/enquiries" onSubmit={onSubmit} noValidate>
           <input type="hidden" name="listing_id" value={listingId} />
@@ -87,7 +108,7 @@ export default function EnquiryForm({ listingId, businessName, claimed, returnTo
             </label>
           </div>
 
-          <p className="font-semibold text-neutral-900">Get a quote from {businessName}</p>
+          <p className="font-semibold text-neutral-900">{cardHeading}</p>
           {errors._ && (
             <p role="alert" className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
               {errors._}
@@ -101,7 +122,7 @@ export default function EnquiryForm({ listingId, businessName, claimed, returnTo
               {errors.name && <span className="mt-1 block text-xs text-red-700">{errors.name}</span>}
             </label>
             <label className="block text-sm">
-              <span className="font-medium text-neutral-800">Postcode of the job</span>
+              <span className="font-medium text-neutral-800">{postcodeLabel}</span>
               <input name="postcode" type="text" inputMode="numeric" maxLength={4} className={input} placeholder="2800" />
               {errors.postcode && <span className="mt-1 block text-xs text-red-700">{errors.postcode}</span>}
             </label>
@@ -119,14 +140,14 @@ export default function EnquiryForm({ listingId, businessName, claimed, returnTo
           <p className="mt-1 text-xs text-neutral-500">Phone or email, whichever you answer.</p>
 
           <label className="mt-3 block text-sm">
-            <span className="font-medium text-neutral-800">What needs doing?</span>
+            <span className="font-medium text-neutral-800">{promptLabel}</span>
             <textarea
               name="message"
               rows={4}
               required
               maxLength={2000}
               className={input}
-              placeholder="Roughly how much, where, and when. E.g. 2km boundary fence near Cargo, wanting it done before October."
+              placeholder={placeholder}
             />
             {errors.message && <span className="mt-1 block text-xs text-red-700">{errors.message}</span>}
           </label>
@@ -135,7 +156,7 @@ export default function EnquiryForm({ listingId, businessName, claimed, returnTo
             <input type="checkbox" name="consent" className="mt-0.5" />
             <span>
               I&apos;m happy for Outback Connections to pass these details to {businessName} so they can
-              quote. We don&apos;t share them with anyone else, we may email you once about a week later
+              reply. We don&apos;t share them with anyone else, we may email you once about a week later
               to ask whether they got back to you, and we delete them after 12 months.
             </span>
           </label>

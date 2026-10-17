@@ -81,8 +81,11 @@ describe("enquiry no-JS fallback route", () => {
 });
 
 describe("enquiry fallback helpers", () => {
-  it("only returns to a service listing path", () => {
+  it("only returns to a valid listing path", () => {
     expect(enquiryReturnPath(LISTING)).toBe(LISTING);
+    expect(enquiryReturnPath("/jobs/mc-driver-orange-2800")).toBe("/jobs/mc-driver-orange-2800");
+    expect(enquiryReturnPath("/sale/lucerne-hay-molong-2866")).toBe("/sale/lucerne-hay-molong-2866");
+    expect(enquiryReturnPath("/freight/drop-deck-dubbo-2830")).toBe("/freight/drop-deck-dubbo-2830");
     expect(enquiryReturnPath("/dashboard")).toBe("/");
     expect(enquiryReturnPath("/services/listing/../../dashboard")).toBe("/");
     expect(enquiryReturnPath("https://evil.example")).toBe("/");

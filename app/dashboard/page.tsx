@@ -65,6 +65,21 @@ export default async function DashboardPage() {
         </Link>
 
         <Link
+          href="/dashboard/messages"
+          className="rounded-2xl border border-green-300 bg-green-50/70 p-5 shadow-sm transition hover:border-green-700 hover:shadow-md"
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide text-green-800">
+            Inbox
+          </p>
+          <h2 className="mt-1 text-lg font-bold text-neutral-900">
+            Messages &amp; enquiries received
+          </h2>
+          <p className="mt-2 text-sm text-neutral-700">
+            Read quote requests, job enquiries, and buyer offers sent to your listings with 1-click call or email reply.
+          </p>
+        </Link>
+
+        <Link
           href="/post/job?direction=available_for_work"
           className="rounded-2xl border border-green-300 bg-green-50/70 p-5 shadow-sm transition hover:border-green-700 hover:shadow-md"
         >

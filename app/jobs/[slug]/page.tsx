@@ -7,6 +7,7 @@ import SyndicatedNotice from "@/components/detail/SyndicatedNotice";
 import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
+import EnquiryForm from "@/components/detail/EnquiryForm";
 import VendorTrustSection from "@/components/detail/VendorTrustSection";
 import { kindLabel, relativeTime } from "@/lib/format";
 import {
@@ -18,6 +19,7 @@ import {
   jsonLdScript,
 } from "@/lib/seo";
 import { logEvent } from "@/lib/analytics";
+import { enquiryNoticeFrom } from "@/lib/enquiry-fallback";
 import { jobDirectionBadge, ticketLabel, travelRadiusLabel } from "@/lib/work-board";
 
 export const dynamic = "force-dynamic";
@@ -75,10 +77,13 @@ type JobDetail = {
 
 export default async function JobDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { slug } = await params;
+  const enquiryNotice = enquiryNoticeFrom(await searchParams);
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
   const viewer = userData.user;
@@ -295,6 +300,35 @@ export default async function JobDetailPage({
           />
         )}
       </section>
+
+      {!isOwner && !isSyndicated && (
+        <section className="mt-6">
+          <EnquiryForm
+            listingId={listing.id}
+            businessName={listing.title}
+            claimed={!isUnclaimedScraped}
+            returnTo={`/jobs/${listing.slug}`}
+            notice={enquiryNotice}
+            heading={
+              isWorkerProfile
+                ? `Message ${listing.title} about work`
+                : `Apply or enquire about ${listing.title}`
+            }
+            ctaLabel={isWorkerProfile ? "Send work enquiry" : "Apply / Send message"}
+            promptLabel={
+              isWorkerProfile
+                ? "What's the job, location & start date?"
+                : "Your experience, tickets & availability"
+            }
+            postcodeLabel={isWorkerProfile ? "Postcode of the job" : "Your postcode"}
+            placeholder={
+              isWorkerProfile
+                ? "e.g. Chasing a header operator / MC driver near Forbes for 3 weeks starting mid-November, accommodation included."
+                : "e.g. Hold MC licence + 10 yrs header/GPS tractor experience, based in Dubbo, available immediately."
+            }
+          />
+        </section>
+      )}
 
       {!isSyndicated && (
         <VendorTrustSection

@@ -12,6 +12,7 @@ const primaryLinks: { href: string; label: string }[] = [
   { href: "/jobs", label: "Work & Skills" },
   { href: "/sale", label: "Livestock & Harvest" },
   { href: "/freight", label: "Freight" },
+  { href: "/profiles", label: "People & Vendors" },
 ];
 
 export default async function Header() {
