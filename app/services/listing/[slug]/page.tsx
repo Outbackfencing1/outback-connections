@@ -11,6 +11,7 @@ import EnquiryForm from "@/components/detail/EnquiryForm";
 import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
+import VendorTrustSection from "@/components/detail/VendorTrustSection";
 import { kindLabel, postedVerb, relativeTime } from "@/lib/format";
 import {
   buildDescription,
@@ -305,6 +306,16 @@ export default async function ServiceDetailPage({
           />
         </section>
       )}
+
+      <VendorTrustSection
+        userId={listing.user_id}
+        businessId={listing.business_id}
+        listingId={listing.id}
+        fallbackTitle={listing.title}
+        returnPath={`/services/listing/${listing.slug}`}
+        defaultDealType="fencing_service"
+        viewerId={viewer?.id ?? null}
+      />
 
       <TradeOfferCard categorySlug={cat?.slug ?? null} placement="listing" />
 

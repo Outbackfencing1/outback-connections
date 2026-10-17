@@ -7,6 +7,7 @@ import SyndicatedNotice from "@/components/detail/SyndicatedNotice";
 import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
+import VendorTrustSection from "@/components/detail/VendorTrustSection";
 import { kindLabel, relativeTime } from "@/lib/format";
 import {
   buildDescription,
@@ -294,6 +295,18 @@ export default async function JobDetailPage({
           />
         )}
       </section>
+
+      {!isSyndicated && (
+        <VendorTrustSection
+          userId={listing.user_id}
+          businessId={listing.business_id}
+          listingId={listing.id}
+          fallbackTitle={listing.title}
+          returnPath={`/jobs/${listing.slug}`}
+          defaultDealType={isWorkerProfile ? "hired_worker" : "worked_for"}
+          viewerId={viewer?.id ?? null}
+        />
+      )}
 
       {!isOwner && (
         <div className="mt-8 space-y-3">

@@ -5,6 +5,7 @@ import ContactBlock from "@/components/detail/ContactBlock";
 import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
+import VendorTrustSection from "@/components/detail/VendorTrustSection";
 import { relativeTime } from "@/lib/format";
 import { buildDescription, buildTitle, breadcrumbJsonLd, jsonLdScript } from "@/lib/seo";
 import { logEvent } from "@/lib/analytics";
@@ -212,6 +213,15 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ slu
           inspect goods, or take a commission. Inspect before you pay.
         </p>
       </section>
+
+      <VendorTrustSection
+        userId={listing.user_id}
+        listingId={listing.id}
+        fallbackTitle={listing.title}
+        returnPath={`/sale/${listing.slug}`}
+        defaultDealType={isWanted ? "sold_item" : "bought_item"}
+        viewerId={viewer?.id ?? null}
+      />
 
       {!isOwner && (
         <div className="mt-8 space-y-3">

@@ -110,20 +110,36 @@ export default async function DashboardPage() {
         </Link>
 
         <Link
-          href="/dashboard/settings"
-          className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm transition hover:border-green-700 hover:shadow-md sm:col-span-2"
+          href={`/profile/${user.id}`}
+          className="rounded-2xl border border-green-300 bg-green-50/70 p-5 shadow-sm transition hover:border-green-700 hover:shadow-md"
         >
           <p className="text-xs font-semibold uppercase tracking-wide text-green-800">
-            Settings
+            Reputation &amp; Reviews
           </p>
           <h2 className="mt-1 text-lg font-bold text-neutral-900">
-            Account settings
+            My trust profile &amp; reviews
           </h2>
           <p className="mt-2 text-sm text-neutral-700">
-            Account age: {ageDays > 0
+            See how farmers, buyers, and contractors view your public profile, verification badges, and community vouches.
+          </p>
+        </Link>
+
+        <Link
+          href="/dashboard/settings"
+          className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm transition hover:border-green-700 hover:shadow-md"
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide text-green-800">
+            Settings &amp; Verification
+          </p>
+          <h2 className="mt-1 text-lg font-bold text-neutral-900">
+            Edit ABN, badges &amp; bio
+          </h2>
+          <p className="mt-2 text-sm text-neutral-700">
+            Add your ABN, trading/property name, insurances, and bio. Account age:{" "}
+            {ageDays > 0
               ? `${ageDays} day${ageDays === 1 ? "" : "s"}`
               : `${ageHours} hour${ageHours === 1 ? "" : "s"}`}
-            . Instant Day-1 posting enabled.
+            .
           </p>
         </Link>
 

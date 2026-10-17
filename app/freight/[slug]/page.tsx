@@ -6,6 +6,7 @@ import ScrapedNotice from "@/components/detail/ScrapedNotice";
 import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
+import VendorTrustSection from "@/components/detail/VendorTrustSection";
 import { kindLabel, relativeTime } from "@/lib/format";
 import { buildDescription, buildTitle, localBusinessJsonLd, breadcrumbJsonLd, jsonLdScript } from "@/lib/seo";
 import { logEvent } from "@/lib/analytics";
@@ -207,6 +208,16 @@ export default async function FreightDetailPage({
           />
         )}
       </section>
+
+      <VendorTrustSection
+        userId={listing.user_id}
+        businessId={listing.business_id}
+        listingId={listing.id}
+        fallbackTitle={listing.title}
+        returnPath={`/freight/${listing.slug}`}
+        defaultDealType="freight_load"
+        viewerId={viewer?.id ?? null}
+      />
 
       {!isOwner && (
         <div className="mt-8 space-y-3">
