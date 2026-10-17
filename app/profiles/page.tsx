@@ -42,6 +42,7 @@ type TrustedProfileItem = {
   website_url?: string | null;
   facebook_url?: string | null;
   services_offered?: string[];
+  photo_urls?: string[];
   insurances_held: string[];
   role_tags: string[];
   years_in_district: number | null;
@@ -481,6 +482,32 @@ export default async function TrustedProfilesDirectoryPage({
                     </p>
                   )}
 
+                  {/* Work & Fleet Photo Strip */}
+                  {Array.isArray(p.photo_urls) && p.photo_urls.length > 0 && (
+                    <div className="mt-2.5 flex items-center gap-1.5 overflow-x-auto">
+                      {p.photo_urls.slice(0, 3).map((url, idx) => (
+                        <Link
+                          key={`${url}-${idx}`}
+                          href={`/profile/${p.profile_id}`}
+                          className="h-12 w-16 shrink-0 overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={url}
+                            alt={`${p.name} work photo ${idx + 1}`}
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
+                        </Link>
+                      ))}
+                      {p.photo_urls.length > 3 && (
+                        <span className="text-[11px] font-semibold text-neutral-500">
+                          +{p.photo_urls.length - 3} more
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   {/* Vouched tags */}
                   {Array.isArray(p.top_tags) && p.top_tags.length > 0 && (
                     <div className="mt-2.5 flex flex-wrap gap-1">
@@ -539,20 +566,30 @@ export default async function TrustedProfilesDirectoryPage({
                     )}
                   </div>
 
-                  <div className="mt-2.5 flex items-center justify-between text-xs text-neutral-500">
-                    {primaryListingHref ? (
-                      <Link
-                        href={primaryListingHref}
-                        className="font-medium text-neutral-700 hover:text-green-800 hover:underline"
-                      >
-                        Get quote / listing →
-                      </Link>
-                    ) : (
-                      <span>
-                        {p.active_listings_count} active listing
-                        {p.active_listings_count === 1 ? "" : "s"}
-                      </span>
-                    )}
+                  <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {primaryListingHref ? (
+                        <Link
+                          href={primaryListingHref}
+                          className="font-medium text-neutral-700 hover:text-green-800 hover:underline"
+                        >
+                          Get quote / listing →
+                        </Link>
+                      ) : (
+                        <span>
+                          {p.active_listings_count} active listing
+                          {p.active_listings_count === 1 ? "" : "s"}
+                        </span>
+                      )}
+                      {!p.is_claimed_business && p.business_id && (
+                        <Link
+                          href={`/claim/${p.business_id}`}
+                          className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900 hover:bg-amber-100"
+                        >
+                          Claim profile →
+                        </Link>
+                      )}
+                    </div>
                     <Link
                       href={`/profile/${p.profile_id}`}
                       className="font-bold text-green-800 hover:underline"

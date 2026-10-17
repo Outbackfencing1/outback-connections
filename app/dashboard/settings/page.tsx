@@ -25,7 +25,7 @@ export default async function SettingsPage() {
     ? Math.floor((now - createdAt.getTime()) / (1000 * 60 * 60 * 24))
     : 0;
 
-  const [{ count: listingCount }, { data: profile }] = await Promise.all([
+  const [{ count: listingCount }, { data: profile }, { data: claimedBiz }] = await Promise.all([
     supabase
       .from("listings")
       .select("id", { count: "exact", head: true })
@@ -33,30 +33,71 @@ export default async function SettingsPage() {
     supabase
       .from("user_profiles")
       .select(
-        "display_name, trading_name, postcode, bio, abn, abn_verified_at, insurances_held, role_tags, years_in_district, availability_status"
+        "display_name, trading_name, suburb, postcode, bio, abn, abn_verified_at, contact_phone, contact_email, website_url, services_offered, photo_urls, insurances_held, role_tags, years_in_district, availability_status"
       )
       .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("businesses")
+      .select(
+        "id, trading_name, legal_name, suburb, postcode, bio, abn, contact_phone, contact_email, website_url, services_offered, photo_urls, insurances_held, role_tags, years_in_district, availability_status, claim_status"
+      )
+      .eq("claimed_by", user.id)
+      .eq("status", "active")
+      .order("claimed_at", { ascending: false })
+      .limit(1)
       .maybeSingle(),
   ]);
 
   const initialTrustValues = {
     display_name: profile?.display_name ?? null,
-    trading_name: profile?.trading_name ?? null,
-    postcode: profile?.postcode ?? null,
-    bio: profile?.bio ?? null,
-    abn: profile?.abn ?? null,
+    trading_name:
+      profile?.trading_name ??
+      claimedBiz?.trading_name ??
+      claimedBiz?.legal_name ??
+      null,
+    suburb: profile?.suburb ?? claimedBiz?.suburb ?? null,
+    postcode: profile?.postcode ?? claimedBiz?.postcode ?? null,
+    bio: profile?.bio ?? claimedBiz?.bio ?? null,
+    abn: profile?.abn ?? claimedBiz?.abn ?? null,
     abn_verified_at: profile?.abn_verified_at ?? null,
-    insurances_held: Array.isArray(profile?.insurances_held)
-      ? (profile.insurances_held as string[])
-      : [],
-    role_tags: Array.isArray(profile?.role_tags)
-      ? (profile.role_tags as string[])
-      : [],
+    contact_phone: profile?.contact_phone ?? claimedBiz?.contact_phone ?? null,
+    contact_email: profile?.contact_email ?? claimedBiz?.contact_email ?? null,
+    website_url: profile?.website_url ?? claimedBiz?.website_url ?? null,
+    services_offered:
+      Array.isArray(profile?.services_offered) && profile.services_offered.length > 0
+        ? (profile.services_offered as string[])
+        : Array.isArray(claimedBiz?.services_offered)
+          ? (claimedBiz.services_offered as string[])
+          : [],
+    photo_urls:
+      Array.isArray(profile?.photo_urls) && profile.photo_urls.length > 0
+        ? (profile.photo_urls as string[])
+        : Array.isArray(claimedBiz?.photo_urls)
+          ? (claimedBiz.photo_urls as string[])
+          : [],
+    insurances_held:
+      Array.isArray(profile?.insurances_held) && profile.insurances_held.length > 0
+        ? (profile.insurances_held as string[])
+        : Array.isArray(claimedBiz?.insurances_held)
+          ? (claimedBiz.insurances_held as string[])
+          : [],
+    role_tags:
+      Array.isArray(profile?.role_tags) && profile.role_tags.length > 0
+        ? (profile.role_tags as string[])
+        : Array.isArray(claimedBiz?.role_tags)
+          ? (claimedBiz.role_tags as string[])
+          : [],
     years_in_district:
       typeof profile?.years_in_district === "number"
         ? profile.years_in_district
-        : null,
-    availability_status: profile?.availability_status ?? "available",
+        : typeof claimedBiz?.years_in_district === "number"
+          ? claimedBiz.years_in_district
+          : null,
+    availability_status:
+      profile?.availability_status ??
+      claimedBiz?.availability_status ??
+      "available",
   };
 
   return (
@@ -73,12 +114,34 @@ export default async function SettingsPage() {
         </Link>
       </div>
 
-      <section className="mt-8 rounded-xl border border-neutral-200 bg-white p-5">
+      {claimedBiz ? (
+        <div className="mt-5 rounded-xl border border-green-300 bg-green-50/80 p-4 text-xs text-green-950">
+          <p className="font-bold">
+            ✓ Linked Business Profile: {claimedBiz.trading_name || claimedBiz.legal_name}
+          </p>
+          <p className="mt-1 text-green-900">
+            Changes you save below automatically update your public contractor profile, 1-click contact buttons, specialty chips, and work photo gallery.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-950">
+          <p className="font-bold">Already listed in our rural directory?</p>
+          <p className="mt-1">
+            Search your business name on{" "}
+            <Link href="/profiles" className="font-bold underline">
+              Trusted Profiles &amp; Contractors
+            </Link>{" "}
+            and tap <strong>Claim this profile</strong> to link your existing directory card to your account.
+          </p>
+        </div>
+      )}
+
+      <section className="mt-6 rounded-xl border border-neutral-200 bg-white p-5">
         <h2 className="text-base font-bold text-neutral-900">
-          Public Trust Profile &amp; Verification Badges
+          Public Profile, Contact Details, Work Photos &amp; Verification Badges
         </h2>
         <p className="mt-1 text-xs text-neutral-600">
-          Build trust with farmers, contractors, buyers and employers. Your name, ABN badge, insurance badges, and reviews appear on your listings and public profile.
+          Build trust with farmers, contractors, buyers and employers. Your direct phone/SMS, specialties, work photos, ABN badge, insurance badges, and reviews appear on your listings and public profile.
         </p>
         <TrustProfileForm initialValues={initialTrustValues} />
       </section>

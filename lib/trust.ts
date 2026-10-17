@@ -201,6 +201,207 @@ export function isAustralianMobile(phone: string | null | undefined): boolean {
   return /^(\+?614|04)\d{8}$/.test(cleaned);
 }
 
+/**
+ * Normalise an Australian phone number to canonical digits (e.g. "0428638699"
+ * or "0268845888") so "+61 428 638 699" and "0428 638 699" match reliably.
+ */
+export function normalisePhoneDigits(phone: string | null | undefined): string {
+  if (!phone) return "";
+  let digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("61") && digits.length === 11) {
+    digits = "0" + digits.slice(2);
+  }
+  return digits;
+}
+
+const FREE_EMAIL_DOMAINS = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "outlook.com",
+  "outlook.com.au",
+  "hotmail.com",
+  "hotmail.com.au",
+  "live.com",
+  "live.com.au",
+  "yahoo.com",
+  "yahoo.com.au",
+  "icloud.com",
+  "me.com",
+  "bigpond.com",
+  "bigpond.net.au",
+  "optusnet.com.au",
+  "telstra.com",
+  "proton.me",
+  "protonmail.com",
+]);
+
+export function extractBusinessDomain(input: string | null | undefined): string | null {
+  if (!input) return null;
+  const trimmed = input.trim().toLowerCase();
+  if (!trimmed) return null;
+
+  let host = "";
+  if (trimmed.includes("@")) {
+    host = trimmed.split("@").pop() ?? "";
+  } else {
+    try {
+      const url = new URL(trimmed.startsWith("http") ? trimmed : `https://${trimmed}`);
+      host = url.hostname.toLowerCase();
+    } catch {
+      return null;
+    }
+  }
+  host = host.replace(/^www\./, "");
+  if (!host || !host.includes(".") || FREE_EMAIL_DOMAINS.has(host)) {
+    return null;
+  }
+  return host;
+}
+
+export type ClaimVerificationDecision = {
+  autoApprove: boolean;
+  method: "email_domain" | "abn_match" | "phone_otp" | "admin_approval";
+  reason: string;
+  phoneMatchesFile: boolean;
+  emailMatchesFile: boolean;
+  domainMatchesFile: boolean;
+};
+
+/**
+ * Evaluates whether a business claim can be auto-approved immediately based on
+ * objective proof (matching business email, matching website domain, matching
+ * ABN on file, or active ABR entity/phone match), or queued for admin review.
+ */
+export function evaluateClaimAutoVerification(params: {
+  claimantEmail: string | null | undefined;
+  businessEmail: string | null | undefined;
+  businessWebsite: string | null | undefined;
+  businessPhone: string | null | undefined;
+  businessAbn: string | null | undefined;
+  businessName: string | null | undefined;
+  submittedPhone?: string | null;
+  submittedAbn?: string | null;
+  abrEntityName?: string | null;
+  abrIsActive?: boolean;
+}): ClaimVerificationDecision {
+  const userEmail = (params.claimantEmail ?? "").trim().toLowerCase();
+  const bizEmail = (params.businessEmail ?? "").trim().toLowerCase();
+
+  const emailMatchesFile = Boolean(userEmail && bizEmail && userEmail === bizEmail);
+
+  const userDomain = extractBusinessDomain(userEmail);
+  const bizEmailDomain = extractBusinessDomain(bizEmail);
+  const bizWebDomain = extractBusinessDomain(params.businessWebsite);
+  const domainMatchesFile = Boolean(
+    userDomain && (userDomain === bizEmailDomain || userDomain === bizWebDomain)
+  );
+
+  const bizPhoneDigits = normalisePhoneDigits(params.businessPhone);
+  const subPhoneDigits = normalisePhoneDigits(params.submittedPhone);
+  const phoneMatchesFile = Boolean(
+    bizPhoneDigits.length >= 8 && subPhoneDigits === bizPhoneDigits
+  );
+
+  const cleanSubmittedAbn = normaliseAbn(params.submittedAbn);
+  const cleanBizAbn = normaliseAbn(params.businessAbn);
+
+  // 1. Exact business email or custom business domain match
+  if (emailMatchesFile) {
+    return {
+      autoApprove: true,
+      method: "email_domain",
+      reason: "Signed-in email matches the business email on file.",
+      phoneMatchesFile,
+      emailMatchesFile,
+      domainMatchesFile,
+    };
+  }
+
+  if (domainMatchesFile) {
+    return {
+      autoApprove: true,
+      method: "email_domain",
+      reason: `Signed-in email domain (@${userDomain}) matches the business website/domain.`,
+      phoneMatchesFile,
+      emailMatchesFile,
+      domainMatchesFile,
+    };
+  }
+
+  // 2. Submitted valid ABN matches ABN already recorded on the business
+  if (cleanSubmittedAbn && cleanBizAbn && cleanSubmittedAbn === cleanBizAbn) {
+    return {
+      autoApprove: true,
+      method: "abn_match",
+      reason: "Submitted ABN matches the business ABN on file.",
+      phoneMatchesFile,
+      emailMatchesFile,
+      domainMatchesFile,
+    };
+  }
+
+  // 3. Submitted valid ABN + ABR entity name shares a significant word with business name
+  if (cleanSubmittedAbn && params.abrIsActive && params.abrEntityName && params.businessName) {
+    const stopWords = new Set([
+      "pty",
+      "ltd",
+      "limited",
+      "the",
+      "and",
+      "nsw",
+      "australia",
+      "rural",
+      "contracting",
+      "contractor",
+      "fencing",
+      "transport",
+      "services",
+      "trust",
+      "family",
+    ]);
+    const bizWords = params.businessName
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length >= 3 && !stopWords.has(w));
+    const abrLower = params.abrEntityName.toLowerCase();
+    const nameOverlap = bizWords.some((w) => abrLower.includes(w));
+    if (nameOverlap) {
+      return {
+        autoApprove: true,
+        method: "abn_match",
+        reason: `Active ABR entity (${params.abrEntityName}) matches business name.`,
+        phoneMatchesFile,
+        emailMatchesFile,
+        domainMatchesFile,
+      };
+    }
+  }
+
+  // 4. Submitted valid ABN + exact business phone match on file
+  if (cleanSubmittedAbn && phoneMatchesFile && params.abrIsActive !== false) {
+    return {
+      autoApprove: true,
+      method: "abn_match",
+      reason: "Valid 11-digit ABN combined with matching registered business phone number.",
+      phoneMatchesFile,
+      emailMatchesFile,
+      domainMatchesFile,
+    };
+  }
+
+  return {
+    autoApprove: false,
+    method: "admin_approval",
+    reason: phoneMatchesFile
+      ? "Phone number matches business on file — queued for quick admin confirmation."
+      : "Queued for admin verification.",
+    phoneMatchesFile,
+    emailMatchesFile,
+    domainMatchesFile,
+  };
+}
+
 export type VendorReviewRow = {
   id: string;
   created_at: string;
@@ -236,6 +437,7 @@ export type VendorTrustSummary = {
   website_url?: string | null;
   facebook_url?: string | null;
   services_offered?: string[];
+  photo_urls?: string[];
   insurances_held: string[];
   role_tags: string[];
   years_in_district: number | null;
@@ -252,4 +454,5 @@ export type VendorTrustSummary = {
   top_tags: Array<{ tag: string; count: number }>;
   recent_reviews: VendorReviewRow[];
 };
+
 

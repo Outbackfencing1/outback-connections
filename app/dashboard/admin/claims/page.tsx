@@ -20,8 +20,25 @@ type Biz = {
   legal_name: string | null;
   postcode: string | null;
   state_code: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  website_url: string | null;
+  abn: string | null;
   claim_status: string;
   source_platform: string | null;
+};
+
+type ClaimEvidence = {
+  claimant_email?: string | null;
+  role?: string | null;
+  phone?: string | null;
+  abn?: string | null;
+  abr_entity_name?: string | null;
+  note?: string | null;
+  phone_matches_file?: boolean;
+  email_matches_file?: boolean;
+  domain_matches_file?: boolean;
+  verification_reason?: string | null;
 };
 
 type Row = {
@@ -30,6 +47,7 @@ type Row = {
   method: string;
   created_at: string;
   claimant_user_id: string;
+  evidence: ClaimEvidence | null;
   business: Biz | Biz[] | null;
 };
 
@@ -61,8 +79,8 @@ export default async function ClaimsPage() {
   const { data } = await supabase
     .from("claims")
     .select(
-      `id, status, method, created_at, claimant_user_id,
-       business:businesses(id, trading_name, legal_name, postcode, state_code, claim_status, source_platform)`
+      `id, status, method, created_at, claimant_user_id, evidence,
+       business:businesses(id, trading_name, legal_name, postcode, state_code, contact_phone, contact_email, website_url, abn, claim_status, source_platform)`
     )
     .eq("status", "pending")
     .order("created_at", { ascending: true })
@@ -77,8 +95,7 @@ export default async function ClaimsPage() {
         <Link href="/dashboard/admin/flags" className="text-sm underline">← Admin</Link>
       </div>
       <p className="mt-2 text-sm text-neutral-700">
-        Pending claim-this-business requests. Approve promotes the business to{" "}
-        <strong>claimed</strong> and links the claimant; reject closes the request.
+        Pending claim-this-business requests. Claims with a matching business email, website domain, or verified ABN + phone are auto-approved; manual requests appear below with their verification details.
       </p>
 
       {rows.length === 0 ? (
@@ -90,24 +107,60 @@ export default async function ClaimsPage() {
           {rows.map((r) => {
             const b = Array.isArray(r.business) ? r.business[0] ?? null : r.business;
             const name = b?.trading_name || b?.legal_name || "(unknown business)";
+            const ev = r.evidence ?? {};
             return (
               <li
                 key={r.id}
                 className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm text-sm"
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-medium text-neutral-900">{name}</span>
+                  <div>
+                    <Link
+                      href={b ? `/profile/${b.id}` : "#"}
+                      className="font-bold text-neutral-900 hover:text-green-800 hover:underline"
+                    >
+                      {name}
+                    </Link>
+                    <span className="ml-2 text-xs text-neutral-500">
+                      {[b?.postcode, b?.state_code].filter(Boolean).join(" ") || "—"}
+                    </span>
+                  </div>
                   <span className="text-xs text-neutral-500">{relativeTime(r.created_at)}</span>
                 </div>
-                <p className="mt-1 text-xs text-neutral-600">
-                  {[b?.postcode, b?.state_code].filter(Boolean).join(" ") || "—"}
-                  {b?.source_platform ? ` · source: ${b.source_platform}` : ""}
-                  {b ? ` · currently ${b.claim_status}` : ""}
-                  {" · method: "}{r.method}
-                </p>
-                <p className="mt-1 font-mono text-[11px] text-neutral-400">
-                  claimant {r.claimant_user_id}
-                </p>
+
+                <div className="mt-2 rounded-lg border border-neutral-100 bg-neutral-50 p-3 text-xs text-neutral-700 space-y-1">
+                  <p>
+                    <strong>Claimant:</strong> {ev.claimant_email || r.claimant_user_id}
+                    {ev.role ? ` (${ev.role})` : ""}
+                  </p>
+                  <p>
+                    <strong>Submitted Phone:</strong> {ev.phone || "—"}{" "}
+                    <span className="text-neutral-500">
+                      (On file: {b?.contact_phone || "—"})
+                    </span>{" "}
+                    {ev.phone_matches_file && (
+                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-bold text-green-900">
+                        ✓ Matches phone on file
+                      </span>
+                    )}
+                  </p>
+                  {ev.abn && (
+                    <p>
+                      <strong>Submitted ABN:</strong> {ev.abn}
+                      {ev.abr_entity_name ? ` — ${ev.abr_entity_name}` : ""}
+                    </p>
+                  )}
+                  {ev.note && (
+                    <p>
+                      <strong>Note:</strong> &ldquo;{ev.note}&rdquo;
+                    </p>
+                  )}
+                  <p className="text-[11px] text-neutral-500">
+                    Method: {r.method}
+                    {ev.verification_reason ? ` · ${ev.verification_reason}` : ""}
+                  </p>
+                </div>
+
                 <div className="mt-3">
                   <ClaimRowActions claimId={r.id} />
                 </div>

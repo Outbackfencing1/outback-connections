@@ -379,14 +379,32 @@ export async function closeListing(formData: FormData): Promise<CloseResult> {
 }
 
 // ============================================================
-// Claim-this-business (Gate 1B). A signed-in user requests ownership of a
-// scraped/unclaimed business; an admin reviews it (see /dashboard/admin/claims).
-// Insert uses the user's RLS context ("Users file own claims").
+// Claim-this-business (Gate 1B + Smart Auto-Verification).
+// A signed-in user requests ownership of an unclaimed business.
+// If their email/domain, ABN, or phone+ABN match the business on file,
+// the claim is auto-approved immediately; otherwise it queues for admin
+// review and sends an email alert.
 // ============================================================
 
-export type ClaimResult = { ok: true } | { ok: false; message: string };
+export type ClaimDetailsInput = {
+  role?: string;
+  phone?: string;
+  abn?: string;
+  note?: string;
+};
 
-export async function submitClaim(businessId: string): Promise<ClaimResult> {
+export type ClaimResult =
+  | {
+      ok: true;
+      autoApproved?: boolean;
+      message?: string;
+    }
+  | { ok: false; message: string };
+
+export async function submitClaim(
+  businessId: string,
+  details?: ClaimDetailsInput
+): Promise<ClaimResult> {
   if (typeof businessId !== "string" || !/^[0-9a-f-]{36}$/i.test(businessId)) {
     return { ok: false, message: "Bad request." };
   }
@@ -394,12 +412,14 @@ export async function submitClaim(businessId: string): Promise<ClaimResult> {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { ok: false, message: "Sign in to claim a business." };
 
+  const user = userData.user;
+
   // Don't let the same user stack duplicate pending/approved claims.
   const { data: existing } = await supabase
     .from("claims")
     .select("id, status")
     .eq("business_id", businessId)
-    .eq("claimant_user_id", userData.user.id)
+    .eq("claimant_user_id", user.id)
     .in("status", ["pending", "approved"])
     .maybeSingle();
   if (existing) {
@@ -412,16 +432,157 @@ export async function submitClaim(businessId: string): Promise<ClaimResult> {
     };
   }
 
-  const { error } = await supabase.from("claims").insert({
-    business_id: businessId,
-    claimant_user_id: userData.user.id,
-    method: "admin_approval",
-    status: "pending",
+  const { evaluateClaimAutoVerification, normaliseAbn } = await import("@/lib/trust");
+  const { lookupAbn } = await import("@/lib/abr");
+
+  const rawAbn = (details?.abn ?? "").trim();
+  let cleanAbn: string | null = null;
+  let abrEntityName: string | null = null;
+  let abrIsActive: boolean | undefined = undefined;
+
+  if (rawAbn) {
+    cleanAbn = normaliseAbn(rawAbn);
+    if (!cleanAbn) {
+      return {
+        ok: false,
+        message: "Please enter a valid 11-digit Australian Business Number (ABN), or leave ABN blank.",
+      };
+    }
+    const abr = await lookupAbn(cleanAbn);
+    if (abr.ok) {
+      abrIsActive = abr.isActive;
+      abrEntityName = abr.entityName;
+      if (!abr.isActive) {
+        return {
+          ok: false,
+          message: `ABN ${cleanAbn} is not active on the Australian Business Register.`,
+        };
+      }
+    }
+  }
+
+  // Fetch business record for verification comparison
+  const { data: biz } = await supabase
+    .from("businesses")
+    .select(
+      "id, trading_name, legal_name, contact_email, contact_phone, website_url, abn, postcode, state_code, claim_status"
+    )
+    .eq("id", businessId)
+    .maybeSingle();
+
+  const bizName = biz?.trading_name || biz?.legal_name || "Business";
+  const decision = evaluateClaimAutoVerification({
+    claimantEmail: user.email,
+    businessEmail: biz?.contact_email,
+    businessWebsite: biz?.website_url,
+    businessPhone: biz?.contact_phone,
+    businessAbn: biz?.abn,
+    businessName: bizName,
+    submittedPhone: details?.phone ?? null,
+    submittedAbn: cleanAbn,
+    abrEntityName,
+    abrIsActive,
   });
-  if (error) {
-    console.error("[claim] insert failed:", error.message);
+
+  const evidencePayload = {
+    claimant_email: user.email ?? null,
+    role: (details?.role ?? "Owner / Director").trim().slice(0, 80),
+    phone: (details?.phone ?? "").trim().slice(0, 40) || null,
+    abn: cleanAbn,
+    abr_entity_name: abrEntityName,
+    note: (details?.note ?? "").trim().slice(0, 500) || null,
+    phone_matches_file: decision.phoneMatchesFile,
+    email_matches_file: decision.emailMatchesFile,
+    domain_matches_file: decision.domainMatchesFile,
+    verification_reason: decision.reason,
+  };
+
+  const { data: insertedClaim, error } = await supabase
+    .from("claims")
+    .insert({
+      business_id: businessId,
+      claimant_user_id: user.id,
+      method: decision.method,
+      status: "pending",
+      evidence: evidencePayload,
+    })
+    .select("id")
+    .single();
+
+  if (error || !insertedClaim) {
+    console.error("[claim] insert failed:", error?.message);
     return { ok: false, message: "Couldn't submit the claim. Please try again." };
   }
-  return { ok: true };
+
+  // If objective verification passed, auto-approve immediately via service role RPC
+  let autoApproved = false;
+  if (decision.autoApprove) {
+    const admin = createAdminClient();
+    if (admin) {
+      const { error: rpcErr } = await admin.rpc("auto_approve_verified_claim", {
+        p_claim_id: insertedClaim.id,
+        p_abn: cleanAbn,
+        p_abn_entity_name: abrEntityName,
+      });
+      if (!rpcErr) {
+        autoApproved = true;
+      } else {
+        console.error("[claim] auto_approve_verified_claim failed:", rpcErr.message);
+      }
+    }
+  }
+
+  // Notify admin (audit notification on auto-approve, or action required on pending)
+  try {
+    const adminUrl = `${BASE_URL}/dashboard/admin/claims`;
+    const profileUrl = `${BASE_URL}/profile/${businessId}`;
+    const subject = autoApproved
+      ? `[AUTO-CLAIMED] ${bizName} claimed & verified by ${user.email ?? "owner"}`
+      : `[CLAIM REQUEST] ${bizName} claim requested by ${user.email ?? "user"}`;
+    const text = [
+      autoApproved
+        ? `A business profile was automatically verified and claimed on Outback Connections.`
+        : `A business claim request is awaiting review on Outback Connections.`,
+      ``,
+      `Business: ${bizName} (${biz?.postcode ?? "—"} ${biz?.state_code ?? ""})`,
+      `Profile URL: ${profileUrl}`,
+      `Claimant Email: ${user.email ?? "(unknown)"}`,
+      `Role at Business: ${evidencePayload.role}`,
+      `Submitted Phone: ${evidencePayload.phone ?? "—"} (On file: ${biz?.contact_phone ?? "—"} · Match: ${decision.phoneMatchesFile ? "YES" : "No"})`,
+      `Submitted ABN: ${cleanAbn ?? "—"}${abrEntityName ? ` (${abrEntityName})` : ""}`,
+      `Verification Method: ${decision.method} — ${decision.reason}`,
+      `Note: ${evidencePayload.note ?? "(none)"}`,
+      ``,
+      `Admin Claims Queue: ${adminUrl}`,
+    ].join("\n");
+
+    await sendEmail({
+      to: NOTIFICATION_TO,
+      subject,
+      text,
+      html: `<pre style="font-family:-apple-system,system-ui,sans-serif;white-space:pre-wrap;">${escapeHtml(text)}</pre>`,
+      replyTo: user.email ?? undefined,
+    });
+  } catch (e) {
+    console.error("[claim] admin notification email failed:", e);
+  }
+
+  revalidatePath(`/claim/${businessId}`);
+  revalidatePath(`/profile/${businessId}`);
+  revalidatePath(`/profile/${user.id}`);
+  revalidatePath("/profiles");
+  revalidatePath("/services");
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/admin/claims");
+
+  return {
+    ok: true,
+    autoApproved,
+    message: autoApproved
+      ? "Verified! Your business profile is now claimed and linked to your account. You can now edit your details and upload work photos."
+      : "Claim submitted — we'll verify your details and link your profile shortly.",
+  };
 }
+
 

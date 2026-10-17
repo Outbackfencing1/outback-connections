@@ -121,6 +121,9 @@ export default async function VendorTrustSection({
   const services = Array.isArray(summary.services_offered)
     ? summary.services_offered
     : [];
+  const photos = Array.isArray(summary.photo_urls)
+    ? summary.photo_urls
+    : [];
   const topTags = Array.isArray(summary.top_tags) ? summary.top_tags : [];
   const reviews = Array.isArray(summary.recent_reviews)
     ? summary.recent_reviews
@@ -329,6 +332,24 @@ export default async function VendorTrustSection({
           </div>
         )}
 
+        {/* Owner Claim Callout for Unclaimed Profiles */}
+        {summary.claim_status === "unclaimed" && resolvedBusinessId && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-xs text-amber-950">
+            <div>
+              <p className="font-bold">Is {vendorName} your business?</p>
+              <p className="mt-0.5 text-amber-900">
+                Claim your free profile to update your details, set live availability, upload photos of your work/rigs, and reply to reviews.
+              </p>
+            </div>
+            <Link
+              href={`/claim/${resolvedBusinessId}`}
+              className="shrink-0 rounded-xl bg-amber-900 px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-amber-950"
+            >
+              Claim &amp; Verify Profile Free →
+            </Link>
+          </div>
+        )}
+
         {/* Staff-only 1-click Outback Verified Gold Badge toggle */}
         {isViewerStaff && (
           <form
@@ -387,6 +408,55 @@ export default async function VendorTrustSection({
             ))}
           </div>
         )}
+
+        {/* Work, Fleet, Fencing & Livestock Photo Gallery */}
+        {photos.length > 0 ? (
+          <div className="mt-5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-bold uppercase tracking-wide text-neutral-700">
+                📷 Work, Fleet &amp; Property Photos ({photos.length})
+              </p>
+              {isOwner && (
+                <Link
+                  href="/dashboard/settings"
+                  className="text-xs font-semibold text-green-800 underline"
+                >
+                  Manage photos →
+                </Link>
+              )}
+            </div>
+            <div className="mt-2.5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {photos.map((url, idx) => (
+                <a
+                  key={`${url}-${idx}`}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group relative overflow-hidden rounded-xl border border-neutral-200 bg-neutral-100 shadow-sm"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={url}
+                    alt={`${vendorName} work photo ${idx + 1}`}
+                    className="h-40 w-full object-cover transition duration-200 group-hover:scale-105"
+                  />
+                </a>
+              ))}
+            </div>
+          </div>
+        ) : isOwner ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-green-300 bg-green-50/40 px-4 py-3 text-xs text-green-950">
+            <span>
+              <strong>📷 Show your gear &amp; workmanship:</strong> Add photos of your fencing jobs, trucks, machinery, or stock so customers can see your work.
+            </span>
+            <Link
+              href="/dashboard/settings"
+              className="rounded-lg bg-green-700 px-3 py-1.5 font-bold text-white hover:bg-green-800"
+            >
+              + Upload Photos →
+            </Link>
+          </div>
+        ) : null}
 
         {/* Track record counters */}
         <div className="mt-5 grid grid-cols-2 gap-3 rounded-2xl border border-neutral-100 bg-neutral-50 p-3.5 sm:grid-cols-4">

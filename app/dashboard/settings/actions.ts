@@ -85,7 +85,12 @@ export async function updateTrustProfile(
 
   const displayName = String(formData.get("display_name") ?? "").trim();
   const tradingName = String(formData.get("trading_name") ?? "").trim();
+  const suburb = String(formData.get("suburb") ?? "").trim();
   const postcode = String(formData.get("postcode") ?? "").trim();
+  const contactPhone = String(formData.get("contact_phone") ?? "").trim();
+  const contactEmail = String(formData.get("contact_email") ?? "").trim();
+  const websiteRaw = String(formData.get("website_url") ?? "").trim();
+  const servicesRaw = String(formData.get("services_offered") ?? "").trim();
   const bio = String(formData.get("bio") ?? "").trim();
   const abnRaw = String(formData.get("abn") ?? "").trim();
   const yearsRaw = String(formData.get("years_in_district") ?? "").trim();
@@ -93,6 +98,24 @@ export async function updateTrustProfile(
   const availabilityStatus = isValidAvailabilityStatus(availRaw)
     ? availRaw
     : "available";
+
+  let websiteUrl: string | null = null;
+  if (websiteRaw) {
+    websiteUrl = websiteRaw.startsWith("http")
+      ? websiteRaw
+      : `https://${websiteRaw}`;
+  }
+
+  const servicesOffered = servicesRaw
+    ? Array.from(
+        new Set(
+          servicesRaw
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => s.length >= 2 && s.length <= 60)
+        )
+      ).slice(0, 12)
+    : [];
 
   const rawInsurances = formData.getAll("insurances_held").map((v) => String(v).trim());
   const insurancesHeld = Array.from(new Set(rawInsurances.filter(isValidInsuranceBadge)));
@@ -145,21 +168,91 @@ export async function updateTrustProfile(
     }
   }
 
-  if (Object.keys(fieldErrors).length > 0) {
-    return { error: "Please check the highlighted fields.", fieldErrors };
-  }
-
   const admin = createAdminClient();
   if (!admin) {
     return { error: "Server configuration error." };
   }
+
+  // Handle photo gallery (kept photos + new URL + uploaded files)
+  const keptPhotos = formData
+    .getAll("kept_photo_urls")
+    .map((v) => String(v).trim())
+    .filter((u) => u.startsWith("http://") || u.startsWith("https://"));
+
+  const newPhotoUrl = String(formData.get("new_photo_url") ?? "").trim();
+  const uploadedUrls: string[] = [];
+
+  if (newPhotoUrl) {
+    if (newPhotoUrl.startsWith("http://") || newPhotoUrl.startsWith("https://")) {
+      uploadedUrls.push(newPhotoUrl);
+    } else {
+      fieldErrors.photos = "Direct photo URL must start with https://";
+    }
+  }
+
+  const fileEntries = formData.getAll("photo_files");
+  for (const entry of fileEntries) {
+    if (typeof entry === "object" && entry !== null && "size" in entry && entry.size > 0) {
+      const file = entry as File;
+      if (file.size > 5 * 1024 * 1024) {
+        fieldErrors.photos = "Each uploaded photo must be 5MB or smaller.";
+        break;
+      }
+      const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+      if (!allowedTypes.includes(file.type)) {
+        fieldErrors.photos = "Photos must be JPG, PNG, or WebP images.";
+        break;
+      }
+      const ext =
+        file.type === "image/png"
+          ? "png"
+          : file.type === "image/webp"
+            ? "webp"
+            : "jpg";
+      const storagePath = `${user.id}/${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}.${ext}`;
+      const arrayBuf = await file.arrayBuffer();
+      const { error: uploadErr } = await admin.storage
+        .from("profile-photos")
+        .upload(storagePath, Buffer.from(arrayBuf), {
+          contentType: file.type,
+          upsert: false,
+        });
+      if (!uploadErr) {
+        const { data: pubUrl } = admin.storage
+          .from("profile-photos")
+          .getPublicUrl(storagePath);
+        if (pubUrl?.publicUrl) {
+          uploadedUrls.push(pubUrl.publicUrl);
+        }
+      } else {
+        console.error("[updateTrustProfile] photo upload failed:", uploadErr.message);
+      }
+    }
+  }
+
+  if (Object.keys(fieldErrors).length > 0) {
+    return { error: "Please check the highlighted fields.", fieldErrors };
+  }
+
+  const finalPhotoUrls = Array.from(new Set([...keptPhotos, ...uploadedUrls])).slice(
+    0,
+    6
+  );
 
   const { error: upsertErr } = await admin.from("user_profiles").upsert(
     {
       user_id: user.id,
       display_name: displayName || null,
       trading_name: tradingName || null,
+      suburb: suburb || null,
       postcode: postcode || null,
+      contact_phone: contactPhone || null,
+      contact_email: contactEmail || null,
+      website_url: websiteUrl,
+      services_offered: servicesOffered,
+      photo_urls: finalPhotoUrls,
       bio: bio || null,
       abn: cleanAbn,
       abn_verified_at: abnVerifiedAt,
@@ -177,23 +270,55 @@ export async function updateTrustProfile(
     return { error: "Could not save your trust profile. Please try again." };
   }
 
-  // Also sync ABN verification to any business claimed by this user
+  // Sync all owner-edited fields to any business claimed by this user
+  const bizUpdate: Record<string, unknown> = {
+    availability_status: availabilityStatus,
+    insurances_held: insurancesHeld,
+    role_tags: roleTags,
+    photo_urls: finalPhotoUrls,
+    last_verified_at: new Date().toISOString(),
+  };
+  if (tradingName) bizUpdate.trading_name = tradingName;
+  if (suburb) bizUpdate.suburb = suburb;
+  if (postcode) bizUpdate.postcode = postcode;
+  if (bio) bizUpdate.bio = bio;
+  if (contactPhone) bizUpdate.contact_phone = contactPhone;
+  if (contactEmail) bizUpdate.contact_email = contactEmail;
+  if (websiteUrl) bizUpdate.website_url = websiteUrl;
+  if (servicesOffered.length > 0) bizUpdate.services_offered = servicesOffered;
+  if (yearsInDistrict !== null) bizUpdate.years_in_district = yearsInDistrict;
   if (cleanAbn) {
+    bizUpdate.abn = cleanAbn;
+    bizUpdate.claim_status = "abn_verified";
+  }
+
+  const { data: updatedBizRows } = await admin
+    .from("businesses")
+    .update(bizUpdate)
+    .eq("claimed_by", user.id)
+    .in("claim_status", ["claimed", "abn_verified", "trusted"])
+    .select("id");
+
+  // Also sync direct phone & email onto the user's active listings so 0-click cards stay in sync
+  if (contactPhone || contactEmail) {
+    const listingContactUpdate: Record<string, unknown> = {};
+    if (contactPhone) listingContactUpdate.contact_phone = contactPhone;
+    if (contactEmail) listingContactUpdate.contact_email = contactEmail;
     await admin
-      .from("businesses")
-      .update({
-        abn: cleanAbn,
-        claim_status: "abn_verified",
-        last_verified_at: new Date().toISOString(),
-      })
-      .eq("claimed_by", user.id)
-      .in("claim_status", ["claimed", "abn_verified"]);
+      .from("listings")
+      .update(listingContactUpdate)
+      .eq("user_id", user.id)
+      .eq("status", "active");
   }
 
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard");
   revalidatePath("/profiles");
   revalidatePath(`/profile/${user.id}`);
+  for (const b of updatedBizRows ?? []) {
+    revalidatePath(`/profile/${b.id}`);
+  }
 
   return { ok: true };
 }
+

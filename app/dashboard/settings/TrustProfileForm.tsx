@@ -13,10 +13,16 @@ type Props = {
   initialValues: {
     display_name: string | null;
     trading_name: string | null;
+    suburb?: string | null;
     postcode: string | null;
     bio: string | null;
     abn: string | null;
     abn_verified_at: string | null;
+    contact_phone?: string | null;
+    contact_email?: string | null;
+    website_url?: string | null;
+    services_offered?: string[];
+    photo_urls?: string[];
     insurances_held: string[];
     role_tags: string[];
     years_in_district: number | null;
@@ -28,12 +34,18 @@ const initial: TrustProfileState = {};
 
 export default function TrustProfileForm({ initialValues }: Props) {
   const [state, formAction, pending] = useActionState(updateTrustProfile, initial);
+  const existingPhotos = Array.isArray(initialValues.photo_urls)
+    ? initialValues.photo_urls
+    : [];
+  const defaultSpecialties = Array.isArray(initialValues.services_offered)
+    ? initialValues.services_offered.join(", ")
+    : "";
 
   return (
     <form action={formAction} className="mt-4 space-y-5">
       {state.ok && (
         <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-xs font-semibold text-green-900">
-          ✓ Your public trust profile &amp; verification badges have been updated.
+          ✓ Your public profile, contact buttons, work photos &amp; verification badges have been updated.
         </div>
       )}
       {state.error && (
@@ -112,8 +124,8 @@ export default function TrustProfileForm({ initialValues }: Props) {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div>
+      <div className="grid gap-4 sm:grid-cols-4">
+        <div className="sm:col-span-2">
           <label
             htmlFor="abn"
             className="block text-xs font-semibold uppercase tracking-wide text-neutral-700"
@@ -136,10 +148,28 @@ export default function TrustProfileForm({ initialValues }: Props) {
 
         <div>
           <label
+            htmlFor="suburb"
+            className="block text-xs font-semibold uppercase tracking-wide text-neutral-700"
+          >
+            Town / Suburb
+          </label>
+          <input
+            id="suburb"
+            name="suburb"
+            type="text"
+            maxLength={60}
+            defaultValue={initialValues.suburb ?? ""}
+            placeholder="e.g. Orange"
+            className="mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900"
+          />
+        </div>
+
+        <div>
+          <label
             htmlFor="postcode"
             className="block text-xs font-semibold uppercase tracking-wide text-neutral-700"
           >
-            Home base postcode
+            Postcode
           </label>
           <input
             id="postcode"
@@ -154,6 +184,94 @@ export default function TrustProfileForm({ initialValues }: Props) {
           {state.fieldErrors?.postcode && (
             <p className="mt-1 text-xs text-red-700">{state.fieldErrors.postcode}</p>
           )}
+        </div>
+      </div>
+
+      {/* Direct Public Contact Details (0-Click Call / SMS / Email / Website) */}
+      <div className="rounded-xl border border-green-200 bg-green-50/40 p-4 space-y-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-green-900">
+            📞 1-Click Direct Contact Details (shown on your profile &amp; cards)
+          </p>
+          <p className="mt-0.5 text-xs text-neutral-600">
+            Let farmers, property owners, and clients call, text, email, or visit your website in 1 click.
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div>
+            <label
+              htmlFor="contact_phone"
+              className="block text-xs font-semibold text-neutral-700"
+            >
+              Phone / Mobile (Call &amp; SMS)
+            </label>
+            <input
+              id="contact_phone"
+              name="contact_phone"
+              type="tel"
+              maxLength={30}
+              defaultValue={initialValues.contact_phone ?? ""}
+              placeholder="e.g. 0428 123 456"
+              className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="contact_email"
+              className="block text-xs font-semibold text-neutral-700"
+            >
+              Public Contact Email
+            </label>
+            <input
+              id="contact_email"
+              name="contact_email"
+              type="email"
+              maxLength={120}
+              defaultValue={initialValues.contact_email ?? ""}
+              placeholder="e.g. info@yourbusiness.com.au"
+              className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="website_url"
+              className="block text-xs font-semibold text-neutral-700"
+            >
+              Website URL
+            </label>
+            <input
+              id="website_url"
+              name="website_url"
+              type="text"
+              maxLength={200}
+              defaultValue={initialValues.website_url ?? ""}
+              placeholder="e.g. https://yourbusiness.com.au"
+              className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="sm:col-span-2">
+          <label
+            htmlFor="services_offered"
+            className="block text-xs font-semibold uppercase tracking-wide text-neutral-700"
+          >
+            Specialties, Gear &amp; Services (comma-separated chips)
+          </label>
+          <input
+            id="services_offered"
+            name="services_offered"
+            type="text"
+            maxLength={300}
+            defaultValue={defaultSpecialties}
+            placeholder="e.g. Exclusion Fencing, Hinge Joint, Cattle Yards, B-Double Stock Crate"
+            className="mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900"
+          />
         </div>
 
         <div>
@@ -197,6 +315,89 @@ export default function TrustProfileForm({ initialValues }: Props) {
         />
         {state.fieldErrors?.bio && (
           <p className="mt-1 text-xs text-red-700">{state.fieldErrors.bio}</p>
+        )}
+      </div>
+
+      {/* Work, Rig, Fencing & Livestock Photo Gallery Upload */}
+      <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 space-y-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-neutral-800">
+            📷 Work, Fleet, Fencing &amp; Property Photos (up to 6 photos)
+          </p>
+          <p className="mt-0.5 text-xs text-neutral-600">
+            Upload photos of your finished exclusion fences, strainer assemblies, trucks, headers, earthmoving gear, or livestock. Photos build immediate trust with farmers.
+          </p>
+        </div>
+
+        {existingPhotos.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-neutral-700">
+              Current photos on your profile (uncheck to remove):
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {existingPhotos.map((url, idx) => (
+                <label
+                  key={`${url}-${idx}`}
+                  className="group relative flex flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white p-1.5 shadow-sm"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={url}
+                    alt={`Work photo ${idx + 1}`}
+                    className="h-28 w-full rounded-lg object-cover"
+                  />
+                  <span className="mt-1.5 flex items-center gap-1.5 px-1 text-[11px] font-medium text-neutral-700">
+                    <input
+                      type="checkbox"
+                      name="kept_photo_urls"
+                      value={url}
+                      defaultChecked
+                      className="h-3.5 w-3.5 rounded border-neutral-300 text-green-700"
+                    />
+                    Keep photo #{idx + 1}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label
+              htmlFor="photo_files"
+              className="block text-xs font-semibold text-neutral-700"
+            >
+              Upload photos from your phone or computer (JPG, PNG, WebP — max 5MB each)
+            </label>
+            <input
+              id="photo_files"
+              name="photo_files"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs text-neutral-800 file:mr-3 file:rounded-md file:border-0 file:bg-green-700 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-green-800"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="new_photo_url"
+              className="block text-xs font-semibold text-neutral-700"
+            >
+              Or paste a direct image URL (optional)
+            </label>
+            <input
+              id="new_photo_url"
+              name="new_photo_url"
+              type="url"
+              placeholder="https://..."
+              className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900"
+            />
+          </div>
+        </div>
+        {state.fieldErrors?.photos && (
+          <p className="text-xs text-red-700">{state.fieldErrors.photos}</p>
         )}
       </div>
 
@@ -249,9 +450,9 @@ export default function TrustProfileForm({ initialValues }: Props) {
       <button
         type="submit"
         disabled={pending}
-        className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-50"
+        className="rounded-xl bg-green-700 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-green-800 disabled:opacity-50"
       >
-        {pending ? "Saving trust profile..." : "Save trust profile"}
+        {pending ? "Saving profile & uploading photos..." : "Save profile, details & photos"}
       </button>
     </form>
   );

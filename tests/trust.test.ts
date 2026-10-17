@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   availabilityStatusInfo,
   dealTypeLabel,
+  evaluateClaimAutoVerification,
+  extractBusinessDomain,
   formatAbn,
   formatPhoneHref,
   insuranceBadgeLabel,
@@ -14,6 +16,7 @@ import {
   isValidRoleTag,
   isValidTrustTag,
   normaliseAbn,
+  normalisePhoneDigits,
   roleTagLabel,
   trustTagLabel,
 } from "@/lib/trust";
@@ -88,6 +91,95 @@ describe("lib/trust rural tags, availability, and badges", () => {
   });
 });
 
+describe("lib/trust business claim ownership auto-verification", () => {
+  it("normalises Australian phone numbers and extracts custom business domains", () => {
+    expect(normalisePhoneDigits("+61 421 572 245")).toBe("0421572245");
+    expect(normalisePhoneDigits("02 6362 9258")).toBe("0263629258");
+    expect(extractBusinessDomain("info@langsfencing.com.au")).toBe(
+      "langsfencing.com.au"
+    );
+    expect(
+      extractBusinessDomain("https://www.langsfencing.com.au/contact")
+    ).toBe("langsfencing.com.au");
+    expect(extractBusinessDomain("contractor@gmail.com")).toBeNull();
+  });
+
+  it("auto-approves when login email matches the registered business email or custom domain", () => {
+    const exactMatch = evaluateClaimAutoVerification({
+      claimantEmail: "admin@centralwestfencing.com.au",
+      businessName: "Central West Rural Fencing",
+      businessEmail: "admin@centralwestfencing.com.au",
+      businessWebsite: "https://centralwestfencing.com.au",
+      businessPhone: "0421 572 245",
+      businessAbn: null,
+      submittedPhone: "",
+    });
+    expect(exactMatch.autoApprove).toBe(true);
+    expect(exactMatch.method).toBe("email_domain");
+    expect(exactMatch.emailMatchesFile).toBe(true);
+
+    const domainMatch = evaluateClaimAutoVerification({
+      claimantEmail: "dave@langsfencing.com.au",
+      businessName: "Langs Rural Fencing Contractors",
+      businessEmail: "office@langsfencing.com.au",
+      businessWebsite: "https://www.langsfencing.com.au",
+      businessPhone: "0428 637 315",
+      businessAbn: null,
+      submittedPhone: "",
+    });
+    expect(domainMatch.autoApprove).toBe(true);
+    expect(domainMatch.method).toBe("email_domain");
+    expect(domainMatch.domainMatchesFile).toBe(true);
+  });
+
+  it("auto-approves when valid ABN matches ABR entity name or registered phone number", () => {
+    const abnEntityMatch = evaluateClaimAutoVerification({
+      claimantEmail: "dave.lang@gmail.com",
+      businessName: "Langs Rural Fencing Contractors",
+      businessEmail: null,
+      businessWebsite: null,
+      businessPhone: "0428 637 315",
+      businessAbn: null,
+      submittedPhone: "0400 000 000",
+      submittedAbn: "51 824 753 556",
+      abrIsActive: true,
+      abrEntityName: "LANGS RURAL FENCING CONTRACTORS PTY LTD",
+    });
+    expect(abnEntityMatch.autoApprove).toBe(true);
+    expect(abnEntityMatch.method).toBe("abn_match");
+
+    const abnPhoneMatch = evaluateClaimAutoVerification({
+      claimantEmail: "owner@bigpond.com",
+      businessName: "Dubbo Rural Contracting",
+      businessEmail: null,
+      businessWebsite: null,
+      businessPhone: "0428 637 315",
+      businessAbn: null,
+      submittedPhone: "+61 428 637 315",
+      submittedAbn: "51 824 753 556",
+      abrIsActive: true,
+      abrEntityName: null,
+    });
+    expect(abnPhoneMatch.autoApprove).toBe(true);
+    expect(abnPhoneMatch.method).toBe("abn_match");
+    expect(abnPhoneMatch.phoneMatchesFile).toBe(true);
+  });
+
+  it("routes unverified free-webmail claims without ABN match to manual admin review", () => {
+    const manualReview = evaluateClaimAutoVerification({
+      claimantEmail: "someone@gmail.com",
+      businessName: "Central West Rural Fencing",
+      businessEmail: "office@centralwestfencing.com.au",
+      businessWebsite: "https://centralwestfencing.com.au",
+      businessPhone: "0421 572 245",
+      businessAbn: null,
+      submittedPhone: "0499 999 999",
+    });
+    expect(manualReview.autoApprove).toBe(false);
+    expect(manualReview.method).toBe("admin_approval");
+  });
+});
+
 describe("lib/sale proof badges and lot/truck deck estimator", () => {
   it("parses and labels proof & biosecurity badges", () => {
     expect(parseProofBadges(["pic_available", "nvd_ready", "bogus"])).toEqual([
@@ -117,4 +209,5 @@ describe("lib/sale proof badges and lot/truck deck estimator", () => {
     expect(grain.truckEstimateText).toContain("B-double");
   });
 });
+
 
