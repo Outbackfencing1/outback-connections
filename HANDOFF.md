@@ -1,31 +1,35 @@
 # HANDOFF
 
 Date: 2026-10-17 (previous: 2026-10-10)
-Branch: `feat/rural-marketplace-workboard` (built on `claude/launch-ready`). Live: https://www.outbackconnections.com.au
+Branch: `main`. Live: https://www.outbackconnections.com.au
 
-Everything from the 6 Sep session is on `main` and deployed (PR #18, 7 Sep;
-PR #19, the staff-post clean-up, 2 Oct; PRs #21, #24, #25, #27 on 10 Oct).
+Everything from the 6 Sep, 2 Oct, 10 Oct, and 17 Oct sessions is on `main` and deployed.
 Pushing to `main` deploys production.
 
 ---
 
-## 17 Oct 2026: Two-sided Work & Skills Board, Day-1 posting, Commodity/Livestock Marketplace & Forecasting (`feat/rural-marketplace-workboard`)
+## 17 Oct 2026: Complete Rural Marketplace, Two-Sided Work & Skills Board, Two-Sided Livestock/Harvest/Gear Marketplace & Forecasting Warehouse (`main`)
 
 Josh's direction (17 Oct): turn Outback Connections into a one-stop rural marketplace and work board before pushing his 3M/month Facebook reach to it:
-1. **Day-1 posting (`ACCOUNT_AGE_REQUIREMENT_HOURS = 0` in `lib/posting.ts`):**
+1. **Always-On Navigation & Interactive Homepage Hub (`components/Header.tsx`, `components/Footer.tsx`, `components/home/RuralMarketplaceHub.tsx`, `app/page.tsx`):**
+   - Header and Footer now always show `Services`, `Work & Skills` (`/jobs`), `Livestock & Harvest` (`/sale`), `Freight` (`/freight`), `List your skills` (`/post/job?direction=available_for_work`), and `Post a listing` (`/post`).
+   - Homepage features an interactive two-door **Rural Marketplace Hub** with direct search forms & 1-click filter pills for the Work & Skills Board (`direction`, `ticket`, `postcode`) and Livestock, Harvest & Gear (`side`, `sub_category`, `postcode`), plus all four active pillars (`Services`, `Work & Skills`, `Livestock, Harvest & Gear`, `Freight & Backloads`).
+   - `getRecentListings()` on `/` prioritises claimed/first-party and regional (`postcode >= 2300`) listings over scraped suburban Sydney (`2000–2249`) entries.
+2. **Day-1 Posting (`ACCOUNT_AGE_REQUIREMENT_HOURS = 0` in `lib/posting.ts`):**
    - Removed the 24-hour new-account waiting period so verified users coming from Facebook can post their skills, jobs, livestock, hay, grain, or freight immediately on signup.
-2. **Two-sided Work & Skills Board (`lib/work-board.ts`, `/jobs`, `/post/job`, `job_details`):**
-   - `job_details` now supports both `direction = 'hiring'` (`listings.side = 'demand'`) and `direction = 'available_for_work'` (`listings.side = 'supply'`).
+3. **Two-Sided Work & Skills Board (`lib/work-board.ts`, `/jobs`, `/post/job`, `job_details`):**
+   - `job_details` supports both `direction = 'hiring'` (`listings.side = 'demand'`) and `direction = 'available_for_work'` (`listings.side = 'supply'`).
    - Drivers, header/machine operators, station hands, shearers, and fencers can list their skills, structured tickets (`WORKER_TICKETS`: MC/HC/HR licence, header/harvester, tractor/GPS, excavator/dozer, loader/telehandler, ChemCert, livestock/dogs, fencing, shearing, welding/mechanic, White Card, own ute/tools, self-contained camp), travel radius, experience, and hourly/daily rate via `/post/job?direction=available_for_work`.
-   - `/jobs` filters by side (`All` | `Workers & operators available` | `Jobs hiring`), role category, specific ticket/skill, postcode, and pay type.
+   - `/jobs` filters by side (`All` | `Workers & operators available` | `Jobs hiring`), role category, 1-click ticket/licence pills, postcode, and pay type.
    - `JobPosting` JSON-LD is strictly emitted only on real hiring vacancies (`direction !== 'available_for_work'`).
-3. **Structured Livestock, Harvest & Gear Marketplace (`lib/sale.ts`, `/sale`, `/post/sale`, `CloseListingForm.tsx`):**
-   - Added `sub_category` (`COMMODITY_GROUPS`: cattle steers/heifers/cows & calves/bulls, sheep ewes/lambs/wethers, lucerne/wheaten/oaten/pasture hay, silage, wheat, barley, oats, canola, sorghum, pulses, tractors, headers, hay gear, earthmoving, fencing steel) and `harvest_season` / breed specs.
+4. **Two-Sided Livestock, Harvest & Gear Marketplace (`lib/sale.ts`, `/sale`, `/post/sale`, `CloseListingForm.tsx`, `edit/page.tsx`, `edit/actions.ts`):**
+   - Supports both **For Sale (Available)** (`listings.side = 'supply'`) and **Wanted to Buy (Chasing)** (`listings.side = 'demand'`) across creating, editing, browsing, and detail views.
+   - Added `sub_category` (`COMMODITY_GROUPS`: cattle steers/heifers/cows & calves/bulls, sheep ewes/lambs/wethers, lucerne/wheaten/oaten/pasture hay, silage, wheat, barley, oats, canola, sorghum, pulses, tractors, headers, hay gear, earthmoving, fencing steel) and `harvest_season` / breed specs, plus 1-click commodity chips on `/sale`.
    - When a seller marks a `for_sale` listing as sold (`reason = 'matched'`) in `/dashboard/listings`, `CloseListingForm` captures optional final `sold_price` and `sold_quantity` and stamps `sale_details.sold_at`, `sold_price_cents`, and `sold_quantity`.
-4. **Market Intelligence & Forecasting Warehouse (`/dashboard/admin/demand`, `admin_market_intelligence`):**
-   - Migration `20261017110000_work_board_and_marketplace_forecasting.sql` adds the new columns, indexes, job categories (`mechanic-welder`, `agronomy-spraying`), `listings.featured_until` (prepared for optional future Stripe boosts while keeping listings 100% free now), and `public.admin_market_intelligence(p_months)`.
-   - `/dashboard/admin/demand` now displays regional & monthly commodity/livestock supply, sold volume, and average unit prices alongside Work & Skills Board supply vs. hiring demand and ticket availability.
-   - **Applied to live (`csisezoohgfrpjrhkmls`) on 17 Oct 2026** alongside `20261010120000_human_traffic_definition.sql` and merged to `main`.
+5. **Market Intelligence & Forecasting Warehouse (`/dashboard/admin/demand`, `admin_market_intelligence`, `ForecastCsvExport.tsx`, `docs/FACEBOOK-KIT.md`):**
+   - Migrations `20261017110000_work_board_and_marketplace_forecasting.sql` and `20261017123000_forecasting_wanted_and_search_signals.sql` add the schema columns, indexes, job categories (`mechanic-welder`, `agronomy-spraying`), `listings.featured_until`, and `public.admin_market_intelligence(p_months)`.
+   - `/dashboard/admin/demand` displays regional & monthly commodity/livestock `For Sale` vs `Wanted to Buy` counts & volumes, cleared sold volume, and average unit prices alongside Work & Skills Board supply vs. hiring demand, ticket availability, **Live search signals** (aggregating non-bot `search_queries` by vertical, ticket/commodity/vehicle filter, region, and zero-result gaps), and 1-click CSV exports.
+   - **Applied to live (`csisezoohgfrpjrhkmls`) on 17 Oct 2026** alongside `20261010120000_human_traffic_definition.sql` and deployed to `main`.
 
 ---
 

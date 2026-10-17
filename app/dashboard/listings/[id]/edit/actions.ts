@@ -133,6 +133,7 @@ export async function editListing(formData: FormData): Promise<ActionResult> {
         contact_email: data.contact_email || null,
         contact_phone: data.contact_phone || null,
         contact_best_time: data.contact_best_time || null,
+        side: data.direction === "offering_truck" ? "supply" : "demand",
       })
       .eq("id", id);
     if (lErr) return { ok: false, errors: { _: "Couldn't save listing." } };
@@ -170,6 +171,7 @@ export async function editListing(formData: FormData): Promise<ActionResult> {
         contact_email: data.contact_email || null,
         contact_phone: data.contact_phone || null,
         contact_best_time: data.contact_best_time || null,
+        side: data.side,
       })
       .eq("id", id);
     if (lErr) return { ok: false, errors: { _: "Couldn't save listing." } };

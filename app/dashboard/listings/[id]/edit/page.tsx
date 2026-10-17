@@ -29,7 +29,7 @@ export default async function EditListingPage({
   const { data: listing } = await supabase
     .from("listings")
     .select(`
-      id, kind, user_id, status,
+      id, kind, side, user_id, status,
       category_id, title, description, postcode,
       contact_email, contact_phone, contact_best_time
     `)
@@ -134,6 +134,7 @@ export default async function EditListingPage({
       .maybeSingle();
     const defaults: Record<string, string> = {
       ...baseDefaults,
+      side: listing.side === "demand" ? "demand" : "supply",
       price: sale?.price_cents !== null && sale?.price_cents !== undefined ? (sale.price_cents / 100).toString() : "",
       price_type: sale?.price_type ?? "negotiable",
       quantity: sale?.quantity?.toString() ?? "",

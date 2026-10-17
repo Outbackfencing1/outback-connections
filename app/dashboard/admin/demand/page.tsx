@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { commodityLabel, formatAud, priceLine } from "@/lib/sale";
 import { ticketLabel } from "@/lib/work-board";
+import ForecastCsvExport from "@/components/admin/ForecastCsvExport";
 
 export const metadata = {
   title: "Demand & Forecasting — Outback Connections",
@@ -62,8 +63,11 @@ type CommodityForecastRow = {
   unit: string | null;
   price_type: string;
   listings_count: number;
+  for_sale_count?: number;
+  wanted_count?: number;
   sold_count: number;
   quantity_listed: number;
+  quantity_wanted?: number;
   quantity_sold: number;
   avg_price_cents: number | null;
 };
@@ -85,16 +89,41 @@ type TicketCountRow = {
   workers_count: number;
 };
 
+type SearchSignalRow = {
+  vertical: string;
+  signal: string;
+  region_name: string;
+  state: string | null;
+  searches: number;
+  zero_result_searches: number;
+};
+
 type MarketIntel = {
   window_months: number;
   commodities: CommodityForecastRow[];
   work_board: WorkForecastRow[];
   tickets: TicketCountRow[];
+  search_signals?: SearchSignalRow[];
 };
 
 const aud = (cents: number) => formatAud(cents, { whole: true });
 
 const WINDOWS = [3, 6, 12] as const;
+
+function formatSignalLabel(vertical: string, signal: string): string {
+  if (signal === "all") return `All ${vertical}`;
+  if (vertical === "job") {
+    if (signal === "available_for_work") return "Workers & operators available";
+    if (signal === "hiring") return "Farms & businesses hiring";
+    return ticketLabel(signal);
+  }
+  if (vertical === "sale") {
+    if (signal === "supply") return "For sale (Available)";
+    if (signal === "demand") return "Wanted to buy (Chasing)";
+    return commodityLabel(signal) ?? signal;
+  }
+  return signal.replace(/_/g, " ");
+}
 
 export default async function DemandPage({
   searchParams,
@@ -153,8 +182,9 @@ export default async function DemandPage({
         <Link href="/dashboard/admin/analytics" className="text-sm underline">← Analytics</Link>
       </div>
       <p className="mt-2 text-sm text-neutral-700">
-        Regional demand, livestock &amp; crop sales volume, rural worker/operator availability, and
-        Shopify sales correlation. Aggregate only; nobody&apos;s personal details are shown here.
+        Regional demand, livestock &amp; crop supply vs wanted-to-buy &amp; sold volume, rural
+        worker/operator availability, live search signals, and Shopify sales correlation. Aggregate
+        only; nobody&apos;s personal details are shown here.
       </p>
 
       <nav className="mt-4 flex gap-2 text-xs">
@@ -178,12 +208,55 @@ export default async function DemandPage({
       {/* Crops, Hay & Livestock Market Intelligence */}
       {marketIntel && (
         <section className="mt-8">
-          <h2 className="text-lg font-semibold text-neutral-900">
-            Crops, hay, grain &amp; livestock (by region &amp; month)
-          </h2>
-          <p className="mt-1 text-xs text-neutral-600">
-            Tracks what stock, hay, grain and gear is listed and marked sold, where, when, and at what average price.
-          </p>
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-neutral-900">
+                Crops, hay, grain &amp; livestock (by region &amp; month)
+              </h2>
+              <p className="mt-1 text-xs text-neutral-600">
+                Tracks what stock, hay, grain and gear is listed For Sale vs Wanted to Buy vs Sold,
+                where, when, and at what average price.
+              </p>
+            </div>
+            {marketIntel.commodities.length > 0 && (
+              <ForecastCsvExport
+                filename={`outback-commodities-forecast-${months}m.csv`}
+                label="Export Commodities CSV"
+                headers={[
+                  "Month",
+                  "Region",
+                  "State",
+                  "Category",
+                  "Commodity",
+                  "Unit",
+                  "Price Type",
+                  "For Sale Count",
+                  "Wanted Count",
+                  "Sold Count",
+                  "Quantity For Sale",
+                  "Quantity Wanted",
+                  "Quantity Sold",
+                  "Avg Price (AUD)",
+                ]}
+                rows={marketIntel.commodities.map((c) => [
+                  c.month,
+                  c.region_name,
+                  c.state ?? "",
+                  c.category_label,
+                  commodityLabel(c.commodity) ?? c.commodity,
+                  c.unit ?? "",
+                  c.price_type,
+                  c.for_sale_count ?? c.listings_count,
+                  c.wanted_count ?? 0,
+                  c.sold_count,
+                  c.quantity_listed,
+                  c.quantity_wanted ?? 0,
+                  c.quantity_sold,
+                  c.avg_price_cents ? (c.avg_price_cents / 100).toFixed(2) : "",
+                ])}
+              />
+            )}
+          </div>
           {marketIntel.commodities.length === 0 ? (
             <p className="mt-2 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-4 text-sm text-neutral-600">
               No livestock, hay, grain or gear listings recorded in this window yet. As farmers post on{" "}
@@ -200,24 +273,35 @@ export default async function DemandPage({
                     <th className="px-3 py-2">Month</th>
                     <th className="px-3 py-2">Region</th>
                     <th className="px-3 py-2">Commodity / Type</th>
-                    <th className="px-3 py-2">Listed</th>
+                    <th className="px-3 py-2">For Sale</th>
+                    <th className="px-3 py-2">Wanted</th>
                     <th className="px-3 py-2">Sold</th>
-                    <th className="px-3 py-2">Volume listed</th>
-                    <th className="px-3 py-2">Volume sold</th>
+                    <th className="px-3 py-2">Vol. for sale</th>
+                    <th className="px-3 py-2">Vol. wanted</th>
+                    <th className="px-3 py-2">Vol. sold</th>
                     <th className="px-3 py-2">Avg price</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
                   {marketIntel.commodities.slice(0, 60).map((c, i) => (
-                    <tr key={i}>
+                    <tr
+                      key={i}
+                      className={(c.wanted_count ?? 0) > 0 && (c.for_sale_count ?? c.listings_count) === 0 ? "bg-amber-50" : ""}
+                    >
                       <td className="px-3 py-2 font-medium text-neutral-900">{c.month}</td>
                       <td className="px-3 py-2">{label(c)}</td>
                       <td className="px-3 py-2">{commodityLabel(c.commodity) ?? c.category_label}</td>
-                      <td className="px-3 py-2">{c.listings_count}</td>
+                      <td className="px-3 py-2">{c.for_sale_count ?? c.listings_count}</td>
+                      <td className="px-3 py-2">{c.wanted_count ?? 0}</td>
                       <td className="px-3 py-2">{c.sold_count}</td>
                       <td className="px-3 py-2">
                         {c.quantity_listed > 0
                           ? `${Number(c.quantity_listed).toLocaleString("en-AU")}${c.unit ? ` ${c.unit}` : ""}`
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-2">
+                        {(c.quantity_wanted ?? 0) > 0
+                          ? `${Number(c.quantity_wanted).toLocaleString("en-AU")}${c.unit ? ` ${c.unit}` : ""}`
                           : "—"}
                       </td>
                       <td className="px-3 py-2">
@@ -242,12 +326,44 @@ export default async function DemandPage({
       {/* Work & Skills Board Intelligence */}
       {marketIntel && (
         <section className="mt-8">
-          <h2 className="text-lg font-semibold text-neutral-900">
-            Work &amp; Skills Board (jobs hiring vs. workers &amp; operators available)
-          </h2>
-          <p className="mt-1 text-xs text-neutral-600">
-            Shows where farms are hiring vs. where drivers, header/machine operators and station hands have listed their skills.
-          </p>
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-neutral-900">
+                Work &amp; Skills Board (jobs hiring vs. workers &amp; operators available)
+              </h2>
+              <p className="mt-1 text-xs text-neutral-600">
+                Shows where farms are hiring vs. where drivers, header/machine operators and station hands have listed their skills.
+              </p>
+            </div>
+            {marketIntel.work_board.length > 0 && (
+              <ForecastCsvExport
+                filename={`outback-work-board-forecast-${months}m.csv`}
+                label="Export Work Board CSV"
+                headers={[
+                  "Month",
+                  "Region",
+                  "State",
+                  "Role",
+                  "Jobs Hiring",
+                  "Workers Available",
+                  "Matched",
+                  "Avg Hourly AUD",
+                  "Avg Daily AUD",
+                ]}
+                rows={marketIntel.work_board.map((w) => [
+                  w.month,
+                  w.region_name,
+                  w.state ?? "",
+                  w.role_label,
+                  w.jobs_hiring,
+                  w.workers_available,
+                  w.matched_count,
+                  w.avg_hourly_aud ?? "",
+                  w.avg_daily_aud ?? "",
+                ])}
+              />
+            )}
+          </div>
           {marketIntel.tickets.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
               {marketIntel.tickets.map((t) => (
@@ -290,6 +406,70 @@ export default async function DemandPage({
                       <td className="px-3 py-2">{w.matched_count}</td>
                       <td className="px-3 py-2">{w.avg_hourly_aud ? `$${w.avg_hourly_aud}/hr` : "—"}</td>
                       <td className="px-3 py-2">{w.avg_daily_aud ? `$${w.avg_daily_aud}/day` : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Live Search Signals (Skills, Crops & Livestock Searched) */}
+      {marketIntel?.search_signals && (
+        <section className="mt-8">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-neutral-900">
+                Live search signals (what skills, crops &amp; stock people are searching for)
+              </h2>
+              <p className="mt-1 text-xs text-neutral-600">
+                Non-bot searches across Work &amp; Skills, Livestock/Harvest and Freight. Yellow rows
+                show searches that returned zero results (immediate supply gaps).
+              </p>
+            </div>
+            {marketIntel.search_signals.length > 0 && (
+              <ForecastCsvExport
+                filename={`outback-search-signals-${months}m.csv`}
+                label="Export Search Signals CSV"
+                headers={["Vertical", "Skill / Commodity / Filter", "Region", "State", "Searches", "Zero-Result Searches"]}
+                rows={marketIntel.search_signals.map((s) => [
+                  s.vertical,
+                  formatSignalLabel(s.vertical, s.signal),
+                  s.region_name,
+                  s.state ?? "",
+                  s.searches,
+                  s.zero_result_searches,
+                ])}
+              />
+            )}
+          </div>
+          {marketIntel.search_signals.length === 0 ? (
+            <p className="mt-2 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-4 text-sm text-neutral-600">
+              No non-bot searches recorded for Work &amp; Skills, Livestock/Harvest or Freight in this window yet.
+            </p>
+          ) : (
+            <div className="mt-2 overflow-x-auto rounded-xl border border-neutral-200">
+              <table className="min-w-full divide-y divide-neutral-200 text-sm">
+                <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-600">
+                  <tr>
+                    <th className="px-3 py-2">Board</th>
+                    <th className="px-3 py-2">Skill / Commodity / Filter</th>
+                    <th className="px-3 py-2">Region</th>
+                    <th className="px-3 py-2">Searches</th>
+                    <th className="px-3 py-2">Zero-result gaps</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {marketIntel.search_signals.slice(0, 40).map((s, i) => (
+                    <tr key={i} className={s.zero_result_searches > 0 ? "bg-amber-50" : ""}>
+                      <td className="px-3 py-2 font-medium capitalize text-neutral-900">
+                        {s.vertical === "job" ? "Work & Skills" : s.vertical === "sale" ? "Livestock & Harvest" : "Freight"}
+                      </td>
+                      <td className="px-3 py-2">{formatSignalLabel(s.vertical, s.signal)}</td>
+                      <td className="px-3 py-2">{label(s)}</td>
+                      <td className="px-3 py-2">{s.searches}</td>
+                      <td className="px-3 py-2">{s.zero_result_searches}</td>
                     </tr>
                   ))}
                 </tbody>
