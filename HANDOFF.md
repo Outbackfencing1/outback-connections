@@ -25,7 +25,7 @@ Josh's direction (17 Oct): turn Outback Connections into a one-stop rural market
 4. **Market Intelligence & Forecasting Warehouse (`/dashboard/admin/demand`, `admin_market_intelligence`):**
    - Migration `20261017110000_work_board_and_marketplace_forecasting.sql` adds the new columns, indexes, job categories (`mechanic-welder`, `agronomy-spraying`), `listings.featured_until` (prepared for optional future Stripe boosts while keeping listings 100% free now), and `public.admin_market_intelligence(p_months)`.
    - `/dashboard/admin/demand` now displays regional & monthly commodity/livestock supply, sold volume, and average unit prices alongside Work & Skills Board supply vs. hiring demand and ticket availability.
-   - Browse and detail pages fall back cleanly if queried before the migration is applied.
+   - **Applied to live (`csisezoohgfrpjrhkmls`) on 17 Oct 2026** alongside `20261010120000_human_traffic_definition.sql` and merged to `main`.
 
 ---
 
@@ -79,7 +79,7 @@ Migration `20261010120000_human_traffic_definition.sql` adds
 `public.is_bot_user_agent()` (the SQL twin of `lib/bot-detect.ts`; a test
 fails if they drift), re-flags `is_bot` on stored rows with it, and
 redefines `admin_gate_metrics()`. Rollback is in the file header and is exact.
-**It is NOT applied to the live project yet.**
+**Applied to live (`csisezoohgfrpjrhkmls`) on 17 Oct 2026.**
 
 To ship, in order:
 1. ~~Two-way schema proof~~ **Done 10 Oct** (Claude, inside one
@@ -90,9 +90,7 @@ To ship, in order:
    internal; documented rollback brought the payload back byte-identical
    (same md5) and the is_bot counts back exactly (events 1700, searches
    1238). Afterwards `is_bot_user_agent` did not exist on live.
-2. Apply the migration to live (MCP or CLI), then merge the PR. The page and
-   the digest cope with either order, but in the gap the old gate counts
-   unverified rows.
+2. ~~Apply the migration to live (MCP or CLI), then merge the PR.~~ **Done 17 Oct.**
 3. After deploy, open the live site on a phone, tap once, and check that a
    `human_ping` row arrives (`select created_at, properties from events where
    event_type = 'human_ping' order by created_at desc limit 5`).
