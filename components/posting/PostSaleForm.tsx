@@ -4,10 +4,12 @@ import BaseFields, { Field } from "./BaseFields";
 import type { Category } from "./types";
 import type { ActionResult } from "@/lib/posting";
 import {
+  COMMODITY_GROUPS,
   CONDITIONS,
   CONDITION_LABELS,
   DELIVERY,
   DELIVERY_LABELS,
+  HARVEST_SEASONS,
   PRICE_TYPES,
   PRICE_TYPE_LABELS,
 } from "@/lib/sale";
@@ -54,7 +56,60 @@ export default function PostSaleForm({ categories, action, listingId, defaults, 
       <BaseFields categories={categories} errors={errors} defaults={defaults ?? {}} />
 
       <div className="rounded-xl border border-neutral-200 p-4">
-        <p className="text-sm font-semibold text-neutral-800">Price and quantity</p>
+        <p className="text-sm font-semibold text-neutral-800">
+          Crop, livestock &amp; price details
+        </p>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Field
+            id="sub_category"
+            label="Stock, crop or gear type (optional)"
+            error={errors.sub_category}
+            compact
+            hint="Helps buyers filter for exact hay, grain or stock"
+          >
+            <select
+              id="sub_category"
+              name="sub_category"
+              defaultValue={v("sub_category")}
+              className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
+            >
+              <option value="">Select type (optional)…</option>
+              {COMMODITY_GROUPS.map((g) => (
+                <optgroup key={g.categorySlug} label={g.groupLabel}>
+                  {g.options.map((opt) => (
+                    <option key={opt.code} value={opt.code}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </Field>
+
+          <Field
+            id="harvest_season"
+            label="Season, breed or specs (optional)"
+            error={errors.harvest_season}
+            compact
+            hint="e.g. '2026/27 Season · Shedded', 'Angus 380kg', '8x4x3'"
+          >
+            <input
+              id="harvest_season"
+              name="harvest_season"
+              list="harvest-season-suggestions"
+              maxLength={60}
+              defaultValue={v("harvest_season")}
+              placeholder="2026/27 Season · Shedded"
+              className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
+            />
+            <datalist id="harvest-season-suggestions">
+              {HARVEST_SEASONS.map((s) => (
+                <option key={s} value={s} />
+              ))}
+            </datalist>
+          </Field>
+        </div>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Field id="price_type" label="Price type" error={errors.price_type} required compact>

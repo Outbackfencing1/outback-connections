@@ -8,7 +8,15 @@ import OwnerActions from "@/components/detail/OwnerActions";
 import { relativeTime } from "@/lib/format";
 import { buildDescription, buildTitle, breadcrumbJsonLd, jsonLdScript } from "@/lib/seo";
 import { logEvent } from "@/lib/analytics";
-import { CONDITION_LABELS, DELIVERY_LABELS, priceLine, quantityLine, type Condition, type Delivery } from "@/lib/sale";
+import {
+  CONDITION_LABELS,
+  DELIVERY_LABELS,
+  commodityLabel,
+  priceLine,
+  quantityLine,
+  type Condition,
+  type Delivery,
+} from "@/lib/sale";
 
 export const dynamic = "force-dynamic";
 
@@ -31,25 +39,55 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return { title, description, openGraph: { title, description, type: "article" }, twitter: { card: "summary", title, description } };
 }
 
+type SaleDetail = {
+  price_cents: number | null;
+  price_type: string;
+  quantity: number | null;
+  unit: string | null;
+  condition: string;
+  delivery: string;
+  sold_at: string | null;
+  sub_category?: string | null;
+  harvest_season?: string | null;
+};
+
 export default async function SaleDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
   const viewer = userData.user;
 
-  const { data: listing } = await supabase
+  let { data: listing, error: queryErr } = await supabase
     .from("listings")
     .select(
       `
       id, anonymised_id, slug, kind, title, description, postcode, state,
       created_at, expires_at, user_id, status,
       category:categories(slug, label),
-      sale_details(price_cents, price_type, quantity, unit, condition, delivery, sold_at)
+      sale_details(price_cents, price_type, quantity, unit, condition, delivery, sold_at, sub_category, harvest_season)
     `
     )
     .eq("slug", slug)
     .eq("kind", "for_sale")
     .maybeSingle();
+
+  if (queryErr) {
+    const fb = await supabase
+      .from("listings")
+      .select(
+        `
+        id, anonymised_id, slug, kind, title, description, postcode, state,
+        created_at, expires_at, user_id, status,
+        category:categories(slug, label),
+        sale_details(price_cents, price_type, quantity, unit, condition, delivery, sold_at)
+      `
+      )
+      .eq("slug", slug)
+      .eq("kind", "for_sale")
+      .maybeSingle();
+    listing = fb.data as typeof listing;
+  }
+
   if (!listing) notFound();
 
   const { data: contact } = viewer
@@ -61,7 +99,9 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ slu
     notFound();
   }
 
-  const d = Array.isArray(listing.sale_details) ? listing.sale_details[0] : listing.sale_details;
+  const d = (Array.isArray(listing.sale_details)
+    ? listing.sale_details[0]
+    : listing.sale_details) as SaleDetail | null;
   const cat = Array.isArray(listing.category) ? listing.category[0] : listing.category;
   const pageUrl = `${BASE_URL}/sale/${listing.slug}`;
   const breadcrumb = breadcrumbJsonLd([
@@ -76,7 +116,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ slu
     entityId: listing.id,
     vertical: "sale",
     userId: viewer?.id ?? null,
-    properties: { slug: listing.slug },
+    properties: { slug: listing.slug, sub_category: d?.sub_category ?? null },
   });
   if (viewer && (contact?.contact_email || contact?.contact_phone)) {
     await logEvent({ eventType: "contact_reveal", entityType: "listing", entityId: listing.id, vertical: "sale", userId: viewer.id });
@@ -84,6 +124,9 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ slu
 
   const rows: Array<{ label: string; value: string }> = [];
   if (d) {
+    const sub = commodityLabel(d.sub_category);
+    if (sub) rows.push({ label: "Type", value: sub });
+    if (d.harvest_season) rows.push({ label: "Season / specs", value: d.harvest_season });
     rows.push({ label: "Price", value: priceLine({ price_cents: d.price_cents, price_type: d.price_type, unit: d.unit }) });
     const qty = quantityLine({ quantity: d.quantity, unit: d.unit });
     if (qty) rows.push({ label: "Quantity", value: qty });
@@ -110,7 +153,8 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ slu
       </div>
 
       <p className="mt-2 text-sm text-neutral-600">
-        {cat?.label ?? "—"} · {listing.state ? `${listing.postcode} ${listing.state}` : `Postcode ${listing.postcode}`} · Posted{" "}
+        {commodityLabel(d?.sub_category) ?? cat?.label ?? "—"} ·{" "}
+        {listing.state ? `${listing.postcode} ${listing.state}` : `Postcode ${listing.postcode}`} · Posted{" "}
         {relativeTime(listing.created_at)} · Expires {new Date(listing.expires_at).toLocaleDateString("en-AU")}
       </p>
 

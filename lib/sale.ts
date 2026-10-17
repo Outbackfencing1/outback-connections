@@ -77,3 +77,93 @@ export function quantityLine(d: { quantity: number | null; unit?: string | null 
   const n = Number.isInteger(q) ? q.toLocaleString("en-AU") : q.toLocaleString("en-AU", { maximumFractionDigits: 2 });
   return d.unit ? `${n} ${d.unit}` : n;
 }
+
+export type CommodityGroup = {
+  categorySlug: string;
+  groupLabel: string;
+  options: Array<{ code: string; label: string }>;
+};
+
+export const COMMODITY_GROUPS: readonly CommodityGroup[] = [
+  {
+    categorySlug: "livestock",
+    groupLabel: "Livestock",
+    options: [
+      { code: "cattle_steers", label: "Cattle — steers / feeders" },
+      { code: "cattle_heifers", label: "Cattle — heifers" },
+      { code: "cattle_cows_calves", label: "Cattle — cows & calves / PTIC" },
+      { code: "cattle_bulls", label: "Cattle — bulls" },
+      { code: "sheep_ewes", label: "Sheep — ewes / breeders" },
+      { code: "sheep_lambs", label: "Sheep — lambs / stores" },
+      { code: "sheep_wethers_rams", label: "Sheep — wethers / rams" },
+      { code: "goats", label: "Goats" },
+      { code: "working_dogs", label: "Working dogs" },
+      { code: "horses", label: "Horses" },
+    ],
+  },
+  {
+    categorySlug: "hay-fodder",
+    groupLabel: "Hay & fodder",
+    options: [
+      { code: "lucerne_hay", label: "Lucerne hay" },
+      { code: "wheaten_hay", label: "Wheaten hay" },
+      { code: "oaten_hay", label: "Oaten hay" },
+      { code: "vetch_clover_hay", label: "Vetch / clover / pasture hay" },
+      { code: "silage", label: "Silage" },
+      { code: "straw", label: "Straw / bedding" },
+    ],
+  },
+  {
+    categorySlug: "grain-feed",
+    groupLabel: "Grain & stock feed",
+    options: [
+      { code: "wheat", label: "Wheat" },
+      { code: "barley", label: "Barley" },
+      { code: "oats", label: "Oats" },
+      { code: "canola", label: "Canola" },
+      { code: "sorghum_maize", label: "Sorghum / maize" },
+      { code: "lupins_pulses", label: "Lupins / chickpeas / faba beans" },
+      { code: "pellets_mix", label: "Stock pellets / ration / cottonseed" },
+    ],
+  },
+  {
+    categorySlug: "machinery",
+    groupLabel: "Machinery & equipment",
+    options: [
+      { code: "tractor", label: "Tractor" },
+      { code: "header_harvester", label: "Header / harvester / chaser bin" },
+      { code: "hay_gear", label: "Baler / mower / rake" },
+      { code: "tillage_seeding", label: "Airseeder / planter / tillage" },
+      { code: "earthmoving", label: "Excavator / dozer / loader / skid steer" },
+      { code: "livestock_handling_gear", label: "Cattle crush / yards / sheep handler / feeder" },
+    ],
+  },
+  {
+    categorySlug: "fencing-materials",
+    groupLabel: "Fencing & steel",
+    options: [
+      { code: "hinge_joint_mesh", label: "Hinge joint / exclusion mesh" },
+      { code: "pickets_posts", label: "Pickets / strainers / stays" },
+      { code: "gates_cattle_rail", label: "Gates / cattle rail / panels" },
+      { code: "plain_barbed_wire", label: "Plain / barbed wire & tools" },
+    ],
+  },
+] as const;
+
+const COMMODITY_LABEL_MAP: Record<string, string> = Object.fromEntries(
+  COMMODITY_GROUPS.flatMap((g) => g.options.map((o) => [o.code, o.label]))
+);
+
+export function commodityLabel(code: string | null | undefined): string | null {
+  if (!code) return null;
+  return COMMODITY_LABEL_MAP[code] ?? code.replace(/_/g, " ");
+}
+
+export const HARVEST_SEASONS = [
+  "2026/27 Season",
+  "2025/26 Season",
+  "Shedded / Stored",
+  "Standing Crop / Paddock",
+  "Weaned / Yard Prepared",
+] as const;
+

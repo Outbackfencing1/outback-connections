@@ -1,15 +1,16 @@
-// /dashboard/admin/demand — what farmers ask for, where, and whether anyone
-// is listed to do it. Josh's planning view: quote requests + job requests +
-// located human searches per region and category, against current supply,
-// with the gaps (demand, no supply) called out. Aggregate only.
+// /dashboard/admin/demand — Demand & Market Forecasting Warehouse.
+// Combines regional service demand vs. supply, Shopify postcode sales,
+// commodity/livestock volume & price tracking, and two-sided Work & Skills
+// Board (jobs hiring vs. workers/operators available + ticket supply).
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { formatAud } from "@/lib/sale";
+import { commodityLabel, formatAud, priceLine } from "@/lib/sale";
+import { ticketLabel } from "@/lib/work-board";
 
 export const metadata = {
-  title: "Demand by region — Outback Connections",
+  title: "Demand & Forecasting — Outback Connections",
   robots: { index: false, follow: false },
 };
 
@@ -52,6 +53,45 @@ type Report = {
   sales_coverage?: { months: number; first_month: string | null; last_month: string | null; updated_at: string | null };
 };
 
+type CommodityForecastRow = {
+  month: string;
+  region_name: string;
+  state: string | null;
+  category_label: string;
+  commodity: string;
+  unit: string | null;
+  price_type: string;
+  listings_count: number;
+  sold_count: number;
+  quantity_listed: number;
+  quantity_sold: number;
+  avg_price_cents: number | null;
+};
+
+type WorkForecastRow = {
+  month: string;
+  region_name: string;
+  state: string | null;
+  role_label: string;
+  jobs_hiring: number;
+  workers_available: number;
+  matched_count: number;
+  avg_hourly_aud: number | null;
+  avg_daily_aud: number | null;
+};
+
+type TicketCountRow = {
+  ticket: string;
+  workers_count: number;
+};
+
+type MarketIntel = {
+  window_months: number;
+  commodities: CommodityForecastRow[];
+  work_board: WorkForecastRow[];
+  tickets: TicketCountRow[];
+};
+
 const aud = (cents: number) => formatAud(cents, { whole: true });
 
 const WINDOWS = [3, 6, 12] as const;
@@ -73,7 +113,7 @@ export default async function DemandPage({
   if (!(profile?.is_admin || profile?.is_staff)) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-10">
-        <h1 className="text-2xl font-bold tracking-tight">Demand by region</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Demand &amp; Forecasting</h1>
         <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
           <p className="font-semibold">Staff and admins only</p>
         </div>
@@ -88,12 +128,19 @@ export default async function DemandPage({
 
   const admin = createAdminClient();
   let report: Report | null = null;
+  let marketIntel: MarketIntel | null = null;
   let err: string | null = null;
   if (!admin) err = "Not configured (service role missing).";
   else {
-    const { data, error } = await admin.rpc("admin_demand_by_region", { p_months: months });
-    if (error) err = error.message;
-    else report = data as Report;
+    const [demandRes, intelRes] = await Promise.all([
+      admin.rpc("admin_demand_by_region", { p_months: months }),
+      admin.rpc("admin_market_intelligence", { p_months: months }),
+    ]);
+    if (demandRes.error) err = demandRes.error.message;
+    else report = demandRes.data as Report;
+    if (!intelRes.error && intelRes.data) {
+      marketIntel = intelRes.data as MarketIntel;
+    }
   }
 
   const label = (r: { region_name: string | null; state: string | null }) =>
@@ -102,13 +149,12 @@ export default async function DemandPage({
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
       <div className="flex items-baseline justify-between gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">Demand by region</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Demand &amp; Market Forecasting</h1>
         <Link href="/dashboard/admin/analytics" className="text-sm underline">← Analytics</Link>
       </div>
       <p className="mt-2 text-sm text-neutral-700">
-        What people asked for, where, and whether anyone is listed to do it. Demand = quote
-        requests + job requests + human searches with a postcode. Supply = live service
-        listings. Aggregate only; nobody&apos;s details are on this page.
+        Regional demand, livestock &amp; crop sales volume, rural worker/operator availability, and
+        Shopify sales correlation. Aggregate only; nobody&apos;s personal details are shown here.
       </p>
 
       <nav className="mt-4 flex gap-2 text-xs">
@@ -129,9 +175,133 @@ export default async function DemandPage({
         <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{err}</div>
       )}
 
+      {/* Crops, Hay & Livestock Market Intelligence */}
+      {marketIntel && (
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold text-neutral-900">
+            Crops, hay, grain &amp; livestock (by region &amp; month)
+          </h2>
+          <p className="mt-1 text-xs text-neutral-600">
+            Tracks what stock, hay, grain and gear is listed and marked sold, where, when, and at what average price.
+          </p>
+          {marketIntel.commodities.length === 0 ? (
+            <p className="mt-2 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-4 text-sm text-neutral-600">
+              No livestock, hay, grain or gear listings recorded in this window yet. As farmers post on{" "}
+              <Link href="/post/sale" className="underline">
+                /post/sale
+              </Link>{" "}
+              and mark items sold, regional volume and price trends populate here automatically.
+            </p>
+          ) : (
+            <div className="mt-2 overflow-x-auto rounded-xl border border-neutral-200">
+              <table className="min-w-full divide-y divide-neutral-200 text-sm">
+                <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-600">
+                  <tr>
+                    <th className="px-3 py-2">Month</th>
+                    <th className="px-3 py-2">Region</th>
+                    <th className="px-3 py-2">Commodity / Type</th>
+                    <th className="px-3 py-2">Listed</th>
+                    <th className="px-3 py-2">Sold</th>
+                    <th className="px-3 py-2">Volume listed</th>
+                    <th className="px-3 py-2">Volume sold</th>
+                    <th className="px-3 py-2">Avg price</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {marketIntel.commodities.slice(0, 60).map((c, i) => (
+                    <tr key={i}>
+                      <td className="px-3 py-2 font-medium text-neutral-900">{c.month}</td>
+                      <td className="px-3 py-2">{label(c)}</td>
+                      <td className="px-3 py-2">{commodityLabel(c.commodity) ?? c.category_label}</td>
+                      <td className="px-3 py-2">{c.listings_count}</td>
+                      <td className="px-3 py-2">{c.sold_count}</td>
+                      <td className="px-3 py-2">
+                        {c.quantity_listed > 0
+                          ? `${Number(c.quantity_listed).toLocaleString("en-AU")}${c.unit ? ` ${c.unit}` : ""}`
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-2">
+                        {c.quantity_sold > 0
+                          ? `${Number(c.quantity_sold).toLocaleString("en-AU")}${c.unit ? ` ${c.unit}` : ""}`
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-2">
+                        {c.avg_price_cents
+                          ? priceLine({ price_cents: c.avg_price_cents, price_type: c.price_type, unit: c.unit })
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Work & Skills Board Intelligence */}
+      {marketIntel && (
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold text-neutral-900">
+            Work &amp; Skills Board (jobs hiring vs. workers &amp; operators available)
+          </h2>
+          <p className="mt-1 text-xs text-neutral-600">
+            Shows where farms are hiring vs. where drivers, header/machine operators and station hands have listed their skills.
+          </p>
+          {marketIntel.tickets.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {marketIntel.tickets.map((t) => (
+                <span
+                  key={t.ticket}
+                  className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-900"
+                >
+                  {ticketLabel(t.ticket)}: {t.workers_count} available
+                </span>
+              ))}
+            </div>
+          )}
+          {marketIntel.work_board.length === 0 ? (
+            <p className="mt-2 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-4 text-sm text-neutral-600">
+              No job or worker skill listings in this window yet.
+            </p>
+          ) : (
+            <div className="mt-2 overflow-x-auto rounded-xl border border-neutral-200">
+              <table className="min-w-full divide-y divide-neutral-200 text-sm">
+                <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-600">
+                  <tr>
+                    <th className="px-3 py-2">Month</th>
+                    <th className="px-3 py-2">Region</th>
+                    <th className="px-3 py-2">Role</th>
+                    <th className="px-3 py-2">Jobs hiring</th>
+                    <th className="px-3 py-2">Workers available</th>
+                    <th className="px-3 py-2">Matched</th>
+                    <th className="px-3 py-2">Avg $/hr</th>
+                    <th className="px-3 py-2">Avg $/day</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {marketIntel.work_board.slice(0, 60).map((w, i) => (
+                    <tr key={i} className={w.jobs_hiring > 0 && w.workers_available === 0 ? "bg-amber-50" : ""}>
+                      <td className="px-3 py-2 font-medium text-neutral-900">{w.month}</td>
+                      <td className="px-3 py-2">{label(w)}</td>
+                      <td className="px-3 py-2">{w.role_label}</td>
+                      <td className="px-3 py-2">{w.jobs_hiring}</td>
+                      <td className="px-3 py-2">{w.workers_available}</td>
+                      <td className="px-3 py-2">{w.matched_count}</td>
+                      <td className="px-3 py-2">{w.avg_hourly_aud ? `$${w.avg_hourly_aud}/hr` : "—"}</td>
+                      <td className="px-3 py-2">{w.avg_daily_aud ? `$${w.avg_daily_aud}/day` : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
       {report && (
         <>
-          <section className="mt-6">
+          <section className="mt-8">
             <h2 className="text-lg font-semibold text-neutral-900">Gaps: asked for, nobody listed</h2>
             {report.gaps.length === 0 ? (
               <p className="mt-1 text-sm text-neutral-600">None in this window. Every located ask had at least one listing.</p>
@@ -248,12 +418,12 @@ export default async function DemandPage({
                   {report.by_region.slice(0, 100).map((r, i) => (
                     <tr key={i} className={r.supply === 0 && r.demand > 0 ? "bg-amber-50" : ""}>
                       <td className="px-3 py-2 font-medium text-neutral-900">{label(r)}</td>
-                      <td className="px-3 py-2 text-neutral-700">{r.category ?? "—"}</td>
+                      <td className="px-3 py-2">{r.category ?? "—"}</td>
                       <td className="px-3 py-2 font-semibold">{r.demand}</td>
                       <td className="px-3 py-2">{r.enquiries}</td>
                       <td className="px-3 py-2">{r.requests}</td>
                       <td className="px-3 py-2">{r.searches}</td>
-                      <td className="px-3 py-2 text-neutral-600">{r.zero_result_searches}</td>
+                      <td className="px-3 py-2">{r.zero_result_searches}</td>
                       <td className="px-3 py-2">{r.supply}</td>
                     </tr>
                   ))}
@@ -261,8 +431,8 @@ export default async function DemandPage({
               </table>
             </div>
             <p className="mt-2 text-xs text-neutral-500">
-              Highlighted rows have demand and no supply. &quot;Found nothing&quot; is searches that returned
-              zero results. Searches without a postcode aren&apos;t located and don&apos;t appear here.
+              Amber rows have demand and zero listed businesses. Quote requests are on a specific listing; job requests
+              are a farmer posting what they need; searches are non-bot searches that included a postcode.
             </p>
           </section>
         </>

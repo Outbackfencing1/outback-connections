@@ -1,12 +1,31 @@
 # HANDOFF
 
-Date: 2026-10-10 (previous: 2026-10-06)
-Branch: `main`. Live: https://www.outbackconnections.com.au
+Date: 2026-10-17 (previous: 2026-10-10)
+Branch: `feat/rural-marketplace-workboard` (built on `claude/launch-ready`). Live: https://www.outbackconnections.com.au
 
 Everything from the 6 Sep session is on `main` and deployed (PR #18, 7 Sep;
-PR #19, the staff-post clean-up, 2 Oct).
-Pushing to `main` deploys production. All migrations in
-`supabase/migrations/` are applied to the live project.
+PR #19, the staff-post clean-up, 2 Oct; PRs #21, #24, #25, #27 on 10 Oct).
+Pushing to `main` deploys production.
+
+---
+
+## 17 Oct 2026: Two-sided Work & Skills Board, Day-1 posting, Commodity/Livestock Marketplace & Forecasting (`feat/rural-marketplace-workboard`)
+
+Josh's direction (17 Oct): turn Outback Connections into a one-stop rural marketplace and work board before pushing his 3M/month Facebook reach to it:
+1. **Day-1 posting (`ACCOUNT_AGE_REQUIREMENT_HOURS = 0` in `lib/posting.ts`):**
+   - Removed the 24-hour new-account waiting period so verified users coming from Facebook can post their skills, jobs, livestock, hay, grain, or freight immediately on signup.
+2. **Two-sided Work & Skills Board (`lib/work-board.ts`, `/jobs`, `/post/job`, `job_details`):**
+   - `job_details` now supports both `direction = 'hiring'` (`listings.side = 'demand'`) and `direction = 'available_for_work'` (`listings.side = 'supply'`).
+   - Drivers, header/machine operators, station hands, shearers, and fencers can list their skills, structured tickets (`WORKER_TICKETS`: MC/HC/HR licence, header/harvester, tractor/GPS, excavator/dozer, loader/telehandler, ChemCert, livestock/dogs, fencing, shearing, welding/mechanic, White Card, own ute/tools, self-contained camp), travel radius, experience, and hourly/daily rate via `/post/job?direction=available_for_work`.
+   - `/jobs` filters by side (`All` | `Workers & operators available` | `Jobs hiring`), role category, specific ticket/skill, postcode, and pay type.
+   - `JobPosting` JSON-LD is strictly emitted only on real hiring vacancies (`direction !== 'available_for_work'`).
+3. **Structured Livestock, Harvest & Gear Marketplace (`lib/sale.ts`, `/sale`, `/post/sale`, `CloseListingForm.tsx`):**
+   - Added `sub_category` (`COMMODITY_GROUPS`: cattle steers/heifers/cows & calves/bulls, sheep ewes/lambs/wethers, lucerne/wheaten/oaten/pasture hay, silage, wheat, barley, oats, canola, sorghum, pulses, tractors, headers, hay gear, earthmoving, fencing steel) and `harvest_season` / breed specs.
+   - When a seller marks a `for_sale` listing as sold (`reason = 'matched'`) in `/dashboard/listings`, `CloseListingForm` captures optional final `sold_price` and `sold_quantity` and stamps `sale_details.sold_at`, `sold_price_cents`, and `sold_quantity`.
+4. **Market Intelligence & Forecasting Warehouse (`/dashboard/admin/demand`, `admin_market_intelligence`):**
+   - Migration `20261017110000_work_board_and_marketplace_forecasting.sql` adds the new columns, indexes, job categories (`mechanic-welder`, `agronomy-spraying`), `listings.featured_until` (prepared for optional future Stripe boosts while keeping listings 100% free now), and `public.admin_market_intelligence(p_months)`.
+   - `/dashboard/admin/demand` now displays regional & monthly commodity/livestock supply, sold volume, and average unit prices alongside Work & Skills Board supply vs. hiring demand and ticket availability.
+   - Browse and detail pages fall back cleanly if queried before the migration is applied.
 
 ---
 

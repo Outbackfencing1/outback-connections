@@ -2,9 +2,10 @@ import Link from "next/link";
 import { checkPostingGuard } from "@/lib/posting";
 
 export const metadata = {
-  alternates: { canonical: "/post" },
   title: "Post a listing — Outback Connections",
-  description: "Post a job, freight, or rural service. Free forever.",
+  robots: { index: false, follow: true },
+  description:
+    "List your rural skills, post a job, sell livestock or harvest, or post freight and rural services. Free forever.",
 };
 
 export const dynamic = "force-dynamic";
@@ -18,10 +19,10 @@ export default async function PostHubPage() {
         What are you posting?
       </h1>
       <p className="mt-2 text-neutral-700">
-        Pick the right kind of listing. Free forever, no lead fees.
+        Pick the right kind of listing. Free forever, no lead fees, no commission.
       </p>
       <p className="mt-1 text-sm text-neutral-600">
-        Posting needs a free account. Asking a listed business for a quote
+        Posting needs a free account (takes 1 minute — post straight away). Asking a listed business for a quote
         doesn&apos;t.
       </p>
 
@@ -29,38 +30,45 @@ export default async function PostHubPage() {
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         <PostCard
-          href="/post/job"
-          title="Post a job"
-          blurb="Need a station hand, fencer, harvester, or driver? Describe the work."
-          eyebrow="Jobs"
+          href="/post/job?direction=available_for_work"
+          title="List your skills (Available for work)"
+          blurb="Truck driver, header/machine operator, fencer, station hand, shearer or welder? List your tickets, rate & availability."
+          eyebrow="Work & Skills — available"
           disabled={!guard.ok}
         />
         <PostCard
-          href="/post/freight"
-          title="Need freight moved"
-          blurb="Livestock, hay, grain, machinery — post what needs moving and where."
-          eyebrow="Freight"
+          href="/post/job?direction=hiring"
+          title="Post a job (Hiring)"
+          blurb="Need a driver, machine operator, station hand, fencer, or harvest crew? Describe the work and rate."
+          eyebrow="Work & Skills — hiring"
+          disabled={!guard.ok}
+        />
+        <PostCard
+          href="/post/sale"
+          title="Sell livestock, hay, grain or gear"
+          blurb="Cattle, sheep, lucerne/cereal hay, grain, machinery, trailers, fencing steel. Zero commission; buyers contact you direct."
+          eyebrow="For sale"
           disabled={!guard.ok}
         />
         <PostCard
           href="/post/service/offering"
           title="Offering a rural service"
-          blurb="Bore pumps, drone spraying, mechanical repairs, contract cropping. Add your service to the directory."
-          eyebrow="Services — offering"
-          disabled={!guard.ok}
-        />
-        <PostCard
-          href="/post/sale"
-          title="Sell hay, stock or gear"
-          blurb="Livestock, hay, grain, machinery, a trailer, fencing steel. No commission; buyers contact you."
-          eyebrow="For sale"
+          blurb="Fencing contractor, bore pumps, drone spraying, mobile diesel mechanic, contract cropping, earthworks. Add your business."
+          eyebrow="Services — contractor directory"
           disabled={!guard.ok}
         />
         <PostCard
           href="/post/service/request"
-          title="Need a service done"
-          blurb="Looking for a specialist for a one-off job? Post what you need."
-          eyebrow="Services — requesting"
+          title="Need a contractor or service done"
+          blurb="Got a fencing job, earthworks, spraying or bore repair? Post what you need and let contractors get in touch."
+          eyebrow="Services — job request"
+          disabled={!guard.ok}
+        />
+        <PostCard
+          href="/post/freight"
+          title="Freight & backloads"
+          blurb="Need livestock, hay, grain or machinery moved — or got a truck with empty deck space on a run?"
+          eyebrow="Freight"
           disabled={!guard.ok}
         />
       </div>
@@ -87,14 +95,14 @@ function PostingGate({
       <p className="mt-2">{guard.message}</p>
       {guard.reason === "not_signed_in" && (
         <p className="mt-3">
-          <Link href="/signin" className="font-medium underline">
+          <Link href="/signin?next=/post" className="font-medium underline">
             Sign in
           </Link>{" "}
           or{" "}
-          <Link href="/signup" className="font-medium underline">
-            create an account
-          </Link>
-          .
+          <Link href="/signup?next=/post" className="font-medium underline">
+            create a free account
+          </Link>{" "}
+          to post right away.
         </p>
       )}
     </div>

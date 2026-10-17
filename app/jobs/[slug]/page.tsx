@@ -17,6 +17,7 @@ import {
   jsonLdScript,
 } from "@/lib/seo";
 import { logEvent } from "@/lib/analytics";
+import { jobDirectionBadge, ticketLabel, travelRadiusLabel } from "@/lib/work-board";
 
 export const dynamic = "force-dynamic";
 
@@ -41,12 +42,12 @@ export async function generateMetadata({
     .maybeSingle();
 
   if (!data) {
-    return { title: "Job not found — Outback Connections" };
+    return { title: "Listing not found — Outback Connections" };
   }
   const cat = Array.isArray(data.category) ? data.category[0] : data.category;
   const title = buildTitle({
     listingTitle: data.title,
-    categoryLabel: cat?.label ?? "Jobs",
+    categoryLabel: cat?.label ?? "Work & Skills",
     postcode: data.postcode,
   });
   const description = buildDescription(data.description);
@@ -58,6 +59,19 @@ export async function generateMetadata({
   };
 }
 
+type JobDetail = {
+  direction?: string | null;
+  work_type: string | null;
+  pay_type: string | null;
+  pay_amount: number | null;
+  start_date: string | null;
+  duration_text: string | null;
+  accommodation_provided: boolean;
+  tickets?: string[] | null;
+  travel_willingness?: string | null;
+  experience_years?: number | null;
+};
+
 export default async function JobDetailPage({
   params,
 }: {
@@ -68,7 +82,7 @@ export default async function JobDetailPage({
   const { data: userData } = await supabase.auth.getUser();
   const viewer = userData.user;
 
-  const { data: listing } = await supabase
+  let { data: listing, error: queryErr } = await supabase
     .from("listings")
     .select(
       `
@@ -77,12 +91,31 @@ export default async function JobDetailPage({
       data_source, source_platform, source_url, business_id, metadata,
       category:categories(slug, label),
       business:businesses(claim_status, geo_lat, geo_lng),
-      job_details(work_type, pay_type, pay_amount, start_date, duration_text, accommodation_provided)
+      job_details(direction, work_type, pay_type, pay_amount, start_date, duration_text, accommodation_provided, tickets, travel_willingness, experience_years)
     `
     )
     .eq("slug", slug)
     .eq("kind", "job")
     .maybeSingle();
+
+  if (queryErr) {
+    const fb = await supabase
+      .from("listings")
+      .select(
+        `
+        id, anonymised_id, slug, kind, title, description, postcode, state,
+        created_at, expires_at, user_id, status,
+        data_source, source_platform, source_url, business_id, metadata,
+        category:categories(slug, label),
+        business:businesses(claim_status, geo_lat, geo_lng),
+        job_details(work_type, pay_type, pay_amount, start_date, duration_text, accommodation_provided)
+      `
+      )
+      .eq("slug", slug)
+      .eq("kind", "job")
+      .maybeSingle();
+    listing = fb.data as typeof listing;
+  }
 
   if (!listing) notFound();
 
@@ -99,9 +132,9 @@ export default async function JobDetailPage({
     notFound();
   }
 
-  const detail = Array.isArray(listing.job_details)
+  const detail = (Array.isArray(listing.job_details)
     ? listing.job_details[0]
-    : listing.job_details;
+    : listing.job_details) as JobDetail | null;
   const cat = Array.isArray(listing.category) ? listing.category[0] : listing.category;
 
   await logEvent({
@@ -110,7 +143,11 @@ export default async function JobDetailPage({
     entityId: listing.id,
     vertical: "job",
     userId: viewer?.id ?? null,
-    properties: { slug: listing.slug, data_source: listing.data_source },
+    properties: {
+      slug: listing.slug,
+      data_source: listing.data_source,
+      direction: detail?.direction ?? "hiring",
+    },
   });
   if (viewer && listing.data_source !== "scraped" && (contact?.contact_email || contact?.contact_phone)) {
     await logEvent({
@@ -122,19 +159,17 @@ export default async function JobDetailPage({
     });
   }
 
-  // Real job ads -> JobPosting (Google-for-Jobs eligible). Scraped directory
-  // rows are NOT job postings, so they NEVER emit JobPosting — they get a
-  // LocalBusiness block instead (a directory entry for a real business).
-  // Syndicated ads (Adzuna) are a third case: a real vacancy that lives on
-  // another board — no JobPosting (not ours to advertise) and no
-  // LocalBusiness (the title is a vacancy, not a business).
+  // Real job ads (direction !== 'available_for_work') -> JobPosting (Google-for-Jobs eligible).
+  // Worker/operator skill profiles are supply listings, NOT job vacancies, so they never emit JobPosting.
+  // Scraped directory rows also never emit JobPosting — they get LocalBusiness instead.
   const isScraped = listing.data_source === "scraped";
   const isSyndicated = isScraped && listing.source_platform === "adzuna";
+  const isWorkerProfile = detail?.direction === "available_for_work";
   const biz = Array.isArray(listing.business) ? listing.business[0] : listing.business;
   const isUnclaimedScraped =
     isScraped && !isSyndicated && (!biz || biz.claim_status === "unclaimed");
   const pageUrl = `${BASE_URL}/jobs/${listing.slug}`;
-  const primaryLd = isSyndicated
+  const primaryLd = isSyndicated || isWorkerProfile
     ? null
     : isScraped
     ? localBusinessJsonLd({
@@ -164,10 +199,12 @@ export default async function JobDetailPage({
     ...(primaryLd ? [primaryLd] : []),
     breadcrumbJsonLd([
       { name: "Home", url: BASE_URL },
-      { name: "Jobs", url: `${BASE_URL}/jobs` },
+      { name: "Work & Skills", url: `${BASE_URL}/jobs` },
       { name: listing.title, url: pageUrl },
     ]),
   ];
+
+  const badge = detail?.direction ? jobDirectionBadge(detail.direction) : null;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -180,7 +217,7 @@ export default async function JobDetailPage({
       ))}
       <p className="text-sm">
         <Link href="/jobs" className="text-neutral-600 underline">
-          ← All jobs
+          ← All work &amp; skills
         </Link>
       </p>
 
@@ -188,9 +225,21 @@ export default async function JobDetailPage({
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
           {listing.title}
         </h1>
-        <span className="shrink-0 rounded bg-neutral-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-neutral-700">
-          {kindLabel(listing.kind)}
-        </span>
+        {badge ? (
+          <span
+            className={`shrink-0 rounded px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${
+              badge.isWorker
+                ? "bg-emerald-100 text-emerald-900"
+                : "bg-neutral-100 text-neutral-700"
+            }`}
+          >
+            {badge.label}
+          </span>
+        ) : (
+          <span className="shrink-0 rounded bg-neutral-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-neutral-700">
+            {kindLabel(listing.kind)}
+          </span>
+        )}
       </div>
 
       <p className="mt-2 text-sm text-neutral-600">
@@ -208,7 +257,7 @@ export default async function JobDetailPage({
 
       <section className="mt-8">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-700">
-          Description
+          {isWorkerProfile ? "About & experience" : "Description"}
         </h2>
         <p className="mt-2 whitespace-pre-line text-neutral-800">
           {listing.description}
@@ -260,48 +309,95 @@ export default async function JobDetailPage({
   );
 }
 
-function JobDetails({
-  detail,
-}: {
-  detail: {
-    work_type: string | null;
-    pay_type: string | null;
-    pay_amount: number | null;
-    start_date: string | null;
-    duration_text: string | null;
-    accommodation_provided: boolean;
-  };
-}) {
+function JobDetails({ detail }: { detail: JobDetail }) {
+  const isWorker = detail.direction === "available_for_work";
   const rows: Array<{ label: string; value: string }> = [];
-  if (detail.work_type) rows.push({ label: "Work type", value: humanise(detail.work_type) });
-  if (detail.pay_type)
+  if (detail.work_type) {
     rows.push({
-      label: "Pay",
+      label: isWorker ? "Preferred work type" : "Work type",
+      value: humanise(detail.work_type),
+    });
+  }
+  if (detail.pay_type) {
+    rows.push({
+      label: isWorker ? "Rate" : "Pay",
       value:
         detail.pay_amount !== null
           ? `$${detail.pay_amount.toLocaleString("en-AU")} ${humanise(detail.pay_type).toLowerCase()}`
           : humanise(detail.pay_type),
     });
-  if (detail.start_date) rows.push({ label: "Start date", value: detail.start_date });
-  if (detail.duration_text) rows.push({ label: "Duration", value: detail.duration_text });
-  if (detail.accommodation_provided)
-    rows.push({ label: "Accommodation", value: "Provided" });
+  }
+  const radius = travelRadiusLabel(detail.travel_willingness);
+  if (radius) {
+    rows.push({
+      label: isWorker ? "Willing to travel" : "Location flexibility",
+      value: radius,
+    });
+  }
+  if (detail.experience_years !== null && detail.experience_years !== undefined) {
+    rows.push({
+      label: isWorker ? "Experience" : "Min. experience",
+      value: `${detail.experience_years} year${detail.experience_years === 1 ? "" : "s"}`,
+    });
+  }
+  if (detail.start_date) {
+    rows.push({
+      label: isWorker ? "Available from" : "Start date",
+      value: detail.start_date,
+    });
+  }
+  if (detail.duration_text) {
+    rows.push({
+      label: isWorker ? "Availability window" : "Duration",
+      value: detail.duration_text,
+    });
+  }
+  if (detail.accommodation_provided) {
+    rows.push({
+      label: "Accommodation",
+      value: isWorker ? "Needed on-farm" : "Provided",
+    });
+  }
 
-  if (rows.length === 0) return null;
+  const tickets = Array.isArray(detail.tickets) ? detail.tickets : [];
+
+  if (rows.length === 0 && tickets.length === 0) return null;
 
   return (
-    <section className="mt-6">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-700">
-        Job details
-      </h2>
-      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-        {rows.map((r) => (
-          <div key={r.label} className="contents">
-            <dt className="text-neutral-600">{r.label}</dt>
-            <dd className="text-neutral-900">{r.value}</dd>
+    <section className="mt-6 space-y-4">
+      {tickets.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-700">
+            {isWorker ? "Tickets, licences & skills" : "Tickets & skills wanted"}
+          </h2>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {tickets.map((t) => (
+              <span
+                key={t}
+                className="rounded-full border border-green-200 bg-green-50 px-3 py-1 text-xs font-medium text-green-900"
+              >
+                {ticketLabel(t)}
+              </span>
+            ))}
           </div>
-        ))}
-      </dl>
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-700">
+            {isWorker ? "Availability & rate" : "Job details"}
+          </h2>
+          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+            {rows.map((r) => (
+              <div key={r.label} className="contents">
+                <dt className="text-neutral-600">{r.label}</dt>
+                <dd className="text-neutral-900">{r.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
     </section>
   );
 }

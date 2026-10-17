@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dollarsToCents, priceLine, quantityLine } from "@/lib/sale";
+import { commodityLabel, dollarsToCents, priceLine, quantityLine } from "@/lib/sale";
 
 describe("dollarsToCents", () => {
   it("parses everyday inputs", () => {
@@ -34,5 +34,14 @@ describe("quantityLine", () => {
     expect(quantityLine({ quantity: 120, unit: "bales" })).toBe("120 bales");
     expect(quantityLine({ quantity: 12.5, unit: "tonnes" })).toBe("12.5 tonnes");
     expect(quantityLine({ quantity: null })).toBeNull();
+  });
+});
+
+describe("commodityLabel", () => {
+  it("maps known commodity codes to human labels", () => {
+    expect(commodityLabel("lucerne_hay")).toBe("Lucerne hay");
+    expect(commodityLabel("cattle_steers")).toBe("Cattle — steers / feeders");
+    expect(commodityLabel("wheat")).toBe("Wheat");
+    expect(commodityLabel(null)).toBeNull();
   });
 });

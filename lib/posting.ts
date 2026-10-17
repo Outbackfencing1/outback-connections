@@ -8,14 +8,15 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listingHref } from "./format";
 import { dollarsToCents, PRICE_TYPES } from "@/lib/sale";
+import { JOB_DIRECTIONS, parseWorkerTickets, TRAVEL_RADII } from "@/lib/work-board";
 import { DEFAULT_FROM, sendEmail } from "@/lib/email";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
 
 // ============================================================
-// Posting guards — caller must be signed in, email verified,
-// account ≥ 7 days old. Returns user or a typed rejection.
+// Posting guards — caller must be signed in and email verified.
+// Returns user or a typed rejection.
 // ============================================================
 
 export type PostingGuardOk = {
@@ -31,9 +32,9 @@ export type PostingGuardFail =
   | { ok: false; reason: "account_too_new"; message: string; accountAgeDays: number }
   | { ok: false; reason: "lockdown"; message: string };
 
-// Hours of account age required before a user can post. Set to 24 after
-// audit feedback — 7 days was filtering legitimate signups too aggressively.
-const ACCOUNT_AGE_REQUIREMENT_HOURS = 24;
+// Set to 0 (Oct 2026) so verified rural users coming from Facebook can post
+// their skills, jobs, livestock, or harvest immediately on Day 1.
+const ACCOUNT_AGE_REQUIREMENT_HOURS = 0;
 
 export type PostingGuardOptions = {
   /** Demand-side posts (a farmer describing a job) skip the 24h account-age
@@ -219,7 +220,22 @@ export function valuesFrom(formData: FormData): Record<string, string> {
   for (const [k, v] of formData.entries()) {
     if (typeof v === "string") out[k] = v;
   }
+  const tickets = formData
+    .getAll("tickets")
+    .filter((t): t is string => typeof t === "string" && t.trim() !== "");
+  if (tickets.length > 0) {
+    out.tickets = tickets.join(",");
+  }
   delete out.website; // never echo back the honeypot
+  return out;
+}
+
+export function formDataToRecord(formData: FormData): Record<string, unknown> {
+  const out: Record<string, unknown> = Object.fromEntries(formData.entries());
+  const tickets = formData.getAll("tickets");
+  if (tickets.length > 0) {
+    out.tickets = tickets;
+  }
   return out;
 }
 
@@ -232,7 +248,7 @@ export function honeypotTripped(formData: FormData): boolean {
 // Zod schemas
 // ============================================================
 
-const optionalEnum = <T extends [string, ...string[]]>(values: T) =>
+const optionalEnum = <T extends readonly [string, ...string[]]>(values: T) =>
   z
     .union([z.enum(values), z.literal("")])
     .transform((v) => (v === "" ? undefined : (v as T[number])));
@@ -281,6 +297,10 @@ const baseSchema = z
 
 export const jobSchema = baseSchema.and(
   z.object({
+    direction: z
+      .union([z.enum(JOB_DIRECTIONS), z.literal("")])
+      .optional()
+      .transform((v) => (v === "available_for_work" ? "available_for_work" : "hiring")),
     work_type: optionalEnum(["full_time", "casual", "contract", "seasonal", "day_rate"]),
     pay_type: optionalEnum(["hourly", "daily", "weekly", "negotiable", "not_specified"]),
     pay_amount: optionalNumber,
@@ -289,6 +309,15 @@ export const jobSchema = baseSchema.and(
     accommodation_provided: z
       .union([z.literal("on"), z.literal("true"), z.boolean(), z.undefined()])
       .transform((v) => v === true || v === "on" || v === "true"),
+    tickets: z
+      .unknown()
+      .optional()
+      .transform((v) => parseWorkerTickets(v)),
+    travel_willingness: optionalEnum(TRAVEL_RADII),
+    experience_years: z.preprocess(
+      (v) => (v === "" || v === undefined ? undefined : Number(v)),
+      z.number().int().min(0).max(80).optional()
+    ),
   })
 );
 
@@ -345,6 +374,8 @@ export const saleSchema = baseSchema
       unit: z.string().trim().max(30).optional().default(""),
       condition: optionalEnum(["new", "used", "na"]),
       delivery: optionalEnum(["pickup", "can_deliver", "either"]),
+      sub_category: z.string().trim().max(60).optional().default(""),
+      harvest_season: z.string().trim().max(60).optional().default(""),
     })
   )
   .superRefine((d, ctx) => {
@@ -401,8 +432,9 @@ export async function insertListing<DetailRow extends Record<string, unknown>>(
   const { user_email: _user_email, ...listingRow } = listing;
 
   // Spine classification (Migration 2). vertical derives from kind; side is the
-  // market side of the resource transacted. For freight, side comes from the
-  // detail row's direction (need_freight => demand, offering_truck => supply).
+  // market side of the resource transacted. For job and freight, side comes from
+  // the detail row's direction (available_for_work / offering_truck => supply,
+  // hiring / need_freight => demand).
   const vertical =
     listing.kind === "for_sale"
       ? "sale"
@@ -415,7 +447,9 @@ export async function insertListing<DetailRow extends Record<string, unknown>>(
     listing.kind === "for_sale"
       ? "supply"
       : listing.kind === "job"
-      ? "demand"
+      ? (detail as { direction?: string }).direction === "available_for_work"
+        ? "supply"
+        : "demand"
       : listing.kind === "service_offering"
         ? "supply"
         : listing.kind === "service_request"

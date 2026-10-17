@@ -9,9 +9,10 @@ const RECENT_MIN_TO_SHOW = 5;
 const RECENT_LIMIT = 5;
 const PILLAR_COUNT_MIN = 10;
 
-const HOME_TITLE = "Find a fencing contractor near you — Outback Connections";
+const HOME_TITLE =
+  "Find a fencing contractor, rural workers, livestock & hay — Outback Connections";
 const HOME_DESCRIPTION =
-  "Find a fencing contractor near you in rural NSW and ask for a quote, no account needed. A free rural directory with no lead fees, run by Outback Fencing & Steel Supplies in Orange.";
+  "Rural Australia's free one-stop marketplace & work board: find a fencing contractor, hire drivers & machine operators, list your skills, or buy and sell livestock, hay, grain and gear with no lead fees or commission.";
 
 export const metadata = {
   alternates: { canonical: "/" },
@@ -103,40 +104,52 @@ export default async function HomePage() {
   const totalActive =
     pillarCounts.services.total +
     pillarCounts.jobs.total +
-    pillarCounts.freight.total;
+    pillarCounts.freight.total +
+    pillarCounts.sale.total;
   const showPillarCounts = totalActive >= PILLAR_COUNT_MIN;
 
   return (
     <div>
-      {/* Hero — single primary CTA, supporting actions in smaller text. */}
-      <section className="mx-auto max-w-3xl px-4 py-12 sm:py-16">
-        <h1 className="text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl md:text-5xl">
-          Find a fencing contractor near you.
-        </h1>
-        <p className="mt-5 text-base text-neutral-700 sm:text-lg">
-          A free rural directory, starting with fencers across NSW. Ask for
-          a quote without an account. No lead fees, ever.
+      {/* Hero — one-stop rural work board, contractor directory & marketplace. */}
+      <section className="mx-auto max-w-4xl px-4 py-12 sm:py-16">
+        <p className="text-xs font-semibold uppercase tracking-wider text-green-800">
+          Rural Australia&apos;s One-Stop Marketplace &amp; Work Board
         </p>
-        <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl md:text-5xl">
+          Contractors, drivers, machine operators, livestock &amp; harvest — in one place.
+        </h1>
+        <p className="mt-4 text-base text-neutral-700 sm:text-lg">
+          Find a fencing contractor, hire a driver or header operator, list your own skills &amp; tickets,
+          or buy and sell livestock, hay, grain and gear. 100% free — no lead fees, no commission, direct contact.
+        </p>
+        <div className="mt-7 flex flex-wrap items-center gap-3">
           <Link
             href="/services/fencing-contractor"
-            className="inline-flex items-center justify-center rounded-xl bg-green-700 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-800 focus:ring-offset-2"
+            className="inline-flex items-center justify-center rounded-xl bg-green-700 px-5 py-3 text-base font-semibold text-white shadow-sm hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-800 focus:ring-offset-2"
           >
             Find a fencer
           </Link>
-          <p className="text-sm text-neutral-700">
-            Or{" "}
-            <Link href="/post" className="font-medium text-green-800 underline">
-              post a listing
-            </Link>{" "}
-            or{" "}
-            <Link href="/post/sale" className="font-medium text-green-800 underline">
-              sell hay, stock or gear
-            </Link>
-            . Free with an account, takes 3 minutes.
-          </p>
+          <Link
+            href="/post/job?direction=available_for_work"
+            className="inline-flex items-center justify-center rounded-xl border border-green-700 bg-white px-5 py-3 text-base font-semibold text-green-800 shadow-sm hover:bg-green-50"
+          >
+            List your skills
+          </Link>
+          <Link
+            href="/post/sale"
+            className="inline-flex items-center justify-center rounded-xl border border-neutral-300 bg-white px-5 py-3 text-base font-semibold text-neutral-800 shadow-sm hover:border-green-700"
+          >
+            Sell stock, hay or gear
+          </Link>
         </div>
-        <p className="mt-4 text-xs text-neutral-500">
+        <p className="mt-4 text-sm text-neutral-700">
+          Or{" "}
+          <Link href="/post" className="font-medium text-green-800 underline">
+            post a job, freight run or service
+          </Link>
+          . Free account, post immediately in 2 minutes.
+        </p>
+        <p className="mt-3 text-xs text-neutral-500">
           Run by{" "}
           <a
             href="https://outbackfencingsupplies.com.au/"
@@ -156,7 +169,7 @@ export default async function HomePage() {
       {/* Live stats (item 12). Hidden if active count < 10 — never show
           fake numbers. */}
       {showStats && (
-        <section className="mx-auto max-w-3xl px-4 pb-2">
+        <section className="mx-auto max-w-4xl px-4 pb-3">
           <p className="text-sm text-neutral-700">
             <strong>{stats.active.toLocaleString("en-AU")}</strong> active
             listing{stats.active === 1 ? "" : "s"}.{" "}
@@ -168,14 +181,14 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* Three pillars — user-mindset CTAs, not category labels. */}
+      {/* Four pillars — Contractors/Services, Work & Skills, Livestock/Harvest/Gear, Freight. */}
       <section className="mx-auto max-w-6xl px-4 pb-6 sm:px-6 lg:px-8">
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <PillarCard
             href="/services"
             icon={<WrenchIcon />}
-            heading="I need a tradie or specialist"
-            blurb="Bore pumps, mustering, shearing, welding — the rural specialists."
+            heading="Contractors & specialists"
+            blurb="Fencing contractors, bore pumps, mustering, shearing, earthworks & welding."
             countLine={
               showPillarCounts && pillarCounts.services.total > 0
                 ? formatCountLine("services", pillarCounts.services)
@@ -184,22 +197,34 @@ export default async function HomePage() {
             cta="Browse services"
           />
           <PillarCard
-            href={pillarCounts.jobs.total > 0 ? "/jobs" : "/post/job"}
+            href={pillarCounts.jobs.total > 0 ? "/jobs" : "/post/job?direction=available_for_work"}
             icon={<HammerIcon />}
-            heading="I&rsquo;ve got work that needs doing"
-            blurb="Post a job — station hands, harvest, fencing, dairy, truckies."
+            heading="Work & skills board"
+            blurb="Find truck drivers, header & machine operators, fencers & station hands — or list your skills."
             countLine={
               showPillarCounts && pillarCounts.jobs.total > 0
                 ? formatCountLine("jobs", pillarCounts.jobs)
                 : null
             }
-            cta={pillarCounts.jobs.total > 0 ? "Browse jobs" : "Post a job"}
+            cta={pillarCounts.jobs.total > 0 ? "Browse work & skills" : "List skills or post a job"}
+          />
+          <PillarCard
+            href={pillarCounts.sale.total > 0 ? "/sale" : "/post/sale"}
+            icon={<WheatTagIcon />}
+            heading="Livestock, harvest & gear"
+            blurb="Cattle, sheep, lucerne & cereal hay, grain, machinery & fencing steel. Zero commission."
+            countLine={
+              showPillarCounts && pillarCounts.sale.total > 0
+                ? formatCountLine("sale", pillarCounts.sale)
+                : null
+            }
+            cta={pillarCounts.sale.total > 0 ? "Browse for sale" : "Sell stock, hay or gear"}
           />
           <PillarCard
             href={pillarCounts.freight.total > 0 ? "/freight" : "/post/freight"}
             icon={<TruckIcon />}
-            heading="I need freight moved"
-            blurb="Livestock, hay, grain, machinery. No brokers, no cut."
+            heading="Freight & backloads"
+            blurb="Livestock, hay, grain, machinery. Farmers needing loads moved; truckies with space."
             countLine={
               showPillarCounts && pillarCounts.freight.total > 0
                 ? formatCountLine("freight", pillarCounts.freight)
@@ -243,23 +268,22 @@ export default async function HomePage() {
           <li className="flex gap-3">
             <span className="shrink-0 font-bold text-green-800">1.</span>
             <span>
-              <strong>Sign in to post.</strong> Use a password, or a
-              one-time email link if you prefer.
+              <strong>Post straight away.</strong> Create a free account in one minute and list your
+              skills, a job, livestock, hay, grain, or freight immediately.
             </span>
           </li>
           <li className="flex gap-3">
             <span className="shrink-0 font-bold text-green-800">2.</span>
             <span>
-              <strong>Browse freely.</strong> No account needed to look
-              around.
+              <strong>Search by postcode, skill or crop.</strong> Filter by postcode, licence/ticket
+              (MC, header, excavator, fencing) or hay/stock type — instead of scrolling endlessly through Facebook comments.
             </span>
           </li>
           <li className="flex gap-3">
             <span className="shrink-0 font-bold text-green-800">3.</span>
             <span>
               <strong>Contact each other directly.</strong> No middleman,
-              no messaging system, no lead fees. Sign in to see contact
-              details.
+              no messaging tax, no commission, no lead fees.
             </span>
           </li>
         </ol>
@@ -282,17 +306,25 @@ export default async function HomePage() {
       <section className="mx-auto max-w-3xl px-4 py-10">
         <div className="rounded-2xl border border-green-200 bg-green-50 p-8 text-center sm:p-10">
           <h2 className="text-2xl font-bold text-neutral-900 sm:text-3xl">
-            Get on it.
+            Put your skills, job or stock on the board.
           </h2>
           <p className="mt-2 text-sm text-neutral-700 sm:text-base">
-            Free forever with an account. Takes 3 minutes.
+            Free forever with an account. Post immediately in 2 minutes.
           </p>
-          <Link
-            href="/post"
-            className="mt-5 inline-flex items-center justify-center rounded-xl bg-green-700 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-800 focus:ring-offset-2"
-          >
-            Post a listing
-          </Link>
+          <div className="mt-5 flex flex-wrap justify-center gap-3">
+            <Link
+              href="/post/job?direction=available_for_work"
+              className="inline-flex items-center justify-center rounded-xl bg-green-700 px-5 py-3 text-base font-semibold text-white shadow-sm hover:bg-green-800"
+            >
+              List your skills
+            </Link>
+            <Link
+              href="/post"
+              className="inline-flex items-center justify-center rounded-xl border border-green-700 bg-white px-5 py-3 text-base font-semibold text-green-800 shadow-sm hover:bg-green-100"
+            >
+              Post a job, stock or service
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -375,13 +407,13 @@ function PillarCard({
       ) : (
         <p className="mt-2 text-sm text-neutral-700">{blurb}</p>
       )}
-      <p className="mt-4 text-sm font-medium text-green-800">{cta} →</p>
+      <p className="mt-auto pt-4 text-sm font-medium text-green-800">{cta} →</p>
     </Link>
   );
 }
 
 function formatCountLine(
-  pillar: "services" | "jobs" | "freight",
+  pillar: "services" | "jobs" | "freight" | "sale",
   stats: PillarStats
 ): string {
   const noun =
@@ -391,11 +423,15 @@ function formatCountLine(
         : "services"
       : pillar === "jobs"
         ? stats.total === 1
-          ? "job"
-          : "jobs"
-        : stats.total === 1
-          ? "freight listing"
-          : "freight listings";
+          ? "work listing"
+          : "work listings"
+        : pillar === "sale"
+          ? stats.total === 1
+            ? "item for sale"
+            : "items for sale"
+          : stats.total === 1
+            ? "freight listing"
+            : "freight listings";
   const cat = stats.categoriesUsed === 1 ? "category" : "categories";
   return `${stats.total.toLocaleString("en-AU")} ${noun} listed across ${stats.categoriesUsed} ${cat}.`;
 }
@@ -432,6 +468,24 @@ function HammerIcon() {
       <path d="m15 12-8.5 8.5a2.12 2.12 0 1 1-3-3L12 9" />
       <path d="M17.64 15 22 10.64" />
       <path d="m20.91 11.7-1.25-1.25c-.6-.6-.93-1.4-.93-2.25v-.86L16.01 4.6a5.56 5.56 0 0 0-3.94-1.64H9l.92.82A6.18 6.18 0 0 1 12 8.4v1.56l2 2h2.47l2.26 1.91" />
+    </svg>
+  );
+}
+
+function WheatTagIcon() {
+  return (
+    <svg
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+      <line x1="7" y1="7" x2="7.01" y2="7" />
     </svg>
   );
 }

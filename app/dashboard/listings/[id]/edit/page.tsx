@@ -79,12 +79,16 @@ export default async function EditListingPage({
       .maybeSingle();
     const defaults: Record<string, string> = {
       ...baseDefaults,
+      direction: jd?.direction ?? "hiring",
       work_type: jd?.work_type ?? "",
       pay_type: jd?.pay_type ?? "",
       pay_amount: jd?.pay_amount?.toString() ?? "",
       start_date: jd?.start_date ?? "",
       duration_text: jd?.duration_text ?? "",
       accommodation_provided: jd?.accommodation_provided ? "true" : "false",
+      tickets: Array.isArray(jd?.tickets) ? jd.tickets.join(",") : "",
+      travel_willingness: jd?.travel_willingness ?? "",
+      experience_years: jd?.experience_years?.toString() ?? "",
     };
     body = (
       <PostJobForm
@@ -136,6 +140,8 @@ export default async function EditListingPage({
       unit: sale?.unit ?? "",
       condition: sale?.condition ?? "na",
       delivery: sale?.delivery ?? "pickup",
+      sub_category: sale?.sub_category ?? "",
+      harvest_season: sale?.harvest_season ?? "",
     };
     body = (
       <PostSaleForm

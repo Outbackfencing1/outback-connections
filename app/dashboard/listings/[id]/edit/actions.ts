@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  formDataToRecord,
   freightSchema,
   honeypotTripped,
   jobSchema,
@@ -56,7 +57,7 @@ export async function editListing(formData: FormData): Promise<ActionResult> {
     return { ok: false, errors: { _: "That listing isn't yours" } };
   }
 
-  const raw = Object.fromEntries(formData.entries());
+  const raw = formDataToRecord(formData);
   const admin = createAdminClient();
   if (!admin) {
     return { ok: false, errors: { _: "Edit isn't configured. Try again later." } };
@@ -88,6 +89,7 @@ export async function editListing(formData: FormData): Promise<ActionResult> {
         contact_email: data.contact_email || null,
         contact_phone: data.contact_phone || null,
         contact_best_time: data.contact_best_time || null,
+        side: data.direction === "available_for_work" ? "supply" : "demand",
       })
       .eq("id", id);
 
@@ -96,12 +98,16 @@ export async function editListing(formData: FormData): Promise<ActionResult> {
     const { error: dErr } = await admin
       .from("job_details")
       .update({
+        direction: data.direction,
         work_type: data.work_type ?? null,
         pay_type: data.pay_type ?? null,
         pay_amount: data.pay_amount ?? null,
         start_date: data.start_date ?? null,
         duration_text: data.duration_text || null,
         accommodation_provided: data.accommodation_provided,
+        tickets: data.tickets,
+        travel_willingness: data.travel_willingness ?? null,
+        experience_years: data.experience_years ?? null,
       })
       .eq("listing_id", id);
 
@@ -177,6 +183,8 @@ export async function editListing(formData: FormData): Promise<ActionResult> {
         unit: data.unit || null,
         condition: data.condition ?? "na",
         delivery: data.delivery ?? "pickup",
+        sub_category: data.sub_category || null,
+        harvest_season: data.harvest_season || null,
       })
       .eq("listing_id", id);
     if (dErr) return { ok: false, errors: { _: "Couldn't save sale details." } };

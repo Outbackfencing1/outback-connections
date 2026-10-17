@@ -64,6 +64,8 @@ export async function postForSale(formData: FormData): Promise<ActionResult> {
       unit: data.unit || null,
       condition: data.condition ?? "na",
       delivery: data.delivery ?? "pickup",
+      sub_category: data.sub_category || null,
+      harvest_season: data.harvest_season || null,
     }
   );
 

@@ -5,17 +5,23 @@ import { closeListing } from "@/app/listings/actions";
 type Props = {
   listingId: string;
   listingTitle: string;
+  listingKind?: string;
 };
 
-export default function CloseListingForm({ listingId, listingTitle }: Props) {
+export default function CloseListingForm({ listingId, listingTitle, listingKind }: Props) {
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState(false);
+  const [reason, setReason] = useState<string>("matched");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
+  const isForSale = listingKind === "for_sale";
+
   if (done) {
     return (
-      <span className="text-xs text-green-700">Closed — thanks for telling us how it went.</span>
+      <span className="text-xs text-green-700">
+        {isForSale ? "Marked sold / closed — thanks!" : "Closed — thanks for telling us how it went."}
+      </span>
     );
   }
 
@@ -26,7 +32,7 @@ export default function CloseListingForm({ listingId, listingTitle }: Props) {
         onClick={() => setOpen(true)}
         className="rounded-lg border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-800 hover:bg-green-100"
       >
-        Mark as filled
+        {isForSale ? "Mark as sold / closed" : "Mark as filled"}
       </button>
     );
   }
@@ -53,28 +59,94 @@ export default function CloseListingForm({ listingId, listingTitle }: Props) {
         How did &ldquo;{listingTitle}&rdquo; go?
       </p>
       <p className="mt-1 text-xs text-neutral-600">
-        We use this anonymously to improve the marketplace. No public effect.
+        We use this in aggregate to track regional rural demand and prices. Never shown with your name.
       </p>
 
       <fieldset className="mt-3 space-y-1.5 text-sm">
         <legend className="sr-only">Outcome reason</legend>
         <label className="flex items-start gap-2">
-          <input type="radio" name="reason" value="matched" required className="mt-1" />
-          <span>Matched — someone got back to me through the listing</span>
+          <input
+            type="radio"
+            name="reason"
+            value="matched"
+            checked={reason === "matched"}
+            onChange={() => setReason("matched")}
+            required
+            className="mt-1"
+          />
+          <span>
+            {isForSale
+              ? "Sold — found a buyer through Outback Connections"
+              : "Matched — found someone / got work through the listing"}
+          </span>
         </label>
         <label className="flex items-start gap-2">
-          <input type="radio" name="reason" value="no_takers" className="mt-1" />
+          <input
+            type="radio"
+            name="reason"
+            value="no_takers"
+            checked={reason === "no_takers"}
+            onChange={() => setReason("no_takers")}
+            className="mt-1"
+          />
           <span>No takers — listing didn&apos;t pull any responses</span>
         </label>
         <label className="flex items-start gap-2">
-          <input type="radio" name="reason" value="withdrawn" className="mt-1" />
+          <input
+            type="radio"
+            name="reason"
+            value="withdrawn"
+            checked={reason === "withdrawn"}
+            onChange={() => setReason("withdrawn")}
+            className="mt-1"
+          />
           <span>Withdrawn — sorted out elsewhere or no longer needed</span>
         </label>
         <label className="flex items-start gap-2">
-          <input type="radio" name="reason" value="other" className="mt-1" />
+          <input
+            type="radio"
+            name="reason"
+            value="other"
+            checked={reason === "other"}
+            onChange={() => setReason("other")}
+            className="mt-1"
+          />
           <span>Other (note below)</span>
         </label>
       </fieldset>
+
+      {isForSale && reason === "matched" && (
+        <div className="mt-3 grid gap-2 rounded-lg border border-green-200 bg-white p-2.5 sm:grid-cols-2">
+          <label className="block">
+            <span className="block text-xs font-medium text-neutral-700">
+              Final sold price AUD (optional)
+            </span>
+            <input
+              type="text"
+              name="sold_price"
+              inputMode="decimal"
+              maxLength={20}
+              placeholder="Leave blank if same as listed"
+              className="mt-1 block w-full rounded border border-neutral-300 px-2.5 py-1 text-xs"
+            />
+          </label>
+          <label className="block">
+            <span className="block text-xs font-medium text-neutral-700">
+              Quantity sold (optional)
+            </span>
+            <input
+              type="number"
+              name="sold_quantity"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              max="1000000"
+              placeholder="Leave blank if all sold"
+              className="mt-1 block w-full rounded border border-neutral-300 px-2.5 py-1 text-xs"
+            />
+          </label>
+        </div>
+      )}
 
       <label className="mt-3 block">
         <span className="block text-xs font-medium text-neutral-700">Note (optional)</span>
@@ -99,7 +171,7 @@ export default function CloseListingForm({ listingId, listingTitle }: Props) {
           disabled={pending}
           className="rounded-lg bg-green-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-60"
         >
-          {pending ? "Closing…" : "Close listing"}
+          {pending ? "Closing…" : isForSale && reason === "matched" ? "Mark as sold" : "Close listing"}
         </button>
         <button
           type="button"

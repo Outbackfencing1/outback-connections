@@ -276,6 +276,11 @@ const CloseSchema = z.object({
   listing_id: z.string().uuid("Bad listing id"),
   reason: z.enum(["matched", "no_takers", "withdrawn", "other"]),
   note: z.string().trim().max(2000).optional().default(""),
+  sold_price: z.string().trim().max(20).optional().default(""),
+  sold_quantity: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? undefined : Number(v)),
+    z.number().min(0).max(1_000_000).optional()
+  ),
 });
 
 export type CloseResult =
@@ -292,7 +297,9 @@ export async function closeListing(formData: FormData): Promise<CloseResult> {
   const parsed = CloseSchema.safeParse({
     listing_id: formData.get("listing_id"),
     reason: formData.get("reason"),
-    note: formData.get("note"),
+    note: formData.get("note") ?? "",
+    sold_price: formData.get("sold_price") ?? "",
+    sold_quantity: formData.get("sold_quantity") ?? "",
   });
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Bad input" };
@@ -301,7 +308,7 @@ export async function closeListing(formData: FormData): Promise<CloseResult> {
   // Ownership check via the user's RLS context
   const { data: existing } = await supabase
     .from("listings")
-    .select("id, user_id, title, status")
+    .select("id, user_id, title, status, kind")
     .eq("id", parsed.data.listing_id)
     .maybeSingle();
 
@@ -325,11 +332,12 @@ export async function closeListing(formData: FormData): Promise<CloseResult> {
     };
   }
 
+  const nowIso = new Date().toISOString();
   const { error } = await admin
     .from("listings")
     .update({
       status: "closed",
-      closed_at: new Date().toISOString(),
+      closed_at: nowIso,
       closed_reason: parsed.data.reason,
       closed_note: parsed.data.note || null,
     })
@@ -340,10 +348,32 @@ export async function closeListing(formData: FormData): Promise<CloseResult> {
     return { ok: false, message: "Couldn't close the listing. Please try again." };
   }
 
+  // If this was a for_sale listing closed as 'matched', stamp sold_at and
+  // any optional sold_price / sold_quantity for commodity & livestock forecasting.
+  if (existing.kind === "for_sale" && parsed.data.reason === "matched") {
+    const { dollarsToCents } = await import("@/lib/sale");
+    const soldCents = dollarsToCents(parsed.data.sold_price);
+    const saleUpdate: Record<string, unknown> = { sold_at: nowIso };
+    if (typeof soldCents === "number") saleUpdate.sold_price_cents = soldCents;
+    if (parsed.data.sold_quantity !== undefined) saleUpdate.sold_quantity = parsed.data.sold_quantity;
+    const { error: saleErr } = await admin
+      .from("sale_details")
+      .update(saleUpdate)
+      .eq("listing_id", parsed.data.listing_id);
+    if (saleErr) {
+      // Fallback if sold_price_cents / sold_quantity columns are not migrated yet
+      await admin
+        .from("sale_details")
+        .update({ sold_at: nowIso })
+        .eq("listing_id", parsed.data.listing_id);
+    }
+  }
+
   revalidatePath("/dashboard/listings");
   revalidatePath("/jobs");
   revalidatePath("/freight");
   revalidatePath("/services");
+  revalidatePath("/sale");
 
   return { ok: true };
 }

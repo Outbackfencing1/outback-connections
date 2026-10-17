@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import {
   checkPostingGuard,
   checkPostingRateLimit,
+  formDataToRecord,
   getLatestPolicyVersionId,
   honeypotTripped,
   insertListing,
@@ -25,7 +26,7 @@ export async function postJob(formData: FormData): Promise<ActionResult> {
     redirect("/dashboard/listings");
   }
 
-  const raw = Object.fromEntries(formData.entries());
+  const raw = formDataToRecord(formData);
   const parsed = jobSchema.safeParse(raw);
   if (!parsed.success) {
     return {
@@ -70,12 +71,16 @@ export async function postJob(formData: FormData): Promise<ActionResult> {
     },
     "job_details",
     {
+      direction: data.direction,
       work_type: data.work_type ?? null,
       pay_type: data.pay_type ?? null,
       pay_amount: data.pay_amount ?? null,
       start_date: data.start_date ?? null,
       duration_text: data.duration_text || null,
       accommodation_provided: data.accommodation_provided,
+      tickets: data.tickets,
+      travel_willingness: data.travel_willingness ?? null,
+      experience_years: data.experience_years ?? null,
     }
   );
 
@@ -87,6 +92,10 @@ export async function postJob(formData: FormData): Promise<ActionResult> {
     };
   }
 
-  await setFlash(`Posted: ${data.title}`);
+  await setFlash(
+    data.direction === "available_for_work"
+      ? `Skills profile posted: ${data.title}`
+      : `Job posted: ${data.title}`
+  );
   redirect("/dashboard/listings");
 }

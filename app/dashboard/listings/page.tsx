@@ -177,7 +177,11 @@ function ListingGroup({
               <div className="mt-3 flex flex-wrap items-start gap-3">
                 <OwnerActions listingId={l.id} listingTitle={l.title} />
                 {showClose && (
-                  <CloseListingForm listingId={l.id} listingTitle={l.title} />
+                  <CloseListingForm
+                    listingId={l.id}
+                    listingTitle={l.title}
+                    listingKind={l.kind}
+                  />
                 )}
               </div>
             </li>

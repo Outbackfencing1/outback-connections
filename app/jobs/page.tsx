@@ -7,6 +7,7 @@ import ListingCard from "@/components/browse/ListingCard";
 import Pagination from "@/components/browse/Pagination";
 import FilterBar from "@/components/browse/FilterBar";
 import { logSearch } from "@/lib/analytics";
+import { WORKER_TICKETS, WORKER_TICKET_LABELS, type WorkerTicket } from "@/lib/work-board";
 
 // Noindex while the section is empty (it's hidden from the nav then) or
 // filtered; see browseRobots().
@@ -21,9 +22,9 @@ export async function generateMetadata({
   ]);
   return {
     alternates: { canonical: "/jobs" },
-    title: "Jobs — Outback Connections",
+    title: "Work & Skills Board — Jobs, Drivers & Operators — Outback Connections",
     description:
-      "Browse rural jobs across Australia: station hands, fencing, harvest, mustering, dairy. Free to browse.",
+      "Rural work & skills board across Australia: find truck drivers, header & machine operators, fencers, station hands and shearers, or list your skills and availability for free.",
     robots: browseRobots({ liveCount, filtered: hasFilterParams(resolvedSearchParams) }),
   };
 }
@@ -40,6 +41,32 @@ function getStr(p: SearchParams, key: string): string {
   return v ?? "";
 }
 
+type JobDetailRow = {
+  direction?: string | null;
+  work_type?: string | null;
+  pay_type?: string | null;
+  pay_amount?: number | null;
+  tickets?: string[] | null;
+  travel_willingness?: string | null;
+  experience_years?: number | null;
+};
+
+type JobListingRow = {
+  anonymised_id: string;
+  slug: string;
+  kind: string;
+  title: string;
+  description: string;
+  postcode: string;
+  state: string | null;
+  created_at: string;
+  data_source: string | null;
+  source_platform: string | null;
+  category: { slug: string; label: string } | { slug: string; label: string }[] | null;
+  business: { claim_status?: string } | { claim_status?: string }[] | null;
+  job_details: JobDetailRow | JobDetailRow[] | null;
+};
+
 export default async function JobsBrowsePage({
   searchParams,
 }: {
@@ -51,6 +78,11 @@ export default async function JobsBrowsePage({
   const postcode = getStr(resolvedSearchParams, "postcode").trim();
   const rawCategory = getStr(resolvedSearchParams, "category").trim();
   const category = /^[0-9a-f-]{36}$/i.test(rawCategory) ? rawCategory : "";
+  const rawDirection = getStr(resolvedSearchParams, "direction").trim();
+  const direction =
+    rawDirection === "hiring" || rawDirection === "available_for_work" ? rawDirection : "";
+  const rawTicket = getStr(resolvedSearchParams, "ticket").trim();
+  const ticket = (WORKER_TICKETS as readonly string[]).includes(rawTicket) ? rawTicket : "";
   const payType = getStr(resolvedSearchParams, "pay_type").trim();
   const page = Math.max(1, parseInt(getStr(resolvedSearchParams, "page") || "1", 10) || 1);
 
@@ -65,7 +97,12 @@ export default async function JobsBrowsePage({
     getCategoryCounts("jobs"),
   ]);
 
-  // Build the listings query
+  const nowIso = new Date().toISOString();
+  const from = (page - 1) * PAGE_SIZE;
+  const to = from + PAGE_SIZE - 1;
+
+  // Query with extended work-board columns; fall back gracefully if the migration
+  // hasn't been applied to the target DB yet.
   let query = supabase
     .from("listings")
     .select(
@@ -73,62 +110,155 @@ export default async function JobsBrowsePage({
       anonymised_id, slug, kind, title, description, postcode, state, created_at, data_source, source_platform,
       category:categories(slug, label),
       business:businesses(claim_status),
-      job_details!inner(work_type, pay_type, pay_amount)
+      job_details!inner(direction, work_type, pay_type, pay_amount, tickets, travel_willingness, experience_years)
     `,
       { count: "exact" }
     )
     .eq("kind", "job")
     .eq("status", "active")
-    .gt("expires_at", new Date().toISOString())
+    .gt("expires_at", nowIso)
     .order("created_at", { ascending: false });
 
   if (postcode) query = query.like("postcode", `${postcode}%`);
   if (category) query = query.eq("category_id", category);
+  if (direction) query = query.eq("job_details.direction", direction);
+  if (ticket) query = query.contains("job_details.tickets", [ticket]);
   if (payType) query = query.eq("job_details.pay_type", payType);
 
-  const from = (page - 1) * PAGE_SIZE;
-  const to = from + PAGE_SIZE - 1;
-  query = query.range(from, to);
+  let { data: rawListings, count, error: queryErr } = await query.range(from, to);
 
-  const { data: listings, count } = await query;
+  if (queryErr) {
+    let fallback = supabase
+      .from("listings")
+      .select(
+        `
+        anonymised_id, slug, kind, title, description, postcode, state, created_at, data_source, source_platform,
+        category:categories(slug, label),
+        business:businesses(claim_status),
+        job_details!inner(work_type, pay_type, pay_amount)
+      `,
+        { count: "exact" }
+      )
+      .eq("kind", "job")
+      .eq("status", "active")
+      .gt("expires_at", nowIso)
+      .order("created_at", { ascending: false });
+    if (postcode) fallback = fallback.like("postcode", `${postcode}%`);
+    if (category) fallback = fallback.eq("category_id", category);
+    if (payType) fallback = fallback.eq("job_details.pay_type", payType);
+    const fbRes = await fallback.range(from, to);
+    rawListings = fbRes.data as typeof rawListings;
+    count = fbRes.count;
+  }
 
+  const listings = (rawListings ?? []) as unknown as JobListingRow[];
   const total = count ?? 0;
+
   if (page === 1) {
     await logSearch({
       vertical: "job",
-      filters: { postcode: postcode || null, category: category || null, pay_type: payType || null },
+      filters: {
+        postcode: postcode || null,
+        category: category || null,
+        direction: direction || null,
+        ticket: ticket || null,
+        pay_type: payType || null,
+      },
       resultCount: total,
       postcode: postcode || null,
     });
   }
-  const filterQS = buildQs({ postcode, category, pay_type: payType });
+  const filterQS = buildQs({
+    postcode,
+    category,
+    direction,
+    ticket,
+    pay_type: payType,
+  });
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
-      <div className="flex items-baseline justify-between gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">Jobs</h1>
-        <Link
-          href="/post/job"
-          className="rounded-lg bg-green-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-green-800"
-        >
-          Post a job
-        </Link>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Work &amp; Skills Board</h1>
+          <p className="mt-2 text-sm text-neutral-700">
+            Find truck drivers, machine &amp; header operators, fencers, shearers and station hands
+            — or put your own skills and tickets on the board. Free to browse and post.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+          <Link
+            href="/post/job?direction=available_for_work"
+            className="rounded-lg border border-green-700 bg-white px-3 py-1.5 text-sm font-semibold text-green-800 shadow-sm hover:bg-green-50"
+          >
+            List your skills
+          </Link>
+          <Link
+            href="/post/job?direction=hiring"
+            className="rounded-lg bg-green-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-green-800"
+          >
+            Post a job
+          </Link>
+        </div>
       </div>
-      <p className="mt-2 text-sm text-neutral-700">
-        Rural work — station hands, fencers, harvest, mustering, dairy.
-        Free to browse. Sign in to see contact details.
-      </p>
 
-      <div className="mt-6">
+      {/* Quick direction tabs */}
+      <nav aria-label="Work board side" className="mt-5 flex flex-wrap gap-2 text-xs font-medium">
+        <Link
+          href={`/jobs${buildQs({ postcode, category, ticket, pay_type: payType }) ? `?${buildQs({ postcode, category, ticket, pay_type: payType })}` : ""}`}
+          className={`rounded-full border px-3.5 py-1.5 ${
+            direction === ""
+              ? "border-green-700 bg-green-700 text-white"
+              : "border-neutral-300 bg-white text-neutral-700 hover:border-green-700"
+          }`}
+        >
+          All work &amp; workers
+        </Link>
+        <Link
+          href={`/jobs?${buildQs({ postcode, category, direction: "available_for_work", ticket, pay_type: payType })}`}
+          className={`rounded-full border px-3.5 py-1.5 ${
+            direction === "available_for_work"
+              ? "border-green-700 bg-green-700 text-white"
+              : "border-neutral-300 bg-white text-neutral-700 hover:border-green-700"
+          }`}
+        >
+          Workers &amp; operators available
+        </Link>
+        <Link
+          href={`/jobs?${buildQs({ postcode, category, direction: "hiring", ticket, pay_type: payType })}`}
+          className={`rounded-full border px-3.5 py-1.5 ${
+            direction === "hiring"
+              ? "border-green-700 bg-green-700 text-white"
+              : "border-neutral-300 bg-white text-neutral-700 hover:border-green-700"
+          }`}
+        >
+          Jobs hiring
+        </Link>
+      </nav>
+
+      <div className="mt-4">
         <FilterBar action="/jobs" postcode={postcode} resetHref="/jobs">
           <label className="block">
-            <span className="block text-xs font-medium text-neutral-700">Category</span>
+            <span className="block text-xs font-medium text-neutral-700">Looking for</span>
+            <select
+              name="direction"
+              defaultValue={direction}
+              className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm"
+            >
+              <option value="">Both jobs &amp; available workers</option>
+              <option value="available_for_work">Workers &amp; operators available</option>
+              <option value="hiring">Farms &amp; businesses hiring</option>
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="block text-xs font-medium text-neutral-700">Role / Category</span>
             <select
               name="category"
               defaultValue={category}
               className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm"
             >
-              <option value="">All categories</option>
+              <option value="">All roles</option>
               {(cats ?? []).map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.label} ({jobCounts.byCategory[c.id] ?? 0})
@@ -138,7 +268,23 @@ export default async function JobsBrowsePage({
           </label>
 
           <label className="block">
-            <span className="block text-xs font-medium text-neutral-700">Pay type</span>
+            <span className="block text-xs font-medium text-neutral-700">Ticket / Skill</span>
+            <select
+              name="ticket"
+              defaultValue={ticket}
+              className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm"
+            >
+              <option value="">Any ticket or skill</option>
+              {WORKER_TICKETS.map((t) => (
+                <option key={t} value={t}>
+                  {WORKER_TICKET_LABELS[t as WorkerTicket]}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="block text-xs font-medium text-neutral-700">Pay / Rate type</span>
             <select
               name="pay_type"
               defaultValue={payType}
@@ -160,28 +306,34 @@ export default async function JobsBrowsePage({
           jobCounts.total === 0 ? <NothingYet /> : <EmptyState />
         ) : (
           <ul className="space-y-4">
-            {listings.map((l) => (
-              <li key={l.anonymised_id}>
-                <ListingCard
-                  listing={{
-                    anonymised_id: l.anonymised_id,
-                    slug: l.slug,
-                    kind: l.kind,
-                    title: l.title,
-                    description: l.description,
-                    postcode: l.postcode,
-                    state: l.state,
-                    created_at: l.created_at,
-                    category: Array.isArray(l.category) ? l.category[0] ?? null : l.category,
-                    data_source: l.data_source,
-                    source_platform: l.source_platform,
-                    business_claim_status: Array.isArray(l.business)
-                      ? l.business[0]?.claim_status ?? null
-                      : (l.business as { claim_status?: string } | null)?.claim_status ?? null,
-                  }}
-                />
-              </li>
-            ))}
+            {listings.map((l) => {
+              const jd = Array.isArray(l.job_details)
+                ? l.job_details[0] ?? null
+                : l.job_details ?? null;
+              return (
+                <li key={l.anonymised_id}>
+                  <ListingCard
+                    listing={{
+                      anonymised_id: l.anonymised_id,
+                      slug: l.slug,
+                      kind: l.kind,
+                      title: l.title,
+                      description: l.description,
+                      postcode: l.postcode,
+                      state: l.state,
+                      created_at: l.created_at,
+                      category: Array.isArray(l.category) ? l.category[0] ?? null : l.category,
+                      data_source: l.data_source,
+                      source_platform: l.source_platform,
+                      business_claim_status: Array.isArray(l.business)
+                        ? l.business[0]?.claim_status ?? null
+                        : (l.business as { claim_status?: string } | null)?.claim_status ?? null,
+                      job_meta: jd,
+                    }}
+                  />
+                </li>
+              );
+            })}
           </ul>
         )}
         {(listings ?? []).some((l) => l.source_platform === "adzuna") && (
@@ -221,13 +373,22 @@ function buildQs(params: Record<string, string>): string {
 function NothingYet() {
   return (
     <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center">
-      <p className="text-sm font-semibold text-neutral-800">No jobs listed yet.</p>
+      <p className="text-sm font-semibold text-neutral-800">
+        No jobs or worker profiles listed yet.
+      </p>
       <p className="mt-2 text-sm text-neutral-700">
-        Be the first.{" "}
-        <Link href="/post/job" className="font-medium text-green-800 underline">
-          Posting a job
+        Be the first:{" "}
+        <Link
+          href="/post/job?direction=available_for_work"
+          className="font-medium text-green-800 underline"
+        >
+          list your skills &amp; tickets
         </Link>{" "}
-        is free and takes a few minutes.
+        or{" "}
+        <Link href="/post/job?direction=hiring" className="font-medium text-green-800 underline">
+          post a job
+        </Link>{" "}
+        for free.
       </p>
       <p className="mt-3 text-xs text-neutral-500">
         After a fencing contractor instead?{" "}
@@ -243,10 +404,14 @@ function NothingYet() {
 function EmptyState() {
   return (
     <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center">
-      <p className="text-sm text-neutral-700">No jobs match the filters.</p>
+      <p className="text-sm text-neutral-700">No listings match those filters.</p>
       <p className="mt-2 text-xs text-neutral-500">
         Try widening the postcode or removing a filter. Or{" "}
-        <Link href="/post/job" className="underline">
+        <Link href="/post/job?direction=available_for_work" className="underline">
+          list your skills
+        </Link>{" "}
+        /{" "}
+        <Link href="/post/job?direction=hiring" className="underline">
           post a job
         </Link>
         .
