@@ -236,6 +236,32 @@ export default async function JobsBrowsePage({
         </Link>
       </nav>
 
+      {/* Quick ticket / licence chips */}
+      <nav aria-label="Filter by ticket or skill" className="mt-3 flex flex-wrap gap-1.5">
+        {WORKER_TICKETS.map((t) => {
+          const active = ticket === t;
+          return (
+            <Link
+              key={t}
+              href={`/jobs?${buildQs({
+                postcode,
+                category,
+                direction,
+                ticket: active ? "" : t,
+                pay_type: payType,
+              })}`}
+              className={`rounded-full border px-2.5 py-1 text-xs font-medium ${
+                active
+                  ? "border-green-700 bg-green-100 text-green-900"
+                  : "border-neutral-200 bg-white text-neutral-700 hover:border-green-700 hover:bg-green-50"
+              }`}
+            >
+              {WORKER_TICKET_LABELS[t as WorkerTicket]}
+            </Link>
+          );
+        })}
+      </nav>
+
       <div className="mt-4">
         <FilterBar action="/jobs" postcode={postcode} resetHref="/jobs">
           <label className="block">
@@ -372,30 +398,57 @@ function buildQs(params: Record<string, string>): string {
 
 function NothingYet() {
   return (
-    <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center">
-      <p className="text-sm font-semibold text-neutral-800">
-        No jobs or worker profiles listed yet.
-      </p>
-      <p className="mt-2 text-sm text-neutral-700">
-        Be the first:{" "}
-        <Link
-          href="/post/job?direction=available_for_work"
-          className="font-medium text-green-800 underline"
-        >
-          list your skills &amp; tickets
-        </Link>{" "}
-        or{" "}
-        <Link href="/post/job?direction=hiring" className="font-medium text-green-800 underline">
-          post a job
-        </Link>{" "}
-        for free.
-      </p>
-      <p className="mt-3 text-xs text-neutral-500">
-        After a fencing contractor instead?{" "}
-        <Link href="/services/fencing-contractor" className="underline">
-          They&apos;re under Services
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="rounded-2xl border border-green-300 bg-green-50/70 p-6">
+          <span className="inline-block rounded-full bg-green-700 px-3 py-0.5 text-xs font-semibold text-white">
+            For Drivers, Operators &amp; Rural Workers
+          </span>
+          <h2 className="mt-3 text-lg font-bold text-neutral-900">
+            Available for work? Put your skills &amp; tickets on the board.
+          </h2>
+          <p className="mt-2 text-sm text-neutral-700">
+            Tick your licences (MC/HC/HR truck, header, tractor + GPS, excavator, fencing, shearing,
+            dogs, welding), set your travel radius and hourly/day rate, and let properties contact
+            you directly.
+          </p>
+          <div className="mt-4">
+            <Link
+              href="/post/job?direction=available_for_work"
+              className="inline-flex items-center justify-center rounded-xl bg-green-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-800"
+            >
+              List your skills free →
+            </Link>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-neutral-200 bg-white p-6">
+          <span className="inline-block rounded-full bg-amber-100 px-3 py-0.5 text-xs font-semibold text-amber-950">
+            For Farms, Stations &amp; Contractors
+          </span>
+          <h2 className="mt-3 text-lg font-bold text-neutral-900">
+            Chasing a driver, machine operator, fencer or station hand?
+          </h2>
+          <p className="mt-2 text-sm text-neutral-700">
+            Post what you need, the tickets required, pay rate, start date and whether quarters or
+            camp accommodation are provided. Free on Day 1, zero recruitment fees.
+          </p>
+          <div className="mt-4">
+            <Link
+              href="/post/job?direction=hiring"
+              className="inline-flex items-center justify-center rounded-xl border border-green-700 bg-white px-4 py-2.5 text-sm font-semibold text-green-800 hover:bg-green-50"
+            >
+              Post a job free →
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      <p className="text-center text-xs text-neutral-500">
+        Looking for an established fencing contracting business instead?{" "}
+        <Link href="/services/fencing-contractor" className="font-medium text-green-800 underline">
+          Browse Fencing Contractors under Services →
         </Link>
-        .
       </p>
     </div>
   );
@@ -403,19 +456,34 @@ function NothingYet() {
 
 function EmptyState() {
   return (
-    <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center">
-      <p className="text-sm text-neutral-700">No listings match those filters.</p>
-      <p className="mt-2 text-xs text-neutral-500">
-        Try widening the postcode or removing a filter. Or{" "}
-        <Link href="/post/job?direction=available_for_work" className="underline">
-          list your skills
-        </Link>{" "}
-        /{" "}
-        <Link href="/post/job?direction=hiring" className="underline">
-          post a job
-        </Link>
-        .
+    <div className="rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center">
+      <p className="text-sm font-semibold text-neutral-800">
+        No listings match those exact filters yet.
       </p>
+      <p className="mt-2 text-sm text-neutral-700">
+        Widen the postcode, clear a filter, or post straight onto the board so people in that region
+        can find you:
+      </p>
+      <div className="mt-4 flex flex-wrap justify-center gap-3">
+        <Link
+          href="/post/job?direction=available_for_work"
+          className="rounded-xl bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800"
+        >
+          + List your skills
+        </Link>
+        <Link
+          href="/post/job?direction=hiring"
+          className="rounded-xl border border-green-700 bg-white px-4 py-2 text-sm font-semibold text-green-800 hover:bg-green-50"
+        >
+          + Post a job
+        </Link>
+        <Link
+          href="/jobs"
+          className="rounded-xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:border-neutral-400"
+        >
+          Reset filters
+        </Link>
+      </div>
     </div>
   );
 }

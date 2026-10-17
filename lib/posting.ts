@@ -365,6 +365,10 @@ export const serviceSchema = baseSchema.and(
 export const saleSchema = baseSchema
   .and(
     z.object({
+      side: z
+        .union([z.enum(["supply", "demand"]), z.literal("")])
+        .optional()
+        .transform((v): "supply" | "demand" => (v === "demand" ? "demand" : "supply")),
       price: z.string().trim().max(20).optional().default(""),
       price_type: z.enum(PRICE_TYPES, { errorMap: () => ({ message: "Pick a price type" }) }),
       quantity: z.preprocess(
@@ -405,6 +409,7 @@ export type InsertResult =
 type ListingsInsert = {
   user_id: string;
   kind: "job" | "freight" | "service_offering" | "service_request" | "for_sale";
+  side?: "supply" | "demand";
   category_id: string;
   title: string;
   description: string;
@@ -429,7 +434,7 @@ export async function insertListing<DetailRow extends Record<string, unknown>>(
   }
 
   // Strip user_email before inserting — it's not a column on listings
-  const { user_email: _user_email, ...listingRow } = listing;
+  const { user_email: _user_email, side: explicitSide, ...listingRow } = listing;
 
   // Spine classification (Migration 2). vertical derives from kind; side is the
   // market side of the resource transacted. For job and freight, side comes from
@@ -444,7 +449,8 @@ export async function insertListing<DetailRow extends Record<string, unknown>>(
         ? "job"
         : "service";
   const side =
-    listing.kind === "for_sale"
+    explicitSide ??
+    (listing.kind === "for_sale"
       ? "supply"
       : listing.kind === "job"
       ? (detail as { direction?: string }).direction === "available_for_work"
@@ -456,7 +462,7 @@ export async function insertListing<DetailRow extends Record<string, unknown>>(
           ? "demand"
           : (detail as { direction?: string }).direction === "offering_truck"
             ? "supply"
-            : "demand"; // freight: need_freight => demand
+            : "demand"); // freight: need_freight => demand
 
   // Step 1: insert listings with a placeholder slug (we don't have the
   // anonymised_id until after insert). We'll update the slug immediately.

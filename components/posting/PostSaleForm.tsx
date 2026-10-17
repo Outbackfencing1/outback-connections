@@ -24,8 +24,12 @@ type Props = {
 
 export default function PostSaleForm({ categories, action, listingId, defaults, submitLabel }: Props) {
   const v = (k: string) => defaults?.[k] ?? "";
+  const [side, setSide] = useState<"supply" | "demand">(
+    v("side") === "demand" ? "demand" : "supply"
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, start] = useTransition();
+  const isWanted = side === "demand";
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -53,11 +57,76 @@ export default function PostSaleForm({ categories, action, listingId, defaults, 
 
       {listingId && <input type="hidden" name="listing_id" value={listingId} />}
 
-      <BaseFields categories={categories} errors={errors} defaults={defaults ?? {}} />
+      <fieldset className="rounded-xl border border-green-200 bg-green-50/60 p-4">
+        <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-green-900">
+          What are you posting?
+        </legend>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <label
+            className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-sm ${
+              !isWanted
+                ? "border-green-700 bg-white font-semibold text-neutral-900 shadow-sm"
+                : "border-neutral-200 bg-white/70 text-neutral-700"
+            }`}
+          >
+            <input
+              type="radio"
+              name="side"
+              value="supply"
+              checked={!isWanted}
+              onChange={() => setSide("supply")}
+              className="mt-0.5 h-4 w-4 text-green-700"
+            />
+            <span>
+              <span className="block font-semibold">For Sale (Available)</span>
+              <span className="block text-xs font-normal text-neutral-600">
+                Selling cattle, sheep, hay, grain, machinery or fencing gear
+              </span>
+            </span>
+          </label>
+          <label
+            className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-sm ${
+              isWanted
+                ? "border-green-700 bg-white font-semibold text-neutral-900 shadow-sm"
+                : "border-neutral-200 bg-white/70 text-neutral-700"
+            }`}
+          >
+            <input
+              type="radio"
+              name="side"
+              value="demand"
+              checked={isWanted}
+              onChange={() => setSide("demand")}
+              className="mt-0.5 h-4 w-4 text-green-700"
+            />
+            <span>
+              <span className="block font-semibold">Wanted to Buy (Chasing)</span>
+              <span className="block text-xs font-normal text-neutral-600">
+                Looking to source livestock, hay, feed grain or machinery
+              </span>
+            </span>
+          </label>
+        </div>
+      </fieldset>
+
+      <BaseFields
+        categories={categories}
+        errors={errors}
+        defaults={defaults ?? {}}
+        titleLabel={isWanted ? "What are you looking to buy?" : "Title"}
+        titlePlaceholder={
+          isWanted
+            ? "e.g. Chasing 2 decks of weaner steers or 100 rolls of lucerne hay near Dubbo"
+            : "e.g. 120 × 8x4x3 shedded lucerne hay bales — Forbes"
+        }
+        descriptionLabel={
+          isWanted ? "Specs, delivery & target price details" : "Description"
+        }
+      />
 
       <div className="rounded-xl border border-neutral-200 p-4">
         <p className="text-sm font-semibold text-neutral-800">
-          Crop, livestock &amp; price details
+          {isWanted ? "Wanted stock, crop & budget details" : "Crop, livestock & price details"}
         </p>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -210,10 +279,12 @@ export default function PostSaleForm({ categories, action, listingId, defaults, 
           disabled={pending}
           className="inline-block rounded-xl bg-green-700 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-800 focus:ring-offset-2 disabled:opacity-60"
         >
-          {pending ? "Saving..." : (submitLabel ?? "Post it for sale")}
+          {pending
+            ? "Saving..."
+            : (submitLabel ?? (isWanted ? "Post wanted to buy" : "Post it for sale"))}
         </button>
         <p className="mt-2 text-xs text-neutral-600">
-          Listings stay up for 30 days, then expire unless you renew. Mark it sold from your dashboard.
+          Listings stay up for 30 days, then expire unless you renew. Mark it sold or sourced from your dashboard.
         </p>
       </div>
     </form>

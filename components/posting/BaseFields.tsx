@@ -8,9 +8,19 @@ type Props = {
   categories: Category[];
   errors: Record<string, string>;
   defaults: Record<string, string>;
+  titleLabel?: string;
+  titlePlaceholder?: string;
+  descriptionLabel?: string;
 };
 
-export default function BaseFields({ categories, errors, defaults }: Props) {
+export default function BaseFields({
+  categories,
+  errors,
+  defaults,
+  titleLabel,
+  titlePlaceholder,
+  descriptionLabel,
+}: Props) {
   const v = (k: string) => defaults[k] ?? "";
 
   return (
@@ -50,7 +60,7 @@ export default function BaseFields({ categories, errors, defaults }: Props) {
         </select>
       </Field>
 
-      <Field id="title" label="Title" error={errors.title} required hint="Short, plain. What is it?">
+      <Field id="title" label={titleLabel ?? "Title"} error={errors.title} required hint="Short, plain. What is it?">
         <input
           id="title"
           name="title"
@@ -59,13 +69,14 @@ export default function BaseFields({ categories, errors, defaults }: Props) {
           minLength={5}
           maxLength={120}
           defaultValue={v("title")}
+          placeholder={titlePlaceholder}
           className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
         />
       </Field>
 
       <Field
         id="description"
-        label="Description"
+        label={descriptionLabel ?? "Description"}
         error={errors.description}
         required
         hint="At least 30 characters. What you need, when, who you're after, anything that helps."

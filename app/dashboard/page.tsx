@@ -22,7 +22,6 @@ export default async function DashboardPage() {
   const ageMs = createdAt ? now - createdAt.getTime() : 0;
   const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
   const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
-  const canPost = ageHours >= 24;
 
   // Quick listings count (RLS lets owners read their own)
   const { count } = await supabase
@@ -56,7 +55,7 @@ export default async function DashboardPage() {
             My listings
           </h2>
           <p className="mt-2 text-sm text-neutral-700">
-            View, edit, or delete what you&apos;ve posted.{" "}
+            View, edit, renew, or mark sold/matched.{" "}
             {count !== null && (
               <span className="text-neutral-500">
                 ({count} total)
@@ -66,17 +65,47 @@ export default async function DashboardPage() {
         </Link>
 
         <Link
+          href="/post/job?direction=available_for_work"
+          className="rounded-2xl border border-green-300 bg-green-50/70 p-5 shadow-sm transition hover:border-green-700 hover:shadow-md"
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide text-green-800">
+            Work &amp; Skills Board
+          </p>
+          <h2 className="mt-1 text-lg font-bold text-neutral-900">
+            List your skills &amp; tickets
+          </h2>
+          <p className="mt-2 text-sm text-neutral-700">
+            MC/HC truck licence, header/harvester, tractor + GPS, excavator, fencing, shearing or station work.
+          </p>
+        </Link>
+
+        <Link
+          href="/post/sale"
+          className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm transition hover:border-green-700 hover:shadow-md"
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide text-green-800">
+            Livestock, Harvest &amp; Gear
+          </p>
+          <h2 className="mt-1 text-lg font-bold text-neutral-900">
+            Sell or source stock, hay &amp; gear
+          </h2>
+          <p className="mt-2 text-sm text-neutral-700">
+            Cattle, sheep, lucerne &amp; cereal hay, grain, machinery or fencing steel. Zero commission.
+          </p>
+        </Link>
+
+        <Link
           href="/post"
           className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm transition hover:border-green-700 hover:shadow-md"
         >
           <p className="text-xs font-semibold uppercase tracking-wide text-green-800">
-            Post
+            Post Hub
           </p>
           <h2 className="mt-1 text-lg font-bold text-neutral-900">
-            Post a listing
+            Post a job, service or freight run
           </h2>
           <p className="mt-2 text-sm text-neutral-700">
-            Job, freight, or service. Free.
+            Hiring workers, offering contracting services, or moving freight &amp; backloads. Free.
           </p>
         </Link>
 
@@ -94,7 +123,7 @@ export default async function DashboardPage() {
             Account age: {ageDays > 0
               ? `${ageDays} day${ageDays === 1 ? "" : "s"}`
               : `${ageHours} hour${ageHours === 1 ? "" : "s"}`}
-            .{!canPost && " You can post once your account is 24 hours old."}
+            . Instant Day-1 posting enabled.
           </p>
         </Link>
 
@@ -111,6 +140,24 @@ export default async function DashboardPage() {
               Found a business online that isn&apos;t yours? Add it here, not through
               &quot;Post a listing&quot;. It goes in as unclaimed, says where you found it,
               and the owner can claim it.
+            </p>
+          </Link>
+        )}
+
+        {isStaff && (
+          <Link
+            href="/dashboard/admin/demand"
+            className="rounded-2xl border border-green-300 bg-green-50 p-5 shadow-sm transition hover:border-green-700 hover:shadow-md sm:col-span-2"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide text-green-900">
+              Forecasting &amp; Market Intelligence
+            </p>
+            <h2 className="mt-1 text-lg font-bold text-neutral-900">
+              Demand, crops, livestock &amp; work board intelligence
+            </h2>
+            <p className="mt-2 text-sm text-neutral-700">
+              Regional &amp; monthly forecasting across crops/hay/livestock sold volume and prices,
+              available workers vs jobs hiring, ticket pool, and service enquiries.
             </p>
           </Link>
         )}

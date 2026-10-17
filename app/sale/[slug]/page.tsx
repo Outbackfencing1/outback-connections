@@ -61,7 +61,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ slu
     .from("listings")
     .select(
       `
-      id, anonymised_id, slug, kind, title, description, postcode, state,
+      id, anonymised_id, slug, kind, side, title, description, postcode, state,
       created_at, expires_at, user_id, status,
       category:categories(slug, label),
       sale_details(price_cents, price_type, quantity, unit, condition, delivery, sold_at, sub_category, harvest_season)
@@ -76,7 +76,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ slu
       .from("listings")
       .select(
         `
-        id, anonymised_id, slug, kind, title, description, postcode, state,
+        id, anonymised_id, slug, kind, side, title, description, postcode, state,
         created_at, expires_at, user_id, status,
         category:categories(slug, label),
         sale_details(price_cents, price_type, quantity, unit, condition, delivery, sold_at)
@@ -122,12 +122,14 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ slu
     await logEvent({ eventType: "contact_reveal", entityType: "listing", entityId: listing.id, vertical: "sale", userId: viewer.id });
   }
 
+  const isWanted = (listing as { side?: string | null }).side === "demand";
   const rows: Array<{ label: string; value: string }> = [];
   if (d) {
+    rows.push({ label: "Listing type", value: isWanted ? "Wanted to Buy (Chasing)" : "For Sale (Available)" });
     const sub = commodityLabel(d.sub_category);
     if (sub) rows.push({ label: "Type", value: sub });
     if (d.harvest_season) rows.push({ label: "Season / specs", value: d.harvest_season });
-    rows.push({ label: "Price", value: priceLine({ price_cents: d.price_cents, price_type: d.price_type, unit: d.unit }) });
+    rows.push({ label: isWanted ? "Target price" : "Price", value: priceLine({ price_cents: d.price_cents, price_type: d.price_type, unit: d.unit }) });
     const qty = quantityLine({ quantity: d.quantity, unit: d.unit });
     if (qty) rows.push({ label: "Quantity", value: qty });
     if (d.condition && d.condition !== "na") rows.push({ label: "Condition", value: CONDITION_LABELS[d.condition as Condition] ?? d.condition });
@@ -139,11 +141,21 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ slu
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumb) }} />
       <p className="text-sm">
         <Link href="/sale" className="text-neutral-600 underline">
-          ← All for sale
+          ← All livestock, harvest &amp; gear
         </Link>
       </p>
 
-      <div className="mt-3 flex items-baseline justify-between gap-4">
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span
+          className={`rounded-full px-3 py-0.5 text-xs font-semibold ${
+            isWanted ? "bg-amber-100 text-amber-950" : "bg-green-100 text-green-900"
+          }`}
+        >
+          {isWanted ? "Wanted to Buy" : "For Sale"}
+        </span>
+      </div>
+
+      <div className="mt-2 flex items-baseline justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{listing.title}</h1>
         {d && (
           <span className="shrink-0 rounded bg-green-100 px-2 py-0.5 text-base font-semibold text-green-900">

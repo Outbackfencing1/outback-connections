@@ -6,23 +6,19 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/dashboard/actions";
-import { getCountsByPillar, type Pillar } from "@/lib/category-counts";
 
-const primaryLinks: { href: string; label: string; pillar: Pillar }[] = [
-  { href: "/services", label: "Services", pillar: "services" },
-  { href: "/jobs", label: "Jobs", pillar: "jobs" },
-  { href: "/freight", label: "Freight", pillar: "freight" },
-  { href: "/sale", label: "For sale", pillar: "sale" },
+const primaryLinks: { href: string; label: string }[] = [
+  { href: "/services", label: "Services" },
+  { href: "/jobs", label: "Work & Skills" },
+  { href: "/sale", label: "Livestock & Harvest" },
+  { href: "/freight", label: "Freight" },
 ];
 
 export default async function Header() {
   const supabase = createClient();
-  const [{ data }, counts] = await Promise.all([supabase.auth.getUser(), getCountsByPillar()]);
+  const { data } = await supabase.auth.getUser();
   const signedIn = !!data.user;
-  // An empty vertical is not advertised in the nav. Services always shows.
-  const links = primaryLinks.filter(
-    (l) => l.pillar === "services" || counts[l.pillar].total > 0
-  );
+  const links = primaryLinks;
 
   return (
     <header className="sticky top-0 z-40 border-b bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/70">
@@ -35,7 +31,7 @@ export default async function Header() {
             Outback Connections
           </Link>
 
-          <nav className="hidden items-center gap-3 md:flex">
+          <nav className="hidden items-center gap-2.5 md:flex">
             {links.map((l) => (
               <Link
                 key={l.href}
@@ -45,6 +41,12 @@ export default async function Header() {
                 {l.label}
               </Link>
             ))}
+            <Link
+              href="/post/job?direction=available_for_work"
+              className="rounded-lg border border-green-700 bg-white px-3 py-1.5 text-sm font-semibold text-green-800 hover:bg-green-50"
+            >
+              List your skills
+            </Link>
             <Link
               href="/post"
               className="rounded-lg bg-green-700 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-800"
@@ -90,6 +92,12 @@ export default async function Header() {
               {l.label}
             </Link>
           ))}
+          <Link
+            href="/post/job?direction=available_for_work"
+            className="rounded-lg border border-green-700 bg-white px-2.5 py-1.5 text-xs font-semibold text-green-800"
+          >
+            List skills
+          </Link>
           <Link
             href="/post"
             className="rounded-lg bg-green-700 px-3 py-2 text-xs font-semibold text-white"

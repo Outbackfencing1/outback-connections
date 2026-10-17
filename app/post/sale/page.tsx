@@ -14,15 +14,29 @@ export const metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function PostSalePage() {
+type SearchParams = Record<string, string | string[] | undefined>;
+
+export default async function PostSalePage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
+  const sp = (await searchParams) ?? {};
+  const sideParam = Array.isArray(sp.side) ? sp.side[0] : sp.side;
+  const initialSide = sideParam === "demand" ? "demand" : "supply";
+
   const guard = await checkPostingGuard();
   if (!guard.ok && guard.reason === "not_signed_in") {
-    redirect("/signin?next=/post/sale");
+    redirect(
+      initialSide === "demand"
+        ? "/signin?next=/post/sale%3Fside%3Ddemand"
+        : "/signin?next=/post/sale"
+    );
   }
   if (!guard.ok) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-10">
-        <h1 className="text-2xl font-bold tracking-tight">Sell something</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Sell or source stock, hay &amp; gear</h1>
         <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
           <p className="font-semibold">Can&apos;t post yet</p>
           <p className="mt-2">{guard.message}</p>
@@ -46,15 +60,23 @@ export default async function PostSalePage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
-      <h1 className="text-2xl font-bold tracking-tight">Sell hay, stock or gear</h1>
+      <h1 className="text-2xl font-bold tracking-tight">
+        {initialSide === "demand"
+          ? "Post wanted to buy — livestock, hay, grain or gear"
+          : "Sell livestock, hay, grain or gear"}
+      </h1>
       <StaffPostNotice kind="sale" />
       <p className="mt-2 text-sm text-neutral-700">
-        Livestock, hay, grain, machinery, a trailer, fencing steel. Post it once and it stays
-        findable. Free, no commission, buyers contact you directly.
+        Cattle, sheep, lucerne &amp; cereal hay, grain, machinery or fencing steel. Post what
+        you&apos;re selling or what you&apos;re chasing — free, zero commission, direct contact.
       </p>
 
       <div className="mt-8">
-        <PostSaleForm categories={cats ?? []} action={postForSale} />
+        <PostSaleForm
+          categories={cats ?? []}
+          action={postForSale}
+          defaults={{ side: initialSide }}
+        />
       </div>
 
       <p className="mt-10 text-xs text-neutral-500">

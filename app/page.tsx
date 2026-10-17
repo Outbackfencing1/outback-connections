@@ -3,10 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { getCountsByPillar, type PillarStats } from "@/lib/category-counts";
 import { kindLabel, listingHref, postedVerb, relativeTime } from "@/lib/format";
 import FencingFinder from "@/components/home/FencingFinder";
+import RuralMarketplaceHub from "@/components/home/RuralMarketplaceHub";
 import { socialMeta } from "@/lib/seo";
 
 const RECENT_MIN_TO_SHOW = 5;
-const RECENT_LIMIT = 5;
+const RECENT_LIMIT = 6;
 const PILLAR_COUNT_MIN = 10;
 
 const HOME_TITLE =
@@ -68,29 +69,61 @@ type RecentListing = {
   category: { label: string } | null;
 };
 
+function isMetroSydneyPostcode(postcode: string): boolean {
+  const n = Number.parseInt(postcode, 10);
+  return Number.isFinite(n) && n >= 2000 && n <= 2249;
+}
+
 async function getRecentListings(): Promise<RecentListing[]> {
   const supabase = createClient();
   const nowIso = new Date().toISOString();
-  const { data } = await supabase
-    .from("listings")
-    .select(
-      `slug, kind, title, postcode, state, created_at, data_source, category:categories(label)`
-    )
-    .eq("status", "active")
-    .gt("expires_at", nowIso)
-    .order("created_at", { ascending: false })
-    .limit(RECENT_LIMIT);
 
-  return (data ?? []).map((row) => ({
-    slug: row.slug,
-    kind: row.kind,
-    title: row.title,
-    postcode: row.postcode,
-    state: row.state,
-    created_at: row.created_at,
-    data_source: row.data_source ?? null,
-    category: Array.isArray(row.category) ? row.category[0] ?? null : row.category,
-  }));
+  // Pull first-party / claimed listings first, then recent regional listings.
+  const [priorityRes, recentRes] = await Promise.all([
+    supabase
+      .from("listings")
+      .select(
+        `slug, kind, title, postcode, state, created_at, data_source, category:categories(label)`
+      )
+      .eq("status", "active")
+      .gt("expires_at", nowIso)
+      .in("data_source", ["first_party", "claimed"])
+      .order("created_at", { ascending: false })
+      .limit(RECENT_LIMIT),
+    supabase
+      .from("listings")
+      .select(
+        `slug, kind, title, postcode, state, created_at, data_source, category:categories(label)`
+      )
+      .eq("status", "active")
+      .gt("expires_at", nowIso)
+      .gte("postcode", "2300")
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
+
+  const combined = [...(priorityRes.data ?? []), ...(recentRes.data ?? [])];
+  const seen = new Set<string>();
+  const picked: RecentListing[] = [];
+
+  for (const row of combined) {
+    if (seen.has(row.slug)) continue;
+    if (row.data_source === "scraped" && isMetroSydneyPostcode(row.postcode)) continue;
+    seen.add(row.slug);
+    picked.push({
+      slug: row.slug,
+      kind: row.kind,
+      title: row.title,
+      postcode: row.postcode,
+      state: row.state,
+      created_at: row.created_at,
+      data_source: row.data_source ?? null,
+      category: Array.isArray(row.category) ? row.category[0] ?? null : row.category,
+    });
+    if (picked.length >= RECENT_LIMIT) break;
+  }
+
+  return picked;
 }
 
 export default async function HomePage() {
@@ -111,57 +144,55 @@ export default async function HomePage() {
   return (
     <div>
       {/* Hero — one-stop rural work board, contractor directory & marketplace. */}
-      <section className="mx-auto max-w-4xl px-4 py-12 sm:py-16">
+      <section className="mx-auto max-w-5xl px-4 pb-8 pt-10 sm:pt-14">
         <p className="text-xs font-semibold uppercase tracking-wider text-green-800">
           Rural Australia&apos;s One-Stop Marketplace &amp; Work Board
         </p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl md:text-5xl">
-          Contractors, drivers, machine operators, livestock &amp; harvest — in one place.
+          Find workers, machine operators, contractors, livestock &amp; harvest — in one place.
         </h1>
-        <p className="mt-4 text-base text-neutral-700 sm:text-lg">
-          Find a fencing contractor, hire a driver or header operator, list your own skills &amp; tickets,
-          or buy and sell livestock, hay, grain and gear. 100% free — no lead fees, no commission, direct contact.
+        <p className="mt-4 max-w-3xl text-base text-neutral-700 sm:text-lg">
+          Built so rural people don&apos;t have to dig through messy Facebook comments. List your
+          skills &amp; licences, find truck drivers and header operators, book fencing contractors,
+          or buy and sell livestock, hay, grain and gear — 100% free with zero commission.
         </p>
-        <div className="mt-7 flex flex-wrap items-center gap-3">
+        <div className="mt-6 flex flex-wrap items-center gap-3">
           <Link
-            href="/services/fencing-contractor"
+            href="/jobs"
             className="inline-flex items-center justify-center rounded-xl bg-green-700 px-5 py-3 text-base font-semibold text-white shadow-sm hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-800 focus:ring-offset-2"
           >
-            Find a fencer
+            Browse Work &amp; Skills Board
           </Link>
           <Link
             href="/post/job?direction=available_for_work"
             className="inline-flex items-center justify-center rounded-xl border border-green-700 bg-white px-5 py-3 text-base font-semibold text-green-800 shadow-sm hover:bg-green-50"
           >
-            List your skills
+            + List your skills &amp; tickets
           </Link>
           <Link
-            href="/post/sale"
+            href="/sale"
             className="inline-flex items-center justify-center rounded-xl border border-neutral-300 bg-white px-5 py-3 text-base font-semibold text-neutral-800 shadow-sm hover:border-green-700"
           >
-            Sell stock, hay or gear
+            Livestock, Hay &amp; Gear
+          </Link>
+          <Link
+            href="/services/fencing-contractor"
+            className="inline-flex items-center justify-center rounded-xl border border-neutral-300 bg-white px-5 py-3 text-base font-semibold text-neutral-800 shadow-sm hover:border-green-700"
+          >
+            Find a fencer
           </Link>
         </div>
         <p className="mt-4 text-sm text-neutral-700">
           Or{" "}
           <Link href="/post" className="font-medium text-green-800 underline">
-            post a job, freight run or service
-          </Link>
-          . Free account, post immediately in 2 minutes.
-        </p>
-        <p className="mt-3 text-xs text-neutral-500">
-          Run by{" "}
-          <a
-            href="https://outbackfencingsupplies.com.au/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
-            Outback Fencing &amp; Steel Supplies
-          </a>
-          .
+            post a job, livestock/crop sale, freight run or service
+          </Link>{" "}
+          — free account, post immediately on Day 1.
         </p>
       </section>
+
+      {/* Interactive Two-Door Hub: Work & Skills Board + Livestock, Harvest & Gear */}
+      <RuralMarketplaceHub />
 
       {/* The thing farmers ask for most. Renders nothing while the category is empty. */}
       <FencingFinder />
@@ -181,7 +212,7 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* Four pillars — Contractors/Services, Work & Skills, Livestock/Harvest/Gear, Freight. */}
+      {/* Four pillars — always link to the browse boards so visitors are never bounced to /signin. */}
       <section className="mx-auto max-w-6xl px-4 pb-6 sm:px-6 lg:px-8">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <PillarCard
@@ -197,7 +228,7 @@ export default async function HomePage() {
             cta="Browse services"
           />
           <PillarCard
-            href={pillarCounts.jobs.total > 0 ? "/jobs" : "/post/job?direction=available_for_work"}
+            href="/jobs"
             icon={<HammerIcon />}
             heading="Work & skills board"
             blurb="Find truck drivers, header & machine operators, fencers & station hands — or list your skills."
@@ -206,10 +237,10 @@ export default async function HomePage() {
                 ? formatCountLine("jobs", pillarCounts.jobs)
                 : null
             }
-            cta={pillarCounts.jobs.total > 0 ? "Browse work & skills" : "List skills or post a job"}
+            cta="Open work & skills board"
           />
           <PillarCard
-            href={pillarCounts.sale.total > 0 ? "/sale" : "/post/sale"}
+            href="/sale"
             icon={<WheatTagIcon />}
             heading="Livestock, harvest & gear"
             blurb="Cattle, sheep, lucerne & cereal hay, grain, machinery & fencing steel. Zero commission."
@@ -218,10 +249,10 @@ export default async function HomePage() {
                 ? formatCountLine("sale", pillarCounts.sale)
                 : null
             }
-            cta={pillarCounts.sale.total > 0 ? "Browse for sale" : "Sell stock, hay or gear"}
+            cta="Open livestock & harvest"
           />
           <PillarCard
-            href={pillarCounts.freight.total > 0 ? "/freight" : "/post/freight"}
+            href="/freight"
             icon={<TruckIcon />}
             heading="Freight & backloads"
             blurb="Livestock, hay, grain, machinery. Farmers needing loads moved; truckies with space."
@@ -230,7 +261,7 @@ export default async function HomePage() {
                 ? formatCountLine("freight", pillarCounts.freight)
                 : null
             }
-            cta={pillarCounts.freight.total > 0 ? "Browse freight" : "Post freight"}
+            cta="Open freight & backloads"
           />
         </div>
       </section>

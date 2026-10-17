@@ -1,9 +1,6 @@
-// components/Footer.tsx
 import Link from "next/link";
-import { getCountsByPillar } from "@/lib/category-counts";
 
-export default async function Footer() {
-  const counts = await getCountsByPillar();
+export default function Footer() {
   return (
     <footer className="mt-16 border-t bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40">
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
@@ -22,16 +19,11 @@ export default async function Footer() {
             </h3>
             <ul className="mt-3 space-y-2 text-sm text-neutral-700">
               <li><Link href="/" className="hover:text-neutral-900">Home</Link></li>
-              <li><Link href="/services" className="hover:text-neutral-900">Services</Link></li>
-              {counts.jobs.total > 0 && (
-                <li><Link href="/jobs" className="hover:text-neutral-900">Jobs</Link></li>
-              )}
-              {counts.freight.total > 0 && (
-                <li><Link href="/freight" className="hover:text-neutral-900">Freight</Link></li>
-              )}
-              {counts.sale.total > 0 && (
-                <li><Link href="/sale" className="hover:text-neutral-900">For sale</Link></li>
-              )}
+              <li><Link href="/services" className="hover:text-neutral-900">Services &amp; Contractors</Link></li>
+              <li><Link href="/jobs" className="hover:text-neutral-900">Work &amp; Skills Board</Link></li>
+              <li><Link href="/sale" className="hover:text-neutral-900">Livestock, Harvest &amp; Gear</Link></li>
+              <li><Link href="/freight" className="hover:text-neutral-900">Freight &amp; Backloads</Link></li>
+              <li><Link href="/post/job?direction=available_for_work" className="hover:text-neutral-900">List your skills</Link></li>
               <li><Link href="/post" className="hover:text-neutral-900">Post a listing</Link></li>
               <li><Link href="/about" className="hover:text-neutral-900">About</Link></li>
               <li><Link href="/faq" className="hover:text-neutral-900">FAQ</Link></li>

@@ -45,6 +45,7 @@ export async function postForSale(formData: FormData): Promise<ActionResult> {
     {
       user_id: guard.userId,
       kind: "for_sale",
+      side: data.side,
       category_id: data.category_id,
       title: data.title,
       description: data.description,
@@ -73,6 +74,10 @@ export async function postForSale(formData: FormData): Promise<ActionResult> {
     return { ok: false, errors: { _: result.message }, values: valuesFrom(formData) };
   }
 
-  await setFlash(`Posted for sale: ${data.title}`);
+  await setFlash(
+    data.side === "demand"
+      ? `Posted wanted to buy: ${data.title}`
+      : `Posted for sale: ${data.title}`
+  );
   redirect("/dashboard/listings");
 }

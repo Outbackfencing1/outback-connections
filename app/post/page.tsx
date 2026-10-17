@@ -44,10 +44,17 @@ export default async function PostHubPage() {
           disabled={!guard.ok}
         />
         <PostCard
-          href="/post/sale"
+          href="/post/sale?side=supply"
           title="Sell livestock, hay, grain or gear"
           blurb="Cattle, sheep, lucerne/cereal hay, grain, machinery, trailers, fencing steel. Zero commission; buyers contact you direct."
-          eyebrow="For sale"
+          eyebrow="Livestock & Harvest — For Sale"
+          disabled={!guard.ok}
+        />
+        <PostCard
+          href="/post/sale?side=demand"
+          title="Wanted to buy — stock, hay, grain or gear"
+          blurb="Chasing weaner steers, breeding ewes, lucerne hay, feed barley or a tractor/header? Post what you need and your postcode."
+          eyebrow="Livestock & Harvest — Wanted"
           disabled={!guard.ok}
         />
         <PostCard

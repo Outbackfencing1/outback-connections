@@ -97,21 +97,77 @@ export default async function FreightBrowsePage({
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
-      <div className="flex items-baseline justify-between gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">Freight</h1>
-        <Link
-          href="/post/freight"
-          className="rounded-lg bg-green-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-green-800"
-        >
-          Post freight
-        </Link>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Freight &amp; Backloads</h1>
+          <p className="mt-2 text-sm text-neutral-700">
+            Livestock crates, hay drop-decks, grain tippers and machinery low-loaders. Match loads
+            needing a truck with carriers looking for a backload.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+          <Link
+            href="/post/freight"
+            className="rounded-lg bg-green-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-green-800"
+          >
+            Post a load or backload
+          </Link>
+        </div>
       </div>
-      <p className="mt-2 text-sm text-neutral-700">
-        Livestock, hay, grain, machinery. Farmers needing freight; truckies
-        with available runs. Free to browse. Sign in to see contact details.
-      </p>
 
-      <div className="mt-6">
+      {/* Quick direction & vehicle chips */}
+      <nav aria-label="Freight direction and vehicle filters" className="mt-5 flex flex-wrap gap-2 text-xs font-medium">
+        <Link
+          href={`/freight${postcode ? `?postcode=${postcode}` : ""}`}
+          className={`rounded-full border px-3.5 py-1.5 ${
+            direction === "" && vehicle === ""
+              ? "border-green-700 bg-green-700 text-white"
+              : "border-neutral-300 bg-white text-neutral-700 hover:border-green-700"
+          }`}
+        >
+          All freight &amp; backloads
+        </Link>
+        <Link
+          href={`/freight?direction=offering_truck${postcode ? `&postcode=${postcode}` : ""}`}
+          className={`rounded-full border px-3.5 py-1.5 ${
+            direction === "offering_truck"
+              ? "border-green-700 bg-green-700 text-white"
+              : "border-neutral-300 bg-white text-neutral-700 hover:border-green-700"
+          }`}
+        >
+          Trucks with backload space
+        </Link>
+        <Link
+          href={`/freight?direction=need_freight${postcode ? `&postcode=${postcode}` : ""}`}
+          className={`rounded-full border px-3.5 py-1.5 ${
+            direction === "need_freight"
+              ? "border-green-700 bg-green-700 text-white"
+              : "border-neutral-300 bg-white text-neutral-700 hover:border-green-700"
+          }`}
+        >
+          Loads needing a truck
+        </Link>
+        {[
+          { code: "livestock", label: "Livestock Crates" },
+          { code: "flatbed", label: "Hay / Drop-Deck / Flatbed" },
+          { code: "tipper", label: "Grain Tippers" },
+          { code: "b_double", label: "B-Doubles" },
+        ].map((v) => (
+          <Link
+            key={v.code}
+            href={`/freight?vehicle_type=${vehicle === v.code ? "" : v.code}${direction ? `&direction=${direction}` : ""}${postcode ? `&postcode=${postcode}` : ""}`}
+            className={`rounded-full border px-3 py-1.5 ${
+              vehicle === v.code
+                ? "border-green-700 bg-green-100 text-green-900"
+                : "border-neutral-200 bg-white text-neutral-700 hover:border-green-700"
+            }`}
+          >
+            {v.label}
+          </Link>
+        ))}
+      </nav>
+
+      <div className="mt-4">
         <FilterBar action="/freight" postcode={postcode} resetHref="/freight">
           <label className="block">
             <span className="block text-xs font-medium text-neutral-700">Direction</span>
@@ -149,27 +205,60 @@ export default async function FreightBrowsePage({
       <div className="mt-6">
         {!listings || listings.length === 0 ? (
           freightCounts.total === 0 ? (
-            <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center">
-              <p className="text-sm font-semibold text-neutral-800">No freight listed yet.</p>
-              <p className="mt-2 text-sm text-neutral-700">
-                Got a load to move, or a truck with space?{" "}
-                <Link href="/post/freight" className="font-medium text-green-800 underline">
-                  Post it
-                </Link>{" "}
-                free.
-              </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-green-300 bg-green-50/70 p-6">
+                <span className="inline-block rounded-full bg-green-700 px-3 py-0.5 text-xs font-semibold text-white">
+                  For Truckies &amp; Carriers
+                </span>
+                <h2 className="mt-3 text-lg font-bold text-neutral-900">
+                  Got an empty run or backload deck space?
+                </h2>
+                <p className="mt-2 text-sm text-neutral-700">
+                  Post your origin, destination, dates and rig type (livestock crate, drop-deck,
+                  tipper, B-double, tray) so farms along your route can fill the backload directly.
+                </p>
+                <div className="mt-4">
+                  <Link
+                    href="/post/freight"
+                    className="inline-flex items-center justify-center rounded-xl bg-green-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-800"
+                  >
+                    Post available truck space →
+                  </Link>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-neutral-200 bg-white p-6">
+                <span className="inline-block rounded-full bg-amber-100 px-3 py-0.5 text-xs font-semibold text-amber-950">
+                  For Farms &amp; Buyers
+                </span>
+                <h2 className="mt-3 text-lg font-bold text-neutral-900">
+                  Need livestock, hay, grain, fencing or machinery moved?
+                </h2>
+                <p className="mt-2 text-sm text-neutral-700">
+                  Post pickup and drop-off postcodes, load weight/decks and dates so carriers with
+                  trucks in the area can quote you directly — zero broker margin.
+                </p>
+                <div className="mt-4">
+                  <Link
+                    href="/post/freight"
+                    className="inline-flex items-center justify-center rounded-xl border border-green-700 bg-white px-4 py-2.5 text-sm font-semibold text-green-800 hover:bg-green-50"
+                  >
+                    Post a load needing freight →
+                  </Link>
+                </div>
+              </div>
             </div>
           ) : (
-          <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center">
-            <p className="text-sm text-neutral-700">No freight listings match.</p>
-            <p className="mt-2 text-xs text-neutral-500">
-              Try a wider postcode or remove a filter. Or{" "}
-              <Link href="/post/freight" className="underline">
-                post a freight listing
-              </Link>
-              .
-            </p>
-          </div>
+            <div className="rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center">
+              <p className="text-sm font-semibold text-neutral-800">No freight listings match those filters.</p>
+              <p className="mt-2 text-xs text-neutral-500">
+                Try a wider postcode or remove a filter. Or{" "}
+                <Link href="/post/freight" className="underline">
+                  post a freight listing
+                </Link>
+                .
+              </p>
+            </div>
           )
         ) : (
           <ul className="space-y-4">
