@@ -7,7 +7,7 @@ import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listingHref } from "./format";
-import { dollarsToCents, PRICE_TYPES } from "@/lib/sale";
+import { dollarsToCents, parseProofBadges, PRICE_TYPES } from "@/lib/sale";
 import { JOB_DIRECTIONS, parseWorkerTickets, TRAVEL_RADII } from "@/lib/work-board";
 import { DEFAULT_FROM, sendEmail } from "@/lib/email";
 
@@ -226,6 +226,12 @@ export function valuesFrom(formData: FormData): Record<string, string> {
   if (tickets.length > 0) {
     out.tickets = tickets.join(",");
   }
+  const proofBadges = formData
+    .getAll("proof_badges")
+    .filter((p): p is string => typeof p === "string" && p.trim() !== "");
+  if (proofBadges.length > 0) {
+    out.proof_badges = proofBadges.join(",");
+  }
   delete out.website; // never echo back the honeypot
   return out;
 }
@@ -235,6 +241,10 @@ export function formDataToRecord(formData: FormData): Record<string, unknown> {
   const tickets = formData.getAll("tickets");
   if (tickets.length > 0) {
     out.tickets = tickets;
+  }
+  const proofBadges = formData.getAll("proof_badges");
+  if (proofBadges.length > 0) {
+    out.proof_badges = proofBadges;
   }
   return out;
 }
@@ -380,6 +390,10 @@ export const saleSchema = baseSchema
       delivery: optionalEnum(["pickup", "can_deliver", "either"]),
       sub_category: z.string().trim().max(60).optional().default(""),
       harvest_season: z.string().trim().max(60).optional().default(""),
+      proof_badges: z
+        .unknown()
+        .optional()
+        .transform((v) => parseProofBadges(v)),
     })
   )
   .superRefine((d, ctx) => {
@@ -514,7 +528,85 @@ export async function insertListing<DetailRow extends Record<string, unknown>>(
     });
   }
 
+  // Best-effort: notify any saved search alerts matching this vertical/postcode/signal
+  void notifyMatchingSearchAlerts({
+    vertical,
+    postcode: listing.postcode,
+    title: listing.title,
+    kind: listing.kind,
+    slug: realSlug,
+    detail: detail as Record<string, unknown>,
+  });
+
   return { ok: true, slug: realSlug };
+}
+
+async function notifyMatchingSearchAlerts(args: {
+  vertical: "job" | "sale" | "freight" | "service";
+  postcode: string;
+  title: string;
+  kind: "job" | "freight" | "service_offering" | "service_request" | "for_sale";
+  slug: string;
+  detail: Record<string, unknown>;
+}): Promise<void> {
+  try {
+    const supa = createAdminClient();
+    if (!supa) return;
+
+    const { data: alerts } = await supa
+      .from("search_alerts")
+      .select("id, email, signal, postcode, notified_count")
+      .eq("vertical", args.vertical)
+      .eq("active", true)
+      .limit(30);
+
+    if (!alerts || alerts.length === 0) return;
+
+    const signalsOnListing = new Set<string>(["all"]);
+    if (typeof args.detail.sub_category === "string" && args.detail.sub_category) {
+      signalsOnListing.add(args.detail.sub_category);
+    }
+    if (typeof args.detail.direction === "string" && args.detail.direction) {
+      signalsOnListing.add(args.detail.direction);
+    }
+    if (typeof args.detail.vehicle_type === "string" && args.detail.vehicle_type) {
+      signalsOnListing.add(args.detail.vehicle_type);
+    }
+    if (Array.isArray(args.detail.tickets)) {
+      for (const t of args.detail.tickets) {
+        if (typeof t === "string") signalsOnListing.add(t);
+      }
+    }
+
+    const link = `${BASE_URL}${listingHref(args.kind, args.slug)}`;
+    for (const a of alerts) {
+      const postcodeMatches =
+        !a.postcode ||
+        a.postcode === args.postcode ||
+        args.postcode.startsWith(a.postcode.slice(0, 2));
+      const signalMatches =
+        !a.signal || a.signal === "all" || signalsOnListing.has(a.signal);
+      if (!postcodeMatches || !signalMatches) continue;
+
+      await sendEmail({
+        to: a.email,
+        from: DEFAULT_FROM,
+        subject: `New match on Outback Connections: ${args.title}`,
+        text: `G'day,\n\nA new listing matching your alert was just posted near postcode ${args.postcode}:\n\n${args.title}\n${link}\n\n— Outback Connections\n${BASE_URL}`,
+        html: `<p>G'day,</p><p>A new listing matching your alert was just posted near postcode <strong>${escapeHtml(args.postcode)}</strong>:</p><p><a href="${link}"><strong>${escapeHtml(args.title)}</strong></a></p><p>— Outback Connections</p>`,
+      });
+
+      await supa
+        .from("search_alerts")
+        .update({
+          notified_count: (a.notified_count ?? 0) + 1,
+          last_notified_at: new Date().toISOString(),
+        })
+        .eq("id", a.id);
+    }
+  } catch (e) {
+    console.error("[search-alerts] notification error:", e);
+  }
 }
 
 // ============================================================

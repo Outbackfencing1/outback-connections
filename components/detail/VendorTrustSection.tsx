@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { relativeTime } from "@/lib/format";
 import { responseLine } from "@/lib/enquiry-outcome";
 import {
+  availabilityStatusInfo,
   dealTypeLabel,
   formatAbn,
   insuranceBadgeLabel,
@@ -14,6 +15,7 @@ import {
   trustTagLabel,
   type VendorTrustSummary,
 } from "@/lib/trust";
+import { submitQuickVouch, toggleOutbackVerified } from "@/app/reviews/actions";
 import LeaveReviewForm from "./LeaveReviewForm";
 import VendorReplyForm from "./VendorReplyForm";
 
@@ -27,6 +29,13 @@ type Props = {
   viewerId?: string | null;
   showProfileLink?: boolean;
 };
+
+const QUICK_VOUCH_TAGS = [
+  { slug: "turned_up_on_time", label: "Turned up on time" },
+  { slug: "accurate_description", label: "As described" },
+  { slug: "great_communication", label: "Easy to deal with" },
+  { slug: "quality_fencing", label: "Quality workmanship" },
+] as const;
 
 export default async function VendorTrustSection({
   userId,
@@ -49,7 +58,7 @@ export default async function VendorTrustSection({
     viewerId
       ? supabase
           .from("user_profiles")
-          .select("display_name, trading_name, postcode")
+          .select("display_name, trading_name, postcode, is_admin, is_staff")
           .eq("user_id", viewerId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -68,6 +77,9 @@ export default async function VendorTrustSection({
   }
 
   const isOwner = !!viewerId && viewerId === resolvedUserId;
+  const isViewerStaff = !!(
+    viewerProfileRes.data?.is_admin || viewerProfileRes.data?.is_staff
+  );
   const profileId = resolvedUserId ?? resolvedBusinessId;
   const vendorName =
     summary.trading_name ||
@@ -96,6 +108,7 @@ export default async function VendorTrustSection({
   const reviews = Array.isArray(summary.recent_reviews)
     ? summary.recent_reviews
     : [];
+  const availInfo = availabilityStatusInfo(summary.availability_status);
 
   const viewerDefaultName =
     viewerProfileRes.data?.trading_name ||
@@ -114,18 +127,33 @@ export default async function VendorTrustSection({
           <p className="text-xs font-semibold uppercase tracking-wide text-green-800">
             Trust, Verification &amp; Community Feedback
           </p>
-          <h2 className="mt-1 text-xl font-bold text-neutral-900">
-            {showProfileLink && profileId ? (
-              <Link
-                href={`/profile/${profileId}`}
-                className="hover:text-green-800 hover:underline"
-              >
-                {vendorName}
-              </Link>
-            ) : (
-              vendorName
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-bold text-neutral-900">
+              {showProfileLink && profileId ? (
+                <Link
+                  href={`/profile/${profileId}`}
+                  className="hover:text-green-800 hover:underline"
+                >
+                  {vendorName}
+                </Link>
+              ) : (
+                vendorName
+              )}
+            </h2>
+            {summary.outback_verified && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-400 bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-950 shadow-sm">
+                ★ Outback Verified
+              </span>
             )}
-          </h2>
+            {resolvedUserId && (
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${availInfo.badgeClass}`}
+              >
+                <span className={`h-2 w-2 rounded-full ${availInfo.dotClass}`} />
+                {availInfo.shortLabel}
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-xs text-neutral-600">
             {summary.postcode
               ? `${summary.postcode}${summary.state ? ` ${summary.state}` : ""}`
@@ -169,8 +197,44 @@ export default async function VendorTrustSection({
         </div>
       </div>
 
+      {/* Staff-only 1-click Outback Verified Gold Badge toggle */}
+      {isViewerStaff && (
+        <form
+          action={toggleOutbackVerified}
+          className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50/70 px-3.5 py-2 text-xs text-amber-950"
+        >
+          <input type="hidden" name="target_user_id" value={resolvedUserId ?? ""} />
+          <input type="hidden" name="target_business_id" value={resolvedBusinessId ?? ""} />
+          <input
+            type="hidden"
+            name="next_value"
+            value={summary.outback_verified ? "false" : "true"}
+          />
+          <input type="hidden" name="return_path" value={returnPath} />
+          <span>
+            <strong>Staff control:</strong>{" "}
+            {summary.outback_verified
+              ? "This profile holds the ★ Outback Verified gold badge."
+              : "Award the ★ Outback Verified gold badge to trusted contractors, carriers & suppliers."}
+          </span>
+          <button
+            type="submit"
+            className="rounded-lg border border-amber-500 bg-white px-3 py-1 font-bold text-amber-950 hover:bg-amber-100"
+          >
+            {summary.outback_verified
+              ? "Remove Outback Verified"
+              : "★ Grant Outback Verified"}
+          </button>
+        </form>
+      )}
+
       {/* Verification & Trust Badges */}
       <div className="mt-4 flex flex-wrap gap-2">
+        {summary.outback_verified && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-amber-400 bg-amber-100 px-3 py-1 text-xs font-bold text-amber-950">
+            ★ Outback Fencing Verified
+          </span>
+        )}
         {summary.abn_verified && (
           <span className="inline-flex items-center gap-1 rounded-full border border-green-300 bg-green-50 px-3 py-1 text-xs font-semibold text-green-900">
             ✓ ABN Verified{formattedAbn ? ` (${formattedAbn})` : ""}
@@ -298,19 +362,46 @@ export default async function VendorTrustSection({
         </div>
       )}
 
-      {/* Leave Review Form (for non-owners) */}
+      {/* 1-Click Quick Vouch + Leave Review Form (for non-owners) */}
       {!isOwner && (
-        <LeaveReviewForm
-          signedIn={!!viewerId}
-          signInRedirect={returnPath}
-          listingId={listingId}
-          targetUserId={resolvedUserId}
-          targetBusinessId={resolvedBusinessId}
-          vendorLabel={vendorName}
-          defaultDealType={defaultDealType}
-          defaultReviewerName={viewerDefaultName}
-          defaultReviewerPostcode={viewerDefaultPostcode}
-        />
+        <>
+          {viewerId ? (
+            <div className="mt-4 rounded-xl border border-green-200 bg-green-50/40 p-3">
+              <p className="text-xs font-semibold text-neutral-800">
+                Dealt with {vendorName}? Tap a 1-click vouch (or write a full review below):
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {QUICK_VOUCH_TAGS.map((qt) => (
+                  <form key={qt.slug} action={submitQuickVouch}>
+                    <input type="hidden" name="target_user_id" value={resolvedUserId ?? ""} />
+                    <input type="hidden" name="target_business_id" value={resolvedBusinessId ?? ""} />
+                    <input type="hidden" name="listing_id" value={listingId ?? ""} />
+                    <input type="hidden" name="tag" value={qt.slug} />
+                    <input type="hidden" name="return_path" value={returnPath} />
+                    <button
+                      type="submit"
+                      className="rounded-full border border-green-300 bg-white px-3 py-1 text-xs font-semibold text-green-900 shadow-sm hover:border-green-700 hover:bg-green-100"
+                    >
+                      + Vouch: {qt.label}
+                    </button>
+                  </form>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <LeaveReviewForm
+            signedIn={!!viewerId}
+            signInRedirect={returnPath}
+            listingId={listingId}
+            targetUserId={resolvedUserId}
+            targetBusinessId={resolvedBusinessId}
+            vendorLabel={vendorName}
+            defaultDealType={defaultDealType}
+            defaultReviewerName={viewerDefaultName}
+            defaultReviewerPostcode={viewerDefaultPostcode}
+          />
+        </>
       )}
 
       {/* Published Reviews List */}

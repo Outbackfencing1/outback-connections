@@ -128,6 +128,42 @@ export function formatAbn(raw: string | null | undefined): string | null {
   return `${digits.slice(0, 2)} ${digits.slice(2, 5)} ${digits.slice(5, 8)} ${digits.slice(8, 11)}`;
 }
 
+export const AVAILABILITY_STATUSES = [
+  {
+    slug: "available",
+    label: "Available for work / bookings now",
+    shortLabel: "Available now",
+    dotClass: "bg-emerald-500",
+    badgeClass: "border-emerald-300 bg-emerald-50 text-emerald-950",
+  },
+  {
+    slug: "available_soon",
+    label: "Available soon / taking bookings",
+    shortLabel: "Available soon",
+    dotClass: "bg-amber-500",
+    badgeClass: "border-amber-300 bg-amber-50 text-amber-950",
+  },
+  {
+    slug: "booked_out",
+    label: "Currently booked out",
+    shortLabel: "Booked out",
+    dotClass: "bg-neutral-400",
+    badgeClass: "border-neutral-300 bg-neutral-100 text-neutral-700",
+  },
+] as const;
+
+export type AvailabilityStatusSlug = (typeof AVAILABILITY_STATUSES)[number]["slug"];
+
+export function isValidAvailabilityStatus(slug: string): slug is AvailabilityStatusSlug {
+  return AVAILABILITY_STATUSES.some((s) => s.slug === slug);
+}
+
+export function availabilityStatusInfo(slug: string | null | undefined) {
+  return (
+    AVAILABILITY_STATUSES.find((s) => s.slug === slug) ?? AVAILABILITY_STATUSES[0]
+  );
+}
+
 export type VendorReviewRow = {
   id: string;
   created_at: string;
@@ -160,6 +196,8 @@ export type VendorTrustSummary = {
   insurances_held: string[];
   role_tags: string[];
   years_in_district: number | null;
+  availability_status?: string | null;
+  outback_verified?: boolean;
   active_listings_count: number;
   completed_deals_count: number;
   enquiry_forwarded: number;
@@ -171,3 +209,4 @@ export type VendorTrustSummary = {
   top_tags: Array<{ tag: string; count: number }>;
   recent_reviews: VendorReviewRow[];
 };
+

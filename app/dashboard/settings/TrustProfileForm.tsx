@@ -2,7 +2,12 @@
 
 import { useActionState } from "react";
 import { updateTrustProfile, type TrustProfileState } from "./actions";
-import { INSURANCE_BADGES, ROLE_TAGS, formatAbn } from "@/lib/trust";
+import {
+  AVAILABILITY_STATUSES,
+  INSURANCE_BADGES,
+  ROLE_TAGS,
+  formatAbn,
+} from "@/lib/trust";
 
 type Props = {
   initialValues: {
@@ -15,6 +20,7 @@ type Props = {
     insurances_held: string[];
     role_tags: string[];
     years_in_district: number | null;
+    availability_status?: string | null;
   };
 };
 
@@ -35,6 +41,32 @@ export default function TrustProfileForm({ initialValues }: Props) {
           {state.error}
         </div>
       )}
+
+      <div>
+        <span className="block text-xs font-semibold uppercase tracking-wide text-neutral-700">
+          Your current availability status (shown on your profile &amp; listings)
+        </span>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+          {AVAILABILITY_STATUSES.map((st) => (
+            <label
+              key={st.slug}
+              className="flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-semibold text-neutral-800 hover:border-green-700"
+            >
+              <input
+                type="radio"
+                name="availability_status"
+                value={st.slug}
+                defaultChecked={
+                  (initialValues.availability_status || "available") === st.slug
+                }
+                className="h-4 w-4 text-green-700"
+              />
+              <span className={`h-2 w-2 rounded-full ${st.dotClass}`} />
+              <span>{st.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>

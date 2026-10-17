@@ -187,6 +187,7 @@ export async function editListing(formData: FormData): Promise<ActionResult> {
         delivery: data.delivery ?? "pickup",
         sub_category: data.sub_category || null,
         harvest_season: data.harvest_season || null,
+        proof_badges: data.proof_badges,
       })
       .eq("listing_id", id);
     if (dErr) return { ok: false, errors: { _: "Couldn't save sale details." } };

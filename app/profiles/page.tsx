@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import {
   ROLE_TAGS,
+  availabilityStatusInfo,
   formatAbn,
   insuranceBadgeLabel,
   isValidRoleTag,
@@ -35,6 +36,8 @@ type TrustedProfileItem = {
   insurances_held: string[];
   role_tags: string[];
   years_in_district: number | null;
+  availability_status?: string | null;
+  outback_verified?: boolean;
   active_listings_count: number;
   completed_deals_count: number;
   review_count: number;
@@ -77,7 +80,7 @@ export default async function TrustedProfilesDirectoryPage({
   let bizQuery = supabase
     .from("businesses")
     .select(
-      "id, trading_name, legal_name, abn, claim_status, postcode, state_code, created_at"
+      "id, trading_name, legal_name, abn, claim_status, postcode, state_code, created_at, outback_verified"
     )
     .eq("status", "active")
     .order("claim_status", { ascending: true })
@@ -116,6 +119,11 @@ export default async function TrustedProfilesDirectoryPage({
       insurances_held: [],
       role_tags: [],
       years_in_district: null,
+      availability_status: null,
+      outback_verified: !!(
+        (b as { outback_verified?: boolean }).outback_verified ||
+        b.claim_status === "trusted"
+      ),
       active_listings_count: 1,
       completed_deals_count: 0,
       review_count: 0,
@@ -292,6 +300,9 @@ export default async function TrustedProfilesDirectoryPage({
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {allProfiles.map((p) => {
             const formattedAbn = formatAbn(p.abn);
+            const avail = p.user_id
+              ? availabilityStatusInfo(p.availability_status)
+              : null;
             return (
               <Link
                 key={p.profile_id}
@@ -321,6 +332,19 @@ export default async function TrustedProfilesDirectoryPage({
 
                   {/* Verification & Role Badges */}
                   <div className="mt-3 flex flex-wrap gap-1.5">
+                    {p.outback_verified && (
+                      <span className="rounded-full border border-amber-400 bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-950">
+                        ★ Outback Verified
+                      </span>
+                    )}
+                    {avail && (
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${avail.badgeClass}`}
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${avail.dotClass}`} />
+                        {avail.shortLabel}
+                      </span>
+                    )}
                     {p.abn_verified && (
                       <span className="rounded-full border border-green-300 bg-green-50 px-2.5 py-0.5 text-[11px] font-semibold text-green-900">
                         ✓ ABN Verified{formattedAbn ? ` · ${formattedAbn}` : ""}

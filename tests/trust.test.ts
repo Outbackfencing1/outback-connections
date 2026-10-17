@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  availabilityStatusInfo,
   dealTypeLabel,
   formatAbn,
   insuranceBadgeLabel,
+  isValidAvailabilityStatus,
   isValidAustralianAbn,
   isValidDealType,
   isValidInsuranceBadge,
@@ -12,6 +14,11 @@ import {
   roleTagLabel,
   trustTagLabel,
 } from "@/lib/trust";
+import {
+  estimateLotSummary,
+  parseProofBadges,
+  proofBadgeLabel,
+} from "@/lib/sale";
 
 describe("lib/trust ABN validation & formatting", () => {
   it("validates official ATO modulus-89 11-digit ABNs", () => {
@@ -37,7 +44,7 @@ describe("lib/trust ABN validation & formatting", () => {
   });
 });
 
-describe("lib/trust rural tags and badges", () => {
+describe("lib/trust rural tags, availability, and badges", () => {
   it("validates and formats trust tags", () => {
     expect(isValidTrustTag("turned_up_on_time")).toBe(true);
     expect(isValidTrustTag("not_a_tag")).toBe(false);
@@ -52,4 +59,43 @@ describe("lib/trust rural tags and badges", () => {
     expect(isValidRoleTag("fencing_contractor")).toBe(true);
     expect(roleTagLabel("fencing_contractor")).toBe("Fencing Contractor");
   });
+
+  it("validates and returns availability status info", () => {
+    expect(isValidAvailabilityStatus("available")).toBe(true);
+    expect(isValidAvailabilityStatus("booked_out")).toBe(true);
+    expect(isValidAvailabilityStatus("unknown")).toBe(false);
+    expect(availabilityStatusInfo("booked_out").shortLabel).toBe("Booked out");
+    expect(availabilityStatusInfo(null).shortLabel).toBe("Available now");
+  });
 });
+
+describe("lib/sale proof badges and lot/truck deck estimator", () => {
+  it("parses and labels proof & biosecurity badges", () => {
+    expect(parseProofBadges(["pic_available", "nvd_ready", "bogus"])).toEqual([
+      "pic_available",
+      "nvd_ready",
+    ]);
+    expect(proofBadgeLabel("shedded_rain_free")).toBe("Shedded / Rain-Free");
+  });
+
+  it("estimates total lot value and truck loads for bales, tonnes, and head", () => {
+    const bales = estimateLotSummary({
+      price_cents: 12000,
+      price_type: "per_bale",
+      quantity: 80,
+      unit: "bales",
+    });
+    expect(bales.totalLotText).toContain("$9,600");
+    expect(bales.truckEstimateText).toContain("B-double");
+
+    const grain = estimateLotSummary({
+      price_cents: 35000,
+      price_type: "per_tonne",
+      quantity: 120,
+      unit: "tonnes",
+    });
+    expect(grain.totalLotText).toContain("$42,000");
+    expect(grain.truckEstimateText).toContain("B-double");
+  });
+});
+

@@ -33,7 +33,7 @@ export default async function SettingsPage() {
     supabase
       .from("user_profiles")
       .select(
-        "display_name, trading_name, postcode, bio, abn, abn_verified_at, insurances_held, role_tags, years_in_district"
+        "display_name, trading_name, postcode, bio, abn, abn_verified_at, insurances_held, role_tags, years_in_district, availability_status"
       )
       .eq("user_id", user.id)
       .maybeSingle(),
@@ -56,6 +56,7 @@ export default async function SettingsPage() {
       typeof profile?.years_in_district === "number"
         ? profile.years_in_district
         : null,
+    availability_status: profile?.availability_status ?? "available",
   };
 
   return (

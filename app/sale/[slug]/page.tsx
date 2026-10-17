@@ -7,6 +7,7 @@ import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
 import EnquiryForm from "@/components/detail/EnquiryForm";
 import VendorTrustSection from "@/components/detail/VendorTrustSection";
+import ShareListingBar from "@/components/detail/ShareListingBar";
 import { relativeTime } from "@/lib/format";
 import { buildDescription, buildTitle, breadcrumbJsonLd, jsonLdScript } from "@/lib/seo";
 import { logEvent } from "@/lib/analytics";
@@ -15,7 +16,9 @@ import {
   CONDITION_LABELS,
   DELIVERY_LABELS,
   commodityLabel,
+  estimateLotSummary,
   priceLine,
+  proofBadgeLabel,
   quantityLine,
   type Condition,
   type Delivery,
@@ -52,6 +55,7 @@ type SaleDetail = {
   sold_at: string | null;
   sub_category?: string | null;
   harvest_season?: string | null;
+  proof_badges?: string[] | null;
 };
 
 export default async function SaleDetailPage({
@@ -74,7 +78,7 @@ export default async function SaleDetailPage({
       id, anonymised_id, slug, kind, side, title, description, postcode, state,
       created_at, expires_at, user_id, status,
       category:categories(slug, label),
-      sale_details(price_cents, price_type, quantity, unit, condition, delivery, sold_at, sub_category, harvest_season)
+      sale_details(price_cents, price_type, quantity, unit, condition, delivery, sold_at, sub_category, harvest_season, proof_badges)
     `
     )
     .eq("slug", slug)
@@ -133,6 +137,8 @@ export default async function SaleDetailPage({
   }
 
   const isWanted = (listing as { side?: string | null }).side === "demand";
+  const proofs = Array.isArray(d?.proof_badges) ? d.proof_badges : [];
+  const lotSummary = d ? estimateLotSummary(d) : null;
   const rows: Array<{ label: string; value: string }> = [];
   if (d) {
     rows.push({ label: "Listing type", value: isWanted ? "Wanted to Buy (Chasing)" : "For Sale (Available)" });
@@ -142,6 +148,8 @@ export default async function SaleDetailPage({
     rows.push({ label: isWanted ? "Target price" : "Price", value: priceLine({ price_cents: d.price_cents, price_type: d.price_type, unit: d.unit }) });
     const qty = quantityLine({ quantity: d.quantity, unit: d.unit });
     if (qty) rows.push({ label: "Quantity", value: qty });
+    if (lotSummary?.totalLotText) rows.push({ label: "Estimated lot total", value: lotSummary.totalLotText });
+    if (lotSummary?.truckEstimateText) rows.push({ label: "Estimated freight load", value: lotSummary.truckEstimateText });
     if (d.condition && d.condition !== "na") rows.push({ label: "Condition", value: CONDITION_LABELS[d.condition as Condition] ?? d.condition });
     if (d.delivery) rows.push({ label: "Pickup / delivery", value: DELIVERY_LABELS[d.delivery as Delivery] ?? d.delivery });
   }
@@ -163,6 +171,14 @@ export default async function SaleDetailPage({
         >
           {isWanted ? "Wanted to Buy" : "For Sale"}
         </span>
+        {proofs.map((p) => (
+          <span
+            key={p}
+            className="rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-900"
+          >
+            ✓ {proofBadgeLabel(p)}
+          </span>
+        ))}
       </div>
 
       <div className="mt-2 flex items-baseline justify-between gap-4">
@@ -179,6 +195,48 @@ export default async function SaleDetailPage({
         {listing.state ? `${listing.postcode} ${listing.state}` : `Postcode ${listing.postcode}`} · Posted{" "}
         {relativeTime(listing.created_at)} · Expires {new Date(listing.expires_at).toLocaleDateString("en-AU")}
       </p>
+
+      {(lotSummary?.totalLotText || lotSummary?.truckEstimateText) && (
+        <div className="mt-3 rounded-xl border border-green-200 bg-green-50/70 px-4 py-3 text-xs text-green-950 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            {lotSummary.totalLotText && (
+              <p className="font-bold text-sm text-green-950">
+                💰 {lotSummary.totalLotText}
+              </p>
+            )}
+            {lotSummary.truckEstimateText && (
+              <p className="mt-0.5 text-green-900">
+                🚛 {lotSummary.truckEstimateText}
+              </p>
+            )}
+          </div>
+          <Link
+            href={`/freight?postcode=${listing.postcode}`}
+            className="rounded-lg border border-green-700 bg-white px-3 py-1.5 font-semibold text-green-900 hover:bg-green-100"
+          >
+            Check trucks near {listing.postcode} →
+          </Link>
+        </div>
+      )}
+
+      <ShareListingBar
+        title={listing.title}
+        url={pageUrl}
+        postcode={listing.postcode}
+        state={listing.state}
+        badgeText={isWanted ? "WANTED TO BUY" : "FOR SALE"}
+        summaryLine={
+          d
+            ? [
+                priceLine({ price_cents: d.price_cents, price_type: d.price_type, unit: d.unit }),
+                quantityLine({ quantity: d.quantity, unit: d.unit }),
+                lotSummary?.totalLotText,
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            : null
+        }
+      />
 
       {d?.sold_at && (
         <p className="mt-3 inline-block rounded-lg bg-neutral-100 px-3 py-1 text-sm font-medium text-neutral-700">Sold</p>
@@ -208,6 +266,32 @@ export default async function SaleDetailPage({
           </dl>
         </section>
       )}
+
+      {/* Auto-Suggest Freight Bar */}
+      <div className="mt-6 rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-xs flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="font-bold text-neutral-900">
+            🚛 Need a livestock crate, hay drop-deck or tipper to move this load?
+          </p>
+          <p className="mt-0.5 text-neutral-600">
+            Browse carriers with backload space near {listing.postcode} or post your freight run for direct quotes.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/freight?postcode=${listing.postcode}`}
+            className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 font-semibold text-neutral-800 hover:border-green-700"
+          >
+            Trucks near {listing.postcode}
+          </Link>
+          <Link
+            href="/post/freight"
+            className="rounded-lg bg-green-700 px-3 py-1.5 font-semibold text-white hover:bg-green-800"
+          >
+            Post freight load →
+          </Link>
+        </div>
+      </div>
 
       <section className="mt-8">
         <ContactBlock

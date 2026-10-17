@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import {
   checkPostingGuard,
   checkPostingRateLimit,
+  formDataToRecord,
   getLatestPolicyVersionId,
   honeypotTripped,
   insertListing,
@@ -23,7 +24,7 @@ export async function postForSale(formData: FormData): Promise<ActionResult> {
     redirect("/dashboard/listings");
   }
 
-  const raw = Object.fromEntries(formData.entries());
+  const raw = formDataToRecord(formData);
   const parsed = saleSchema.safeParse(raw);
   if (!parsed.success) {
     return { ok: false, errors: zodErrorsToMap(parsed.error), values: valuesFrom(formData) };
@@ -67,6 +68,7 @@ export async function postForSale(formData: FormData): Promise<ActionResult> {
       delivery: data.delivery ?? "pickup",
       sub_category: data.sub_category || null,
       harvest_season: data.harvest_season || null,
+      proof_badges: data.proof_badges,
     }
   );
 

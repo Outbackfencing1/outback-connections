@@ -6,6 +6,7 @@ import { getCategoryCounts } from "@/lib/category-counts";
 import ListingCard from "@/components/browse/ListingCard";
 import Pagination from "@/components/browse/Pagination";
 import FilterBar from "@/components/browse/FilterBar";
+import SearchAlertBox from "@/components/browse/SearchAlertBox";
 import { logSearch } from "@/lib/analytics";
 import { WORKER_TICKETS, WORKER_TICKET_LABELS, type WorkerTicket } from "@/lib/work-board";
 
@@ -325,6 +326,21 @@ export default async function JobsBrowsePage({
             </select>
           </label>
         </FilterBar>
+
+        <SearchAlertBox
+          vertical="job"
+          signal={ticket || direction || "all"}
+          signalLabel={
+            ticket
+              ? WORKER_TICKET_LABELS[ticket as WorkerTicket]
+              : direction === "available_for_work"
+                ? "available rural workers & operators"
+                : direction === "hiring"
+                  ? "rural jobs hiring"
+                  : "work & skills"
+          }
+          postcode={postcode}
+        />
       </div>
 
       <div className="mt-6">

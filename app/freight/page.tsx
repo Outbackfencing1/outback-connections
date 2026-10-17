@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import ListingCard from "@/components/browse/ListingCard";
 import Pagination from "@/components/browse/Pagination";
 import FilterBar from "@/components/browse/FilterBar";
+import SearchAlertBox from "@/components/browse/SearchAlertBox";
 import { logSearch } from "@/lib/analytics";
 import { getCategoryCounts } from "@/lib/category-counts";
 
@@ -200,6 +201,21 @@ export default async function FreightBrowsePage({
             </select>
           </label>
         </FilterBar>
+
+        <SearchAlertBox
+          vertical="freight"
+          signal={vehicle || direction || "all"}
+          signalLabel={
+            vehicle
+              ? `${vehicle.replace(/_/g, " ")} freight`
+              : direction === "offering_truck"
+                ? "trucks with backload space"
+                : direction === "need_freight"
+                  ? "loads needing a truck"
+                  : "freight & backload runs"
+          }
+          postcode={postcode}
+        />
       </div>
 
       <div className="mt-6">

@@ -143,6 +143,9 @@ export default async function EditListingPage({
       delivery: sale?.delivery ?? "pickup",
       sub_category: sale?.sub_category ?? "",
       harvest_season: sale?.harvest_season ?? "",
+      proof_badges: Array.isArray(sale?.proof_badges)
+        ? sale.proof_badges.join(",")
+        : "",
     };
     body = (
       <PostSaleForm

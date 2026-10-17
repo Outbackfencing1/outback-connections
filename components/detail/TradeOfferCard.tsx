@@ -29,12 +29,14 @@ export default function TradeOfferCard({
         From the people who run this site
       </p>
       <p className="mt-2 font-semibold text-neutral-900">
-        Fencing contractor? Trade pricing on clips, wire, posts and the Outback cordless
-        clipgun.
+        Pricing a fence line or running a crew? Direct trade supply on the 18V Cordless Clip
+        Gun (Full Kit $1,699), C24 stainless clips, Pickets &amp; Australian-rolled mesh.
       </p>
       <p className="mt-1 text-neutral-700">
         Outback Connections is run by Outback Fencing &amp; Steel Supplies in Orange NSW. We
-        sell direct to contractors across rural Australia.
+        supply Bitumen, Gal &amp; Jumbo Pickets, Hinge Joint (`7/90/30`, `8/90/30`, `8/115/15`),
+        Fixed Knot Exclusion Mesh (`16/180/15`), N-Brace gates, and the 18V Clip Gun (fits
+        Makita 18V directly, or Milwaukee M18 via adaptor).
       </p>
       <div className="mt-3 flex flex-wrap gap-3">
         <a
@@ -43,7 +45,7 @@ export default function TradeOfferCard({
           rel="nofollow noopener noreferrer"
           className="rounded-lg bg-green-700 px-4 py-2 font-semibold text-white hover:bg-green-800"
         >
-          See the clipgun →
+          See the 18V Clip Gun Full Kit →
         </a>
         <a
           href={storeUrl}
@@ -51,7 +53,7 @@ export default function TradeOfferCard({
           rel="nofollow noopener noreferrer"
           className="rounded-lg border border-green-700 bg-white px-4 py-2 font-semibold text-green-800 hover:bg-green-100"
         >
-          Ask about trade pricing
+          Mesh, Pickets &amp; Trade Quotes
         </a>
       </div>
       <p className="mt-3 text-xs text-neutral-500">

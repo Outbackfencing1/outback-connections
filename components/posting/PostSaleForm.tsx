@@ -12,6 +12,7 @@ import {
   HARVEST_SEASONS,
   PRICE_TYPES,
   PRICE_TYPE_LABELS,
+  PROOF_BADGES,
 } from "@/lib/sale";
 
 type Props = {
@@ -30,6 +31,12 @@ export default function PostSaleForm({ categories, action, listingId, defaults, 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, start] = useTransition();
   const isWanted = side === "demand";
+  const initialProofBadges = new Set(
+    v("proof_badges")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -265,6 +272,31 @@ export default function PostSaleForm({ categories, action, listingId, defaults, 
               ))}
             </select>
           </Field>
+        </div>
+
+        <div className="mt-4 border-t border-neutral-200 pt-3">
+          <span className="block text-xs font-semibold uppercase tracking-wide text-neutral-700">
+            {isWanted
+              ? "Required declarations / loading (optional)"
+              : "Proof, biosecurity & loading badges (optional — builds buyer trust)"}
+          </span>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {PROOF_BADGES.map((b) => (
+              <label
+                key={b.slug}
+                className="flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-medium text-neutral-800 hover:border-green-700"
+              >
+                <input
+                  type="checkbox"
+                  name="proof_badges"
+                  value={b.slug}
+                  defaultChecked={initialProofBadges.has(b.slug)}
+                  className="h-4 w-4 rounded border-neutral-300 text-green-700"
+                />
+                ✓ {b.label}
+              </label>
+            ))}
+          </div>
         </div>
       </div>
 

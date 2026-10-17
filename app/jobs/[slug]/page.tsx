@@ -9,6 +9,8 @@ import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
 import EnquiryForm from "@/components/detail/EnquiryForm";
 import VendorTrustSection from "@/components/detail/VendorTrustSection";
+import ShareListingBar from "@/components/detail/ShareListingBar";
+import TradeOfferCard from "@/components/detail/TradeOfferCard";
 import { kindLabel, relativeTime } from "@/lib/format";
 import {
   buildDescription,
@@ -255,6 +257,15 @@ export default async function JobDetailPage({
         Expires {new Date(listing.expires_at).toLocaleDateString("en-AU")}
       </p>
 
+      <ShareListingBar
+        title={listing.title}
+        url={pageUrl}
+        postcode={listing.postcode}
+        state={listing.state}
+        badgeText={isWorkerProfile ? "AVAILABLE FOR WORK" : "HIRING"}
+        summaryLine={cat?.label ?? null}
+      />
+
       {isOwner && (
         <div className="mt-4">
           <OwnerActions listingId={listing.id} listingTitle={listing.title} />
@@ -341,6 +352,16 @@ export default async function JobDetailPage({
           viewerId={viewer?.id ?? null}
         />
       )}
+
+      <TradeOfferCard
+        categorySlug={
+          cat?.slug ||
+          (Array.isArray(detail?.tickets) && detail.tickets.includes("fencing_exclusion")
+            ? "fencing-labour"
+            : null)
+        }
+        placement="listing"
+      />
 
       {!isOwner && (
         <div className="mt-8 space-y-3">

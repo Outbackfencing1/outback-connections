@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ListingCard from "@/components/browse/ListingCard";
 import VendorTrustSection from "@/components/detail/VendorTrustSection";
+import ShareListingBar from "@/components/detail/ShareListingBar";
 import type { VendorTrustSummary } from "@/lib/trust";
 
 export const dynamic = "force-dynamic";
@@ -140,6 +141,12 @@ export default async function PublicVendorProfilePage({
         returnPath={`/profile/${id}`}
         viewerId={viewer?.id ?? null}
         showProfileLink={false}
+      />
+
+      <ShareListingBar
+        title={fallbackTitle}
+        path={`/profile/${id}`}
+        badge="Trusted Rural Profile & Reviews"
       />
 
       <section className="mt-10">

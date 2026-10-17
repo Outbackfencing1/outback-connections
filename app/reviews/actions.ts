@@ -210,3 +210,128 @@ export async function replyToVendorReview(
 
   return { ok: true };
 }
+
+export async function submitQuickVouch(formData: FormData): Promise<void> {
+  const supabase = createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  const user = auth.user;
+  if (!user) return;
+
+  const targetUserId = String(formData.get("target_user_id") ?? "").trim() || null;
+  const targetBusinessId = String(formData.get("target_business_id") ?? "").trim() || null;
+  const listingId = String(formData.get("listing_id") ?? "").trim() || null;
+  const tagRaw = String(formData.get("tag") ?? "great_communication").trim();
+  const returnPath = String(formData.get("return_path") ?? "").trim();
+
+  if (!targetUserId && !targetBusinessId) return;
+  if (targetUserId && targetUserId === user.id) return;
+
+  const tag = isValidTrustTag(tagRaw) ? tagRaw : "great_communication";
+  const admin = createAdminClient();
+  if (!admin) return;
+
+  const { data: reviewerProfile } = await admin
+    .from("user_profiles")
+    .select("display_name, trading_name, postcode")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const reviewerName =
+    reviewerProfile?.trading_name ||
+    reviewerProfile?.display_name ||
+    (user.email ? user.email.split("@")[0] : "Verified Member") ||
+    "Verified Member";
+
+  // Check if reviewer already vouched for this target without a listing or on this listing
+  let existingQuery = admin
+    .from("vendor_reviews")
+    .select("id, tags")
+    .eq("reviewer_user_id", user.id);
+
+  if (listingId) {
+    existingQuery = existingQuery.eq("listing_id", listingId);
+  } else if (targetUserId) {
+    existingQuery = existingQuery.eq("target_user_id", targetUserId).is("listing_id", null);
+  } else if (targetBusinessId) {
+    existingQuery = existingQuery.eq("target_business_id", targetBusinessId).is("listing_id", null);
+  }
+
+  const { data: existing } = await existingQuery.maybeSingle();
+  if (existing) {
+    const existingTags = Array.isArray(existing.tags) ? (existing.tags as string[]) : [];
+    const mergedTags = Array.from(new Set([...existingTags, tag]));
+    await admin
+      .from("vendor_reviews")
+      .update({ tags: mergedTags })
+      .eq("id", existing.id);
+  } else {
+    await admin.from("vendor_reviews").insert({
+      listing_id: listingId,
+      target_user_id: targetUserId,
+      target_business_id: targetBusinessId,
+      reviewer_user_id: user.id,
+      reviewer_display_name: reviewerName.slice(0, 60),
+      reviewer_postcode: reviewerProfile?.postcode ?? null,
+      rating: 5,
+      would_recommend: true,
+      deal_type: "general",
+      tags: [tag],
+      comment: null,
+      status: "published",
+    });
+  }
+
+  if (returnPath && returnPath.startsWith("/")) {
+    revalidatePath(returnPath);
+  }
+  if (targetUserId) revalidatePath(`/profile/${targetUserId}`);
+  if (targetBusinessId) revalidatePath(`/profile/${targetBusinessId}`);
+  revalidatePath("/profiles");
+}
+
+export async function toggleOutbackVerified(formData: FormData): Promise<void> {
+  const supabase = createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  const user = auth.user;
+  if (!user) return;
+
+  const { data: staffCheck } = await supabase
+    .from("user_profiles")
+    .select("is_admin, is_staff")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!(staffCheck?.is_admin || staffCheck?.is_staff)) return;
+
+  const targetUserId = String(formData.get("target_user_id") ?? "").trim() || null;
+  const targetBusinessId = String(formData.get("target_business_id") ?? "").trim() || null;
+  const nextVal = String(formData.get("next_value") ?? "true") === "true";
+  const returnPath = String(formData.get("return_path") ?? "").trim();
+
+  const admin = createAdminClient();
+  if (!admin) return;
+
+  if (targetUserId) {
+    await admin
+      .from("user_profiles")
+      .update({
+        outback_verified: nextVal,
+        outback_verified_at: nextVal ? new Date().toISOString() : null,
+      })
+      .eq("user_id", targetUserId);
+  }
+  if (targetBusinessId) {
+    await admin
+      .from("businesses")
+      .update({ outback_verified: nextVal })
+      .eq("id", targetBusinessId);
+  }
+
+  if (returnPath && returnPath.startsWith("/")) {
+    revalidatePath(returnPath);
+  }
+  if (targetUserId) revalidatePath(`/profile/${targetUserId}`);
+  if (targetBusinessId) revalidatePath(`/profile/${targetBusinessId}`);
+  revalidatePath("/profiles");
+}
+

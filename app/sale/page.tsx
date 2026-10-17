@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCategoryCounts } from "@/lib/category-counts";
 import Pagination from "@/components/browse/Pagination";
 import FilterBar from "@/components/browse/FilterBar";
+import SearchAlertBox from "@/components/browse/SearchAlertBox";
 import { logSearch } from "@/lib/analytics";
 import { relativeTime, teaser } from "@/lib/format";
 import {
@@ -12,7 +13,9 @@ import {
   DELIVERY,
   DELIVERY_LABELS,
   commodityLabel,
+  estimateLotSummary,
   priceLine,
+  proofBadgeLabel,
   quantityLine,
   type Delivery,
 } from "@/lib/sale";
@@ -59,6 +62,7 @@ type SaleDetailRow = {
   sold_at: string | null;
   sub_category?: string | null;
   harvest_season?: string | null;
+  proof_badges?: string[] | null;
 };
 
 type SaleListingRow = {
@@ -76,19 +80,19 @@ type SaleListingRow = {
 };
 
 const QUICK_SALE_CHIPS: { code: string; label: string }[] = [
-  { code: "cattle-steers", label: "Cattle (Steers & Heifers)" },
-  { code: "cattle-breeders", label: "Cows & Calves" },
-  { code: "sheep-lambs", label: "Sheep & Lambs" },
-  { code: "lucerne-hay", label: "Lucerne Hay" },
-  { code: "wheaten-hay", label: "Wheaten Hay" },
-  { code: "oaten-hay", label: "Oaten Hay" },
+  { code: "cattle_steers", label: "Cattle (Steers & Feeders)" },
+  { code: "cattle_cows_calves", label: "Cows & Calves" },
+  { code: "sheep_lambs", label: "Sheep & Lambs" },
+  { code: "lucerne_hay", label: "Lucerne Hay" },
+  { code: "wheaten_hay", label: "Wheaten Hay" },
+  { code: "oaten_hay", label: "Oaten Hay" },
   { code: "silage", label: "Silage" },
-  { code: "feed-barley", label: "Feed Barley" },
+  { code: "barley", label: "Feed Barley" },
   { code: "wheat", label: "Wheat" },
   { code: "canola", label: "Canola" },
-  { code: "tractors", label: "Tractors" },
-  { code: "headers-harvesters", label: "Headers & Harvesters" },
-  { code: "fencing-materials", label: "Mesh, Pickets & Gates" },
+  { code: "tractor", label: "Tractors" },
+  { code: "header_harvester", label: "Headers & Harvesters" },
+  { code: "hinge_joint_mesh", label: "Mesh, Pickets & Gates" },
 ];
 
 export default async function SaleBrowsePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -120,7 +124,7 @@ export default async function SaleBrowsePage({ searchParams }: { searchParams: P
       `
       anonymised_id, slug, kind, side, title, description, postcode, state, created_at,
       category:categories(slug, label),
-      sale_details!inner(price_cents, price_type, quantity, unit, condition, delivery, sold_at, sub_category, harvest_season)
+      sale_details!inner(price_cents, price_type, quantity, unit, condition, delivery, sold_at, sub_category, harvest_season, proof_badges)
     `,
       { count: "exact" }
     )
@@ -339,6 +343,21 @@ export default async function SaleBrowsePage({ searchParams }: { searchParams: P
             </select>
           </label>
         </FilterBar>
+
+        <SearchAlertBox
+          vertical="sale"
+          signal={subCategory || side || "all"}
+          signalLabel={
+            subCategory
+              ? commodityLabel(subCategory) ?? "livestock, hay & gear"
+              : side === "demand"
+                ? "wanted to buy"
+                : side === "supply"
+                  ? "livestock, hay & gear for sale"
+                  : "livestock, hay & gear"
+          }
+          postcode={postcode}
+        />
       </div>
 
       <div className="mt-6">
@@ -426,6 +445,8 @@ export default async function SaleBrowsePage({ searchParams }: { searchParams: P
               const qty = d ? quantityLine({ quantity: d.quantity, unit: d.unit }) : null;
               const subLabel = d ? commodityLabel(d.sub_category) : null;
               const isWanted = l.side === "demand";
+              const proofs = Array.isArray(d?.proof_badges) ? d.proof_badges : [];
+              const lot = d ? estimateLotSummary(d) : null;
               return (
                 <li key={l.anonymised_id}>
                   <Link
@@ -456,10 +477,23 @@ export default async function SaleBrowsePage({ searchParams }: { searchParams: P
                     <p className="mt-1 text-xs text-neutral-600">
                       {subLabel ?? cat?.label ?? "—"}
                       {qty ? ` · ${qty}` : ""}
+                      {lot?.totalLotText ? ` (${lot.totalLotText})` : ""}
                       {d?.harvest_season ? ` · ${d.harvest_season}` : ""} ·{" "}
                       {l.state ? `${l.postcode} ${l.state}` : `Postcode ${l.postcode}`} ·{" "}
                       {relativeTime(l.created_at)}
                     </p>
+                    {proofs.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {proofs.map((p) => (
+                          <span
+                            key={p}
+                            className="rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-900"
+                          >
+                            ✓ {proofBadgeLabel(p)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <p className="mt-3 text-sm text-neutral-700">{teaser(l.description, 160)}</p>
                   </Link>
                 </li>

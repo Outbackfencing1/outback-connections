@@ -167,3 +167,130 @@ export const HARVEST_SEASONS = [
   "Weaned / Yard Prepared",
 ] as const;
 
+export const PROOF_BADGES = [
+  { slug: "pic_available", label: "PIC Available" },
+  { slug: "nvd_ready", label: "NVD / Waybill Ready" },
+  { slug: "shedded_rain_free", label: "Shedded / Rain-Free" },
+  { slug: "weed_free_declared", label: "Weed-Free Declared" },
+  { slug: "loading_available", label: "Forklift / Loader / Ramp On-Farm" },
+] as const;
+
+export type ProofBadgeSlug = (typeof PROOF_BADGES)[number]["slug"];
+
+const PROOF_BADGE_MAP = new Map<string, string>(
+  PROOF_BADGES.map((b) => [b.slug, b.label])
+);
+
+export function isValidProofBadge(slug: string): slug is ProofBadgeSlug {
+  return PROOF_BADGE_MAP.has(slug);
+}
+
+export function proofBadgeLabel(slug: string): string {
+  return PROOF_BADGE_MAP.get(slug) ?? slug;
+}
+
+export function parseProofBadges(raw: unknown): ProofBadgeSlug[] {
+  if (!raw) return [];
+  const items: string[] = Array.isArray(raw)
+    ? raw.map(String)
+    : typeof raw === "string"
+      ? raw.split(",")
+      : [];
+  const seen = new Set<ProofBadgeSlug>();
+  for (const item of items) {
+    const clean = item.trim();
+    if (isValidProofBadge(clean)) seen.add(clean);
+  }
+  return Array.from(seen);
+}
+
+/**
+ * Computes total lot value and approximate truck/deck equivalents for livestock,
+ * hay bales, or grain tonnes so buyers & carriers can size the load at a glance.
+ */
+export function estimateLotSummary(d: {
+  price_cents: number | null;
+  price_type: string;
+  quantity: number | null;
+  unit?: string | null;
+}): {
+  totalLotCents: number | null;
+  totalLotText: string | null;
+  truckEstimateText: string | null;
+} {
+  const qty = d.quantity !== null && d.quantity !== undefined ? Number(d.quantity) : null;
+  if (!qty || qty <= 0) {
+    return { totalLotCents: null, totalLotText: null, truckEstimateText: null };
+  }
+
+  const unitLower = (d.unit ?? "").toLowerCase().trim();
+  const isPerUnitPrice =
+    d.price_type === "per_head" ||
+    d.price_type === "per_bale" ||
+    d.price_type === "per_tonne" ||
+    d.price_type === "per_unit";
+
+  let totalLotCents: number | null = null;
+  let totalLotText: string | null = null;
+  if (isPerUnitPrice && d.price_cents && d.price_cents > 0 && qty > 1) {
+    totalLotCents = Math.round(d.price_cents * qty);
+    const unitName =
+      d.unit ||
+      (d.price_type === "per_head"
+        ? "head"
+        : d.price_type === "per_bale"
+          ? "bales"
+          : d.price_type === "per_tonne"
+            ? "tonnes"
+            : "units");
+    totalLotText = `${qty.toLocaleString("en-AU")} ${unitName} × ${formatAud(d.price_cents)} = ${formatAud(totalLotCents, { whole: true })} total lot`;
+  }
+
+  let truckEstimateText: string | null = null;
+  if (
+    d.price_type === "per_bale" ||
+    unitLower.includes("bale") ||
+    unitLower.includes("roll")
+  ) {
+    // Typical single drop-deck carries ~36–44 large square/round bales; B-double ~56–68
+    const singleDecks = Math.max(1, Math.ceil(qty / 40));
+    const bDoubles = Math.max(1, Math.ceil(qty / 62));
+    truckEstimateText =
+      qty >= 50
+        ? `Approx. ${bDoubles} B-double load${bDoubles === 1 ? "" : "s"} (or ~${singleDecks} single drop-deck${singleDecks === 1 ? "" : "s"})`
+        : `Approx. ${singleDecks} single drop-deck / semi load${singleDecks === 1 ? "" : "s"}`;
+  } else if (
+    d.price_type === "per_tonne" ||
+    unitLower === "t" ||
+    unitLower.includes("tonne") ||
+    unitLower.includes("ton")
+  ) {
+    // Typical single grain tipper ~26t, B-double ~42t, road train ~78t
+    const bDoubles = Math.max(1, Math.ceil(qty / 42));
+    const singles = Math.max(1, Math.ceil(qty / 26));
+    truckEstimateText =
+      qty >= 35
+        ? `Approx. ${bDoubles} B-double tipper load${bDoubles === 1 ? "" : "s"} (~42t/load)`
+        : `Approx. ${singles} single bogie/semi tipper load${singles === 1 ? "" : "s"}`;
+  } else if (
+    d.price_type === "per_head" ||
+    unitLower.includes("head") ||
+    unitLower.includes("steer") ||
+    unitLower.includes("heifer") ||
+    unitLower.includes("ewe") ||
+    unitLower.includes("lamb")
+  ) {
+    const isSheep =
+      unitLower.includes("ewe") ||
+      unitLower.includes("lamb") ||
+      unitLower.includes("wether") ||
+      unitLower.includes("sheep");
+    const perDeck = isSheep ? 110 : 28;
+    const decks = Math.max(1, Math.ceil(qty / perDeck));
+    truckEstimateText = `Approx. ${decks} standard ${isSheep ? "sheep" : "cattle"} deck${decks === 1 ? "" : "s"}`;
+  }
+
+  return { totalLotCents, totalLotText, truckEstimateText };
+}
+
+

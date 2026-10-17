@@ -12,6 +12,7 @@ import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
 import VendorTrustSection from "@/components/detail/VendorTrustSection";
+import ShareListingBar from "@/components/detail/ShareListingBar";
 import { kindLabel, postedVerb, relativeTime } from "@/lib/format";
 import {
   buildDescription,
@@ -271,6 +272,14 @@ export default async function ServiceDetailPage({
       </section>
 
       {detail && <ServiceDetails detail={detail} />}
+
+      <ShareListingBar
+        title={listing.title}
+        path={`/services/listing/${listing.slug}`}
+        postcode={listing.postcode}
+        state={listing.state}
+        badge={cat?.label ?? kindLabel(listing.kind)}
+      />
 
       <section className="mt-8">
         {isUnclaimedScraped ? (

@@ -8,6 +8,7 @@ import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
 import EnquiryForm from "@/components/detail/EnquiryForm";
 import VendorTrustSection from "@/components/detail/VendorTrustSection";
+import ShareListingBar from "@/components/detail/ShareListingBar";
 import { kindLabel, relativeTime } from "@/lib/format";
 import { buildDescription, buildTitle, localBusinessJsonLd, breadcrumbJsonLd, jsonLdScript } from "@/lib/seo";
 import { logEvent } from "@/lib/analytics";
@@ -191,6 +192,18 @@ export default async function FreightDetailPage({
       </section>
 
       {detail && <FreightDetails detail={detail} />}
+
+      <ShareListingBar
+        title={listing.title}
+        path={`/freight/${listing.slug}`}
+        postcode={listing.postcode}
+        state={listing.state}
+        badge={
+          detail?.direction === "need_freight"
+            ? "Freight load needing a truck"
+            : "Truck with deck space available"
+        }
+      />
 
       <section className="mt-8">
         {isUnclaimedScraped ? (

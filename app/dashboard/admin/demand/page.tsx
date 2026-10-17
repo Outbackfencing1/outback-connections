@@ -9,6 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { commodityLabel, formatAud, priceLine } from "@/lib/sale";
 import { ticketLabel } from "@/lib/work-board";
 import ForecastCsvExport from "@/components/admin/ForecastCsvExport";
+import CopyTextButton from "@/components/admin/CopyTextButton";
 
 export const metadata = {
   title: "Demand & Forecasting — Outback Connections",
@@ -98,12 +99,21 @@ type SearchSignalRow = {
   zero_result_searches: number;
 };
 
+type SavedAlertRow = {
+  vertical: string;
+  signal: string;
+  region_name: string;
+  state: string | null;
+  active_subscribers: number;
+};
+
 type MarketIntel = {
   window_months: number;
   commodities: CommodityForecastRow[];
   work_board: WorkForecastRow[];
   tickets: TicketCountRow[];
   search_signals?: SearchSignalRow[];
+  saved_alerts?: SavedAlertRow[];
 };
 
 const aud = (cents: number) => formatAud(cents, { whole: true });
@@ -175,6 +185,83 @@ export default async function DemandPage({
   const label = (r: { region_name: string | null; state: string | null }) =>
     r.region_name ? `${r.region_name}${r.state ? `, ${r.state}` : ""}` : "Unknown region";
 
+  // Build "Unmet Demand — Post This on Facebook Today" hotlist items
+  const hotlist: Array<{
+    badge: string;
+    headline: string;
+    detail: string;
+    fbPost: string;
+  }> = [];
+
+  if (marketIntel?.commodities) {
+    for (const c of marketIntel.commodities) {
+      const wanted = c.wanted_count ?? 0;
+      const forSale = c.for_sale_count ?? c.listings_count;
+      if (wanted > 0 && forSale === 0) {
+        const commName = commodityLabel(c.commodity) ?? c.category_label;
+        const reg = label(c);
+        const vol =
+          (c.quantity_wanted ?? 0) > 0
+            ? `${Number(c.quantity_wanted).toLocaleString("en-AU")}${c.unit ? ` ${c.unit}` : ""}`
+            : `${wanted} buyer listing${wanted === 1 ? "" : "s"}`;
+        hotlist.push({
+          badge: "Wanted to Buy Shortage",
+          headline: `${commName} wanted in ${reg}`,
+          detail: `${vol} wanted · 0 listed for sale`,
+          fbPost: `CHASING ${commName.toUpperCase()} IN ${reg.toUpperCase()} 🌾🐄\n\nWe have buyers on Outback Connections actively chasing ${commName} (${vol}) around ${reg} right now with zero local lots listed.\n\nGot some in the shed or paddock? List it free in 60 seconds so buyers can contact you direct:\nhttps://www.outbackconnections.com.au/post/sale`,
+        });
+      }
+    }
+  }
+
+  if (marketIntel?.work_board) {
+    for (const w of marketIntel.work_board) {
+      if (w.jobs_hiring > 0 && w.workers_available === 0) {
+        const reg = label(w);
+        hotlist.push({
+          badge: "Worker / Operator Shortage",
+          headline: `${w.role_label} needed in ${reg}`,
+          detail: `${w.jobs_hiring} job${w.jobs_hiring === 1 ? "" : "s"} hiring · 0 workers listed`,
+          fbPost: `WORK AVAILABLE: ${w.role_label.toUpperCase()} NEEDED AROUND ${reg.toUpperCase()} 🚜🔧\n\nFarms & rural businesses have ${w.jobs_hiring} open ${w.role_label} role${w.jobs_hiring === 1 ? "" : "s"} on Outback Connections in ${reg} right now.\n\nLooking for work or know an operator with tickets? Put your skills up free or check the board:\nhttps://www.outbackconnections.com.au/jobs`,
+        });
+      }
+    }
+  }
+
+  if (marketIntel?.search_signals) {
+    for (const s of marketIntel.search_signals) {
+      if (s.zero_result_searches > 0) {
+        const sigName = formatSignalLabel(s.vertical, s.signal);
+        const reg = label(s);
+        const postUrl =
+          s.vertical === "job"
+            ? "https://www.outbackconnections.com.au/post/job"
+            : s.vertical === "sale"
+              ? "https://www.outbackconnections.com.au/post/sale"
+              : "https://www.outbackconnections.com.au/post/freight";
+        hotlist.push({
+          badge: "Zero-Result Search Gap",
+          headline: `${sigName} searched in ${reg}`,
+          detail: `${s.zero_result_searches} search${s.zero_result_searches === 1 ? "" : "es"} found 0 listings`,
+          fbPost: `ANYONE AROUND ${reg.toUpperCase()} GOT ${sigName.toUpperCase()}? 👀\n\nFarmers have been searching Outback Connections for ${sigName} in ${reg} this week and coming up empty.\n\nIf you can help out, list it free here so locals can find you:\n${postUrl}`,
+        });
+      }
+    }
+  }
+
+  if (report?.gaps) {
+    for (const g of report.gaps.slice(0, 6)) {
+      const reg = label(g);
+      const cat = g.category ?? "Rural Contractors";
+      hotlist.push({
+        badge: "Contractor / Service Gap",
+        headline: `${cat} needed in ${reg}`,
+        detail: `${g.demand} farmer enquiry/search · 0 listed`,
+        fbPost: `CALLING ${cat.toUpperCase()} AROUND ${reg.toUpperCase()} 🛠️\n\nLandholders around ${reg} are looking for ${cat} on Outback Connections right now.\n\nList your business or crew free so local farmers can get in touch direct:\nhttps://www.outbackconnections.com.au/post/service`,
+      });
+    }
+  }
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
       <div className="flex items-baseline justify-between gap-4">
@@ -183,7 +270,7 @@ export default async function DemandPage({
       </div>
       <p className="mt-2 text-sm text-neutral-700">
         Regional demand, livestock &amp; crop supply vs wanted-to-buy &amp; sold volume, rural
-        worker/operator availability, live search signals, and Shopify sales correlation. Aggregate
+        worker/operator availability, live search signals, saved alerts, and Shopify sales correlation. Aggregate
         only; nobody&apos;s personal details are shown here.
       </p>
 
@@ -204,6 +291,54 @@ export default async function DemandPage({
       {err && (
         <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{err}</div>
       )}
+
+      {/* Unmet Demand — Post This on Facebook Today Hotlist */}
+      <section className="mt-8 rounded-2xl border border-amber-300 bg-amber-50/70 p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-amber-900">
+              3M/Month Facebook Reach · Actionable Supply Shortages
+            </p>
+            <h2 className="mt-0.5 text-lg font-bold text-neutral-900">
+              Unmet Demand — &ldquo;Post This on Facebook Today&rdquo; Hotlist
+            </h2>
+            <p className="mt-1 text-xs text-neutral-700">
+              Automatic call-outs generated from Wanted-to-Buy shortages, unfilled jobs, and zero-result searches. Click to copy a ready-made Facebook post.
+            </p>
+          </div>
+        </div>
+        {hotlist.length === 0 ? (
+          <p className="mt-3 rounded-xl border border-amber-200 bg-white p-4 text-xs text-neutral-600">
+            No immediate zero-supply shortages detected in this window yet — or click the general Facebook call-out below to drive fresh listings:
+            <span className="mt-2 block">
+              <CopyTextButton
+                label="Copy General Facebook Marketplace Call-Out"
+                text={`GOT HAY, STOCK, GEAR OR LOOKING FOR RURAL WORK? 🚜🌾🐄\n\nInstead of posts getting lost in the Facebook feed, put your listing or skills up free on Outback Connections so farmers, drivers and contractors can search by postcode, tickets and commodity:\n\n👉 Browse or post free: https://www.outbackconnections.com.au`}
+              />
+            </span>
+          </p>
+        ) : (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {hotlist.slice(0, 8).map((item, idx) => (
+              <div
+                key={idx}
+                className="flex flex-col justify-between rounded-xl border border-amber-200 bg-white p-3.5 shadow-sm"
+              >
+                <div>
+                  <span className="inline-block rounded bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                    {item.badge}
+                  </span>
+                  <p className="mt-1.5 text-sm font-bold text-neutral-900">{item.headline}</p>
+                  <p className="mt-0.5 text-xs text-neutral-600">{item.detail}</p>
+                </div>
+                <div className="mt-3 flex items-center justify-between border-t border-neutral-100 pt-2.5">
+                  <CopyTextButton text={item.fbPost} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* Crops, Hay & Livestock Market Intelligence */}
       {marketIntel && (
@@ -470,6 +605,66 @@ export default async function DemandPage({
                       <td className="px-3 py-2">{label(s)}</td>
                       <td className="px-3 py-2">{s.searches}</td>
                       <td className="px-3 py-2">{s.zero_result_searches}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Saved Search Alerts (Active Buyer & Hiring Subscriptions) */}
+      {marketIntel?.saved_alerts && (
+        <section className="mt-8">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-neutral-900">
+                Active saved search alerts (buyers &amp; farms waiting for a match)
+              </h2>
+              <p className="mt-1 text-xs text-neutral-600">
+                Subscribers who clicked &ldquo;Email me when new matches are posted&rdquo; on Livestock/Harvest, Work &amp; Skills, or Freight.
+              </p>
+            </div>
+            {marketIntel.saved_alerts.length > 0 && (
+              <ForecastCsvExport
+                filename={`outback-saved-alerts.csv`}
+                label="Export Saved Alerts CSV"
+                headers={["Board", "Commodity / Role / Filter", "Region", "State", "Active Subscribers"]}
+                rows={marketIntel.saved_alerts.map((a) => [
+                  a.vertical,
+                  formatSignalLabel(a.vertical, a.signal),
+                  a.region_name,
+                  a.state ?? "",
+                  a.active_subscribers,
+                ])}
+              />
+            )}
+          </div>
+          {marketIntel.saved_alerts.length === 0 ? (
+            <p className="mt-2 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-4 text-sm text-neutral-600">
+              No active search alert subscriptions yet. Every browse page now has a 1-click &ldquo;Email me when new matches are posted&rdquo; box.
+            </p>
+          ) : (
+            <div className="mt-2 overflow-x-auto rounded-xl border border-neutral-200">
+              <table className="min-w-full divide-y divide-neutral-200 text-sm">
+                <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-600">
+                  <tr>
+                    <th className="px-3 py-2">Board</th>
+                    <th className="px-3 py-2">Commodity / Role / Filter</th>
+                    <th className="px-3 py-2">Region</th>
+                    <th className="px-3 py-2">Subscribers waiting</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {marketIntel.saved_alerts.map((a, i) => (
+                    <tr key={i}>
+                      <td className="px-3 py-2 font-medium capitalize text-neutral-900">
+                        {a.vertical === "job" ? "Work & Skills" : a.vertical === "sale" ? "Livestock & Harvest" : "Freight"}
+                      </td>
+                      <td className="px-3 py-2">{formatSignalLabel(a.vertical, a.signal)}</td>
+                      <td className="px-3 py-2">{label(a)}</td>
+                      <td className="px-3 py-2 font-semibold text-green-900">{a.active_subscribers}</td>
                     </tr>
                   ))}
                 </tbody>

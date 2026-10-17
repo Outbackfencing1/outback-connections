@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { lookupAbn } from "@/lib/abr";
 import {
+  isValidAvailabilityStatus,
   isValidInsuranceBadge,
   isValidRoleTag,
   normaliseAbn,
@@ -88,6 +89,10 @@ export async function updateTrustProfile(
   const bio = String(formData.get("bio") ?? "").trim();
   const abnRaw = String(formData.get("abn") ?? "").trim();
   const yearsRaw = String(formData.get("years_in_district") ?? "").trim();
+  const availRaw = String(formData.get("availability_status") ?? "available").trim();
+  const availabilityStatus = isValidAvailabilityStatus(availRaw)
+    ? availRaw
+    : "available";
 
   const rawInsurances = formData.getAll("insurances_held").map((v) => String(v).trim());
   const insurancesHeld = Array.from(new Set(rawInsurances.filter(isValidInsuranceBadge)));
@@ -162,6 +167,7 @@ export async function updateTrustProfile(
       insurances_held: insurancesHeld,
       role_tags: roleTags,
       years_in_district: yearsInDistrict,
+      availability_status: availabilityStatus,
       email_verified_at: user.email_confirmed_at ?? null,
     },
     { onConflict: "user_id" }
@@ -186,6 +192,7 @@ export async function updateTrustProfile(
 
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard");
+  revalidatePath("/profiles");
   revalidatePath(`/profile/${user.id}`);
 
   return { ok: true };
