@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { listingHref } from "@/lib/format";
 import {
   ROLE_TAGS,
   availabilityStatusInfo,
   formatAbn,
+  formatPhoneHref,
   insuranceBadgeLabel,
+  isAustralianMobile,
   isValidRoleTag,
   roleTagLabel,
   trustTagLabel,
@@ -13,9 +16,9 @@ import {
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Trusted People, Contractors & Vendors — Outback Connections",
+  title: "Verified Contractors, Carriers, Skilled Labour & Customer Profiles — Outback Connections",
   description:
-    "Browse verified rural contractors, truck drivers, header operators, farmers, and livestock & hay vendors with ABN verification and community vouches.",
+    "Find verified rural fencing contractors, livestock & hay carriers, header operators, earthmovers, shearers, bore drillers, and property profiles with 1-click phone numbers, ABN verification, and community vouches.",
 };
 
 type TrustedProfileItem = {
@@ -26,6 +29,7 @@ type TrustedProfileItem = {
   display_name: string | null;
   trading_name: string | null;
   bio: string | null;
+  suburb?: string | null;
   postcode: string | null;
   state: string | null;
   member_since: string | null;
@@ -33,6 +37,11 @@ type TrustedProfileItem = {
   abn_verified: boolean;
   abn: string | null;
   is_claimed_business: boolean;
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  website_url?: string | null;
+  facebook_url?: string | null;
+  services_offered?: string[];
   insurances_held: string[];
   role_tags: string[];
   years_in_district: number | null;
@@ -44,7 +53,21 @@ type TrustedProfileItem = {
   avg_rating: number | null;
   recommend_pct: number | null;
   top_tags: Array<{ tag: string; count: number }>;
+  listing_slug?: string | null;
+  listing_kind?: string | null;
+  category_label?: string | null;
 };
+
+function getInitials(name: string): string {
+  const words = name
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length === 0) return "OC";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
 
 export default async function TrustedProfilesDirectoryPage({
   searchParams,
@@ -55,140 +78,162 @@ export default async function TrustedProfilesDirectoryPage({
   const roleRaw = typeof sp.role === "string" ? sp.role.trim() : "";
   const role = isValidRoleTag(roleRaw) ? roleRaw : "";
   const postcodeRaw = typeof sp.postcode === "string" ? sp.postcode.trim() : "";
-  const postcode = /^\d{4}$/.test(postcodeRaw) ? postcodeRaw : "";
+  const postcode = /^\d{3,4}$/.test(postcodeRaw) ? postcodeRaw : "";
+  const qRaw = typeof sp.q === "string" ? sp.q.trim() : "";
   const abnOnly = sp.abn === "1";
 
   const supabase = createClient();
 
+  // Map newer granular role slugs so RPC + client filtering both work seamlessly
+  const rpcRole =
+    role === "earthmoving_dam_contractor" || role === "bore_water_driller"
+      ? null
+      : role || null;
+
   const { data: rpcData } = await supabase.rpc("list_trusted_profiles", {
-    p_role: role || null,
-    p_postcode: postcode || null,
+    p_role: rpcRole,
+    p_postcode: postcode.length === 4 ? postcode : null,
     p_abn_only: abnOnly,
-    p_limit: 48,
+    p_limit: 200,
   });
 
-  const memberProfiles: TrustedProfileItem[] = Array.isArray(rpcData)
+  let allProfiles: TrustedProfileItem[] = Array.isArray(rpcData)
     ? (rpcData as TrustedProfileItem[])
     : [];
 
-  // Also fetch regional businesses so the directory has immediate regional depth
-  // while placing claimed/verified members first.
-  const seenBusinessIds = new Set(
-    memberProfiles.map((p) => p.business_id).filter(Boolean) as string[]
-  );
-
-  let bizQuery = supabase
-    .from("businesses")
-    .select(
-      "id, trading_name, legal_name, abn, claim_status, postcode, state_code, created_at, outback_verified"
-    )
-    .eq("status", "active")
-    .order("claim_status", { ascending: true })
-    .limit(36);
-
-  if (postcode) {
-    bizQuery = bizQuery.eq("postcode", postcode);
-  } else {
-    bizQuery = bizQuery.gte("postcode", "2300");
+  if (role === "earthmoving_dam_contractor") {
+    allProfiles = allProfiles.filter((p) => {
+      const hay = [
+        p.name,
+        p.bio,
+        p.category_label,
+        ...(p.role_tags ?? []),
+        ...(p.services_offered ?? []),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return (
+        (p.role_tags ?? []).includes("earthmoving_dam_contractor") ||
+        hay.includes("earth") ||
+        hay.includes("dam") ||
+        hay.includes("excavat") ||
+        hay.includes("dozer")
+      );
+    });
+  } else if (role === "bore_water_driller") {
+    allProfiles = allProfiles.filter((p) => {
+      const hay = [
+        p.name,
+        p.bio,
+        p.category_label,
+        ...(p.role_tags ?? []),
+        ...(p.services_offered ?? []),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return (
+        (p.role_tags ?? []).includes("bore_water_driller") ||
+        hay.includes("bore") ||
+        hay.includes("drill") ||
+        hay.includes("water")
+      );
+    });
   }
-  if (abnOnly) {
-    bizQuery = bizQuery.in("claim_status", ["abn_verified", "trusted"]);
+
+  if (qRaw) {
+    const needle = qRaw.toLowerCase();
+    allProfiles = allProfiles.filter((p) => {
+      const hay = [
+        p.name,
+        p.suburb,
+        p.postcode,
+        p.bio,
+        p.category_label,
+        ...(p.services_offered ?? []),
+        ...(p.role_tags ?? []).map(roleTagLabel),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(needle);
+    });
   }
 
-  const { data: rawBusinesses } = role ? { data: [] } : await bizQuery;
-
-  const directoryProfiles: TrustedProfileItem[] = (rawBusinesses ?? [])
-    .filter((b) => !seenBusinessIds.has(b.id))
-    .slice(0, 24)
-    .map((b) => ({
-      profile_id: b.id,
-      user_id: null,
-      business_id: b.id,
-      name: b.trading_name || b.legal_name || "Rural Business",
-      display_name: null,
-      trading_name: b.trading_name,
-      bio: null,
-      postcode: b.postcode,
-      state: b.state_code,
-      member_since: b.created_at,
-      email_verified: false,
-      abn_verified:
-        b.claim_status === "abn_verified" || b.claim_status === "trusted",
-      abn: b.abn,
-      is_claimed_business: b.claim_status !== "unclaimed",
-      insurances_held: [],
-      role_tags: [],
-      years_in_district: null,
-      availability_status: null,
-      outback_verified: !!(
-        (b as { outback_verified?: boolean }).outback_verified ||
-        b.claim_status === "trusted"
-      ),
-      active_listings_count: 1,
-      completed_deals_count: 0,
-      review_count: 0,
-      avg_rating: null,
-      recommend_pct: null,
-      top_tags: [],
-    }));
-
-  const allProfiles = [...memberProfiles, ...directoryProfiles];
+  const withPhoneCount = allProfiles.filter((p) => !!p.contact_phone).length;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-green-800">
-            Reputation, Reviews &amp; Verification
-          </p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-neutral-900">
-            Trusted People, Contractors &amp; Vendors
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm text-neutral-700">
-            Find rural contractors, truck drivers, header operators, farmers, and hay/livestock vendors backed by ABN verification, insurance badges, and community vouches.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/dashboard/settings"
-            className="rounded-xl bg-green-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-800"
-          >
-            Set up your trust profile →
-          </Link>
-          <Link
-            href="/post/job?direction=available_for_work"
-            className="rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-900 hover:bg-neutral-50"
-          >
-            List your skills
-          </Link>
+      {/* Hero Header */}
+      <div className="rounded-3xl border border-green-900/15 bg-gradient-to-br from-green-950 via-green-900 to-emerald-900 p-6 text-white shadow-md sm:p-8">
+        <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
+          <div>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/40 bg-amber-400/20 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-200">
+              ★ 0-Click Direct Contact · Two-Sided Rural Reputation
+            </span>
+            <h1 className="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">
+              Contractors, Carriers, Skilled Labour &amp; Property Profiles
+            </h1>
+            <p className="mt-2 max-w-3xl text-sm text-emerald-100 sm:text-base">
+              Call or text fencing contractors, livestock &amp; hay truckies, header operators, earthmovers, shearers, bore drillers, and local properties directly — no login wall, no lead fees, backed by community vouches and customer ratings.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-3 text-xs font-semibold text-emerald-100">
+              <span className="rounded-full bg-white/10 px-3 py-1">
+                📞 {withPhoneCount} profiles with instant 1-click phone numbers
+              </span>
+              <span className="rounded-full bg-white/10 px-3 py-1">
+                ✓ Contractor &amp; Customer/Property ratings
+              </span>
+              <span className="rounded-full bg-white/10 px-3 py-1">
+                ★ Outback Verified &amp; ABN badges
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2.5 lg:shrink-0 lg:flex-col">
+            <Link
+              href="/dashboard/settings"
+              className="inline-flex items-center justify-center rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-extrabold text-amber-950 shadow-sm hover:bg-amber-300"
+            >
+              Set up your Vendor / Customer Profile →
+            </Link>
+            <Link
+              href="/post/job?direction=available_for_work"
+              className="inline-flex items-center justify-center rounded-xl border border-white/30 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/20"
+            >
+              + List your skills or contracting gear
+            </Link>
+          </div>
         </div>
       </div>
 
       {/* Role filter pills */}
-      <div className="mt-6 flex flex-wrap gap-1.5">
+      <nav aria-label="Filter profiles by trade or role" className="mt-6 flex flex-wrap gap-1.5">
         <Link
           href={`/profiles${postcode ? `?postcode=${postcode}` : ""}`}
-          className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+          className={`rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
             !role
-              ? "border-green-700 bg-green-700 text-white"
+              ? "border-green-800 bg-green-800 text-white shadow-sm"
               : "border-neutral-300 bg-white text-neutral-800 hover:border-green-700"
           }`}
         >
-          All people &amp; vendors
+          All profiles ({allProfiles.length})
         </Link>
         {ROLE_TAGS.map((r) => {
           const active = role === r.slug;
           const q = new URLSearchParams();
           if (!active) q.set("role", r.slug);
           if (postcode) q.set("postcode", postcode);
+          if (qRaw) q.set("q", qRaw);
           if (abnOnly) q.set("abn", "1");
           return (
             <Link
               key={r.slug}
               href={`/profiles${q.toString() ? `?${q.toString()}` : ""}`}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+              className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
                 active
-                  ? "border-green-700 bg-green-700 text-white"
+                  ? "border-green-800 bg-green-800 text-white shadow-sm"
                   : "border-neutral-300 bg-white text-neutral-800 hover:border-green-700"
               }`}
             >
@@ -196,15 +241,32 @@ export default async function TrustedProfilesDirectoryPage({
             </Link>
           );
         })}
-      </div>
+      </nav>
 
-      {/* Filter form */}
+      {/* Search & Filter Bar */}
       <form
         method="get"
         action="/profiles"
-        className="mt-4 flex flex-wrap items-end gap-3 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"
+        className="mt-4 grid gap-3 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_140px_auto_auto]"
       >
-        <div className="min-w-[180px] flex-1">
+        <div>
+          <label
+            htmlFor="profile-q"
+            className="block text-xs font-semibold uppercase tracking-wide text-neutral-700"
+          >
+            Search town, business, skill or gear
+          </label>
+          <input
+            id="profile-q"
+            name="q"
+            type="text"
+            defaultValue={qRaw}
+            placeholder="e.g. Dubbo, Orange, B-double, hay baling, shearing, bore..."
+            className="mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900"
+          />
+        </div>
+
+        <div>
           <label
             htmlFor="profile-role"
             className="block text-xs font-semibold uppercase tracking-wide text-neutral-700"
@@ -217,7 +279,7 @@ export default async function TrustedProfilesDirectoryPage({
             defaultValue={role}
             className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900"
           >
-            <option value="">All roles &amp; businesses</option>
+            <option value="">All roles, contractors &amp; properties</option>
             {ROLE_TAGS.map((r) => (
               <option key={r.slug} value={r.slug}>
                 {r.label}
@@ -226,7 +288,7 @@ export default async function TrustedProfilesDirectoryPage({
           </select>
         </div>
 
-        <div className="w-36">
+        <div>
           <label
             htmlFor="profile-postcode"
             className="block text-xs font-semibold uppercase tracking-wide text-neutral-700"
@@ -245,7 +307,7 @@ export default async function TrustedProfilesDirectoryPage({
           />
         </div>
 
-        <label className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-semibold text-neutral-800">
+        <label className="flex items-center gap-2 self-end rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-semibold text-neutral-800">
           <input
             type="checkbox"
             name="abn"
@@ -253,46 +315,48 @@ export default async function TrustedProfilesDirectoryPage({
             defaultChecked={abnOnly}
             className="h-4 w-4 rounded border-neutral-300 text-green-700"
           />
-          ✓ ABN Verified only
+          ✓ ABN Verified
         </label>
 
-        <button
-          type="submit"
-          className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800"
-        >
-          Filter
-        </button>
-        {(role || postcode || abnOnly) && (
-          <Link
-            href="/profiles"
-            className="px-2 py-2 text-xs font-medium text-neutral-600 underline"
+        <div className="flex items-end gap-2">
+          <button
+            type="submit"
+            className="rounded-lg bg-green-700 px-4 py-2 text-sm font-bold text-white hover:bg-green-800"
           >
-            Reset
-          </Link>
-        )}
+            Search
+          </button>
+          {(role || postcode || qRaw || abnOnly) && (
+            <Link
+              href="/profiles"
+              className="px-2 py-2 text-xs font-medium text-neutral-600 underline"
+            >
+              Reset
+            </Link>
+          )}
+        </div>
       </form>
 
       {/* Profiles Grid */}
       {allProfiles.length === 0 ? (
         <div className="mt-8 rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center">
           <p className="text-base font-semibold text-neutral-900">
-            No profiles match those filters yet
+            No profiles match those exact filters yet
           </p>
           <p className="mt-1 text-sm text-neutral-600">
-            Be the first in your district to set up your verified trust profile or list your skills.
+            Clear a filter to see all {withPhoneCount}+ regional contractors, or add your own profile in 60 seconds.
           </p>
           <div className="mt-4 flex flex-wrap justify-center gap-3">
             <Link
-              href="/dashboard/settings"
+              href="/profiles"
               className="rounded-lg bg-green-700 px-4 py-2 text-xs font-semibold text-white hover:bg-green-800"
             >
-              Create your trust profile
+              Show all profiles
             </Link>
             <Link
-              href="/profiles"
+              href="/dashboard/settings"
               className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-xs font-semibold text-neutral-800"
             >
-              Show all profiles
+              Create your profile
             </Link>
           </div>
         </div>
@@ -300,35 +364,58 @@ export default async function TrustedProfilesDirectoryPage({
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {allProfiles.map((p) => {
             const formattedAbn = formatAbn(p.abn);
-            const avail = p.user_id
-              ? availabilityStatusInfo(p.availability_status)
-              : null;
+            const avail = availabilityStatusInfo(p.availability_status);
+            const phoneHref = formatPhoneHref(p.contact_phone);
+            const canSms = isAustralianMobile(p.contact_phone);
+            const initials = getInitials(p.name);
+            const services = Array.isArray(p.services_offered)
+              ? p.services_offered
+              : [];
+            const primaryListingHref =
+              p.listing_kind && p.listing_slug
+                ? listingHref(p.listing_kind, p.listing_slug)
+                : null;
+
             return (
-              <Link
+              <div
                 key={p.profile_id}
-                href={`/profile/${p.profile_id}`}
                 className="flex flex-col justify-between rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm transition hover:border-green-700 hover:shadow-md"
               >
                 <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <h2 className="text-base font-bold text-neutral-900 [overflow-wrap:anywhere]">
-                      {p.name}
-                    </h2>
+                  {/* Card Top: Avatar + Name + Rating */}
+                  <div className="flex items-start justify-between gap-2.5">
+                    <div className="flex items-start gap-3">
+                      <Link
+                        href={`/profile/${p.profile_id}`}
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-800 text-sm font-extrabold text-white shadow-sm"
+                      >
+                        {initials}
+                      </Link>
+                      <div>
+                        <Link
+                          href={`/profile/${p.profile_id}`}
+                          className="text-base font-bold text-neutral-900 hover:text-green-800 hover:underline [overflow-wrap:anywhere]"
+                        >
+                          {p.name}
+                        </Link>
+                        <p className="mt-0.5 text-xs font-medium text-neutral-600">
+                          📍 {p.suburb ? `${p.suburb}, ` : ""}
+                          {p.postcode
+                            ? `${p.postcode}${p.state ? ` ${p.state}` : ""}`
+                            : "Regional NSW"}
+                          {p.years_in_district
+                            ? ` · ${p.years_in_district}+ yrs`
+                            : ""}
+                        </p>
+                      </div>
+                    </div>
+
                     {p.review_count > 0 && p.avg_rating !== null ? (
-                      <span className="shrink-0 rounded-lg border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-900">
+                      <span className="shrink-0 rounded-lg border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-extrabold text-amber-950">
                         ★ {Number(p.avg_rating).toFixed(1)} ({p.review_count})
                       </span>
                     ) : null}
                   </div>
-
-                  <p className="mt-1 text-xs text-neutral-600">
-                    {p.postcode
-                      ? `${p.postcode}${p.state ? ` ${p.state}` : ""}`
-                      : "Regional Australia"}
-                    {p.years_in_district
-                      ? ` · ${p.years_in_district}+ yrs in district`
-                      : ""}
-                  </p>
 
                   {/* Verification & Role Badges */}
                   <div className="mt-3 flex flex-wrap gap-1.5">
@@ -337,42 +424,22 @@ export default async function TrustedProfilesDirectoryPage({
                         ★ Outback Verified
                       </span>
                     )}
-                    {avail && (
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${avail.badgeClass}`}
-                      >
-                        <span className={`h-1.5 w-1.5 rounded-full ${avail.dotClass}`} />
-                        {avail.shortLabel}
-                      </span>
-                    )}
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${avail.badgeClass}`}
+                    >
+                      <span className={`h-1.5 w-1.5 rounded-full ${avail.dotClass}`} />
+                      {avail.shortLabel}
+                    </span>
                     {p.abn_verified && (
                       <span className="rounded-full border border-green-300 bg-green-50 px-2.5 py-0.5 text-[11px] font-semibold text-green-900">
-                        ✓ ABN Verified{formattedAbn ? ` · ${formattedAbn}` : ""}
+                        ✓ ABN{formattedAbn ? ` ${formattedAbn}` : " Verified"}
                       </span>
                     )}
-                    {p.is_claimed_business ? (
-                      <span className="rounded-full border border-green-200 bg-green-50 px-2.5 py-0.5 text-[11px] font-semibold text-green-900">
-                        ✓ Claimed
-                      </span>
-                    ) : !p.user_id ? (
-                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-900">
-                        Unclaimed directory entry
-                      </span>
-                    ) : null}
-                    {p.email_verified && (
-                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-900">
-                        ✓ Verified Member
+                    {p.category_label && (
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-900">
+                        {p.category_label}
                       </span>
                     )}
-                    {Array.isArray(p.insurances_held) &&
-                      p.insurances_held.slice(0, 2).map((ins) => (
-                        <span
-                          key={ins}
-                          className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[11px] font-semibold text-sky-900"
-                        >
-                          🛡 {insuranceBadgeLabel(ins)}
-                        </span>
-                      ))}
                     {Array.isArray(p.role_tags) &&
                       p.role_tags.slice(0, 2).map((r) => (
                         <span
@@ -382,20 +449,45 @@ export default async function TrustedProfilesDirectoryPage({
                           {roleTagLabel(r)}
                         </span>
                       ))}
+                    {Array.isArray(p.insurances_held) &&
+                      p.insurances_held.slice(0, 2).map((ins) => (
+                        <span
+                          key={ins}
+                          className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[11px] font-semibold text-sky-900"
+                        >
+                          🛡 {insuranceBadgeLabel(ins)}
+                        </span>
+                      ))}
                   </div>
 
+                  {/* Services / Specialties */}
+                  {services.length > 0 && (
+                    <div className="mt-2.5 flex flex-wrap gap-1">
+                      {services.slice(0, 3).map((srv) => (
+                        <span
+                          key={srv}
+                          className="rounded-md border border-neutral-200 bg-neutral-50 px-2 py-0.5 text-[11px] font-medium text-neutral-700"
+                        >
+                          🔧 {srv}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Bio snippet */}
                   {p.bio && (
-                    <p className="mt-3 line-clamp-2 text-xs text-neutral-700">
+                    <p className="mt-2.5 line-clamp-2 text-xs leading-relaxed text-neutral-700">
                       {p.bio}
                     </p>
                   )}
 
+                  {/* Vouched tags */}
                   {Array.isArray(p.top_tags) && p.top_tags.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1">
+                    <div className="mt-2.5 flex flex-wrap gap-1">
                       {p.top_tags.slice(0, 2).map((t) => (
                         <span
                           key={t.tag}
-                          className="rounded-full border border-green-200 bg-green-50/70 px-2 py-0.5 text-[11px] text-green-900"
+                          className="rounded-full border border-green-200 bg-green-50/70 px-2 py-0.5 text-[11px] font-medium text-green-900"
                         >
                           ✓ {trustTagLabel(t.tag)} ({t.count})
                         </span>
@@ -404,19 +496,72 @@ export default async function TrustedProfilesDirectoryPage({
                   )}
                 </div>
 
-                <div className="mt-4 flex items-center justify-between border-t border-neutral-100 pt-3 text-xs text-neutral-600">
-                  <span>
-                    {p.active_listings_count} active listing
-                    {p.active_listings_count === 1 ? "" : "s"}
-                    {p.completed_deals_count > 0
-                      ? ` · ${p.completed_deals_count} completed`
-                      : ""}
-                  </span>
-                  <span className="font-semibold text-green-800">
-                    View profile &amp; reviews →
-                  </span>
+                {/* 0-Click Direct Contact Footer Bar */}
+                <div className="mt-4 border-t border-neutral-100 pt-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {phoneHref && (
+                      <a
+                        href={`tel:${phoneHref}`}
+                        className="inline-flex items-center gap-1 rounded-lg bg-green-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-green-800"
+                      >
+                        📞 {p.contact_phone}
+                      </a>
+                    )}
+                    {phoneHref && canSms && (
+                      <a
+                        href={`sms:${phoneHref}?body=${encodeURIComponent(
+                          `Hi ${p.name}, saw your profile on Outback Connections (${p.postcode ?? "NSW"}) — are you available?`
+                        )}`}
+                        className="inline-flex items-center rounded-lg border border-green-700 bg-green-50 px-2.5 py-1.5 text-xs font-bold text-green-900 hover:bg-green-100"
+                      >
+                        💬 SMS
+                      </a>
+                    )}
+                    {p.contact_email && (
+                      <a
+                        href={`mailto:${p.contact_email}?subject=${encodeURIComponent(
+                          `Enquiry via Outback Connections: ${p.name}`
+                        )}`}
+                        className="inline-flex items-center rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-neutral-800 hover:border-green-700"
+                      >
+                        ✉️ Email
+                      </a>
+                    )}
+                    {p.website_url && (
+                      <a
+                        href={p.website_url}
+                        target="_blank"
+                        rel="nofollow noopener noreferrer"
+                        className="inline-flex items-center rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-neutral-800 hover:border-green-700"
+                      >
+                        🌐 Web
+                      </a>
+                    )}
+                  </div>
+
+                  <div className="mt-2.5 flex items-center justify-between text-xs text-neutral-500">
+                    {primaryListingHref ? (
+                      <Link
+                        href={primaryListingHref}
+                        className="font-medium text-neutral-700 hover:text-green-800 hover:underline"
+                      >
+                        Get quote / listing →
+                      </Link>
+                    ) : (
+                      <span>
+                        {p.active_listings_count} active listing
+                        {p.active_listings_count === 1 ? "" : "s"}
+                      </span>
+                    )}
+                    <Link
+                      href={`/profile/${p.profile_id}`}
+                      className="font-bold text-green-800 hover:underline"
+                    >
+                      Profile &amp; Vouch →
+                    </Link>
+                  </div>
                 </div>
-              </Link>
+              </div>
             );
           })}
         </div>
@@ -424,3 +569,4 @@ export default async function TrustedProfilesDirectoryPage({
     </div>
   );
 }
+

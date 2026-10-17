@@ -63,8 +63,27 @@ type JobListingRow = {
   created_at: string;
   data_source: string | null;
   source_platform: string | null;
+  contact_phone?: string | null;
+  contact_email?: string | null;
   category: { slug: string; label: string } | { slug: string; label: string }[] | null;
-  business: { claim_status?: string } | { claim_status?: string }[] | null;
+  business:
+    | {
+        claim_status?: string;
+        contact_phone?: string | null;
+        contact_email?: string | null;
+        website_url?: string | null;
+        suburb?: string | null;
+        outback_verified?: boolean | null;
+      }
+    | {
+        claim_status?: string;
+        contact_phone?: string | null;
+        contact_email?: string | null;
+        website_url?: string | null;
+        suburb?: string | null;
+        outback_verified?: boolean | null;
+      }[]
+    | null;
   job_details: JobDetailRow | JobDetailRow[] | null;
 };
 
@@ -108,9 +127,9 @@ export default async function JobsBrowsePage({
     .from("listings")
     .select(
       `
-      anonymised_id, slug, kind, title, description, postcode, state, created_at, data_source, source_platform,
+      anonymised_id, slug, kind, title, description, postcode, state, created_at, data_source, source_platform, contact_phone, contact_email,
       category:categories(slug, label),
-      business:businesses(claim_status),
+      business:businesses(claim_status, contact_phone, contact_email, website_url, suburb, outback_verified),
       job_details!inner(direction, work_type, pay_type, pay_amount, tickets, travel_willingness, experience_years)
     `,
       { count: "exact" }
@@ -133,9 +152,9 @@ export default async function JobsBrowsePage({
       .from("listings")
       .select(
         `
-        anonymised_id, slug, kind, title, description, postcode, state, created_at, data_source, source_platform,
+        anonymised_id, slug, kind, title, description, postcode, state, created_at, data_source, source_platform, contact_phone, contact_email,
         category:categories(slug, label),
-        business:businesses(claim_status),
+        business:businesses(claim_status, contact_phone, contact_email, website_url, suburb, outback_verified),
         job_details!inner(work_type, pay_type, pay_amount)
       `,
         { count: "exact" }
@@ -352,6 +371,7 @@ export default async function JobsBrowsePage({
               const jd = Array.isArray(l.job_details)
                 ? l.job_details[0] ?? null
                 : l.job_details ?? null;
+              const biz = Array.isArray(l.business) ? l.business[0] ?? null : l.business;
               return (
                 <li key={l.anonymised_id}>
                   <ListingCard
@@ -367,9 +387,10 @@ export default async function JobsBrowsePage({
                       category: Array.isArray(l.category) ? l.category[0] ?? null : l.category,
                       data_source: l.data_source,
                       source_platform: l.source_platform,
-                      business_claim_status: Array.isArray(l.business)
-                        ? l.business[0]?.claim_status ?? null
-                        : (l.business as { claim_status?: string } | null)?.claim_status ?? null,
+                      contact_phone: l.contact_phone,
+                      contact_email: l.contact_email,
+                      business_claim_status: biz?.claim_status ?? null,
+                      business: biz,
                       job_meta: jd,
                     }}
                   />

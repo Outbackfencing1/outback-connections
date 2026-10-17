@@ -69,9 +69,9 @@ export default async function ServiceRegionPage({ params }: { params: Params }) 
     .select(
       `
       anonymised_id, slug, kind, title, description, postcode, state, created_at,
-      data_source, source_platform,
+      data_source, source_platform, contact_phone, contact_email,
       category:categories(slug, label),
-      business:businesses(claim_status),
+      business:businesses(claim_status, contact_phone, contact_email, website_url, suburb, outback_verified),
       service_details!inner(direction)
     `
     )
@@ -115,7 +115,7 @@ export default async function ServiceRegionPage({ params }: { params: Params }) 
       <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">{heading}</h1>
       <p className="mt-2 max-w-2xl text-sm text-neutral-700">
         {rows.length > 0
-          ? `${rows.length} listed around ${region.region_name}. Open any entry to ask for a quote, no account needed. Unclaimed entries were found online and haven't been confirmed by the business yet.`
+          ? `${rows.length} listed around ${region.region_name}. Call, text, or ask for a quote directly — no account needed.`
           : `Nothing listed around ${region.region_name} yet.`}
       </p>
 
@@ -136,28 +136,32 @@ export default async function ServiceRegionPage({ params }: { params: Params }) 
           </div>
         ) : (
           <ul className="space-y-4">
-            {rows.map((l) => (
-              <li key={l.anonymised_id}>
-                <ListingCard
-                  listing={{
-                    anonymised_id: l.anonymised_id,
-                    slug: l.slug,
-                    kind: l.kind,
-                    title: l.title,
-                    description: l.description,
-                    postcode: l.postcode,
-                    state: l.state,
-                    created_at: l.created_at,
-                    category: Array.isArray(l.category) ? l.category[0] ?? null : l.category,
-                    data_source: l.data_source,
-                    source_platform: l.source_platform,
-                    business_claim_status: Array.isArray(l.business)
-                      ? l.business[0]?.claim_status ?? null
-                      : (l.business as { claim_status?: string } | null)?.claim_status ?? null,
-                  }}
-                />
-              </li>
-            ))}
+            {rows.map((l) => {
+              const biz = Array.isArray(l.business) ? l.business[0] ?? null : l.business;
+              return (
+                <li key={l.anonymised_id}>
+                  <ListingCard
+                    listing={{
+                      anonymised_id: l.anonymised_id,
+                      slug: l.slug,
+                      kind: l.kind,
+                      title: l.title,
+                      description: l.description,
+                      postcode: l.postcode,
+                      state: l.state,
+                      created_at: l.created_at,
+                      category: Array.isArray(l.category) ? l.category[0] ?? null : l.category,
+                      data_source: l.data_source,
+                      source_platform: l.source_platform,
+                      contact_phone: l.contact_phone,
+                      contact_email: l.contact_email,
+                      business_claim_status: biz?.claim_status ?? null,
+                      business: biz,
+                    }}
+                  />
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

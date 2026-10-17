@@ -101,8 +101,9 @@ export default async function ServiceDetailPage({
       id, anonymised_id, slug, kind, title, description, postcode, state,
       created_at, expires_at, user_id, status,
       data_source, source_platform, source_url, business_id, metadata,
+      contact_email, contact_phone, contact_best_time,
       category:categories(slug, label),
-      business:businesses(claim_status, geo_lat, geo_lng),
+      business:businesses(claim_status, geo_lat, geo_lng, contact_phone, contact_email, website_url, suburb, outback_verified),
       service_details(direction, rate_type, rate_amount, travel_willingness)
     `
     )
@@ -115,18 +116,10 @@ export default async function ServiceDetailPage({
     notFound();
   }
 
-  const [{ data: contact }, { data: responseStats }] = await Promise.all([
-    viewer
-      ? supabase
-          .from("listings")
-          .select("contact_email, contact_phone, contact_best_time")
-          .eq("id", listing.id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
+  const { data: responseStats } =
     listing.kind === "service_offering"
-      ? supabase.rpc("business_response_stats", { p_listing_id: listing.id })
-      : Promise.resolve({ data: null }),
-  ]);
+      ? await supabase.rpc("business_response_stats", { p_listing_id: listing.id })
+      : { data: null };
 
   const isOwner = viewer?.id === listing.user_id;
   if (!isOwner && (listing.status !== "active" || new Date(listing.expires_at) <= new Date())) {
@@ -159,6 +152,12 @@ export default async function ServiceDetailPage({
         : null;
   const responded = responseLine(responseStats as { answered?: number; responded?: number } | null);
 
+  const resolvedPhone = listing.contact_phone || business?.contact_phone || null;
+  const resolvedEmail = listing.contact_email || business?.contact_email || null;
+  const resolvedWebsite = business?.website_url || null;
+  const resolvedSuburb = business?.suburb || null;
+  const phoneDigits = resolvedPhone ? resolvedPhone.replace(/[^\d+]/g, "") : null;
+
   await logEvent({
     eventType: "listing_view",
     entityType: "listing",
@@ -167,7 +166,7 @@ export default async function ServiceDetailPage({
     userId: viewer?.id ?? null,
     properties: { slug: listing.slug },
   });
-  if (viewer && !isUnclaimedScraped && (contact?.contact_email || contact?.contact_phone)) {
+  if (viewer && !isUnclaimedScraped && (resolvedEmail || resolvedPhone)) {
     await logEvent({
       eventType: "contact_reveal",
       entityType: "listing",
@@ -232,9 +231,14 @@ export default async function ServiceDetailPage({
         </Link>
       </p>
 
-      <div className="mt-3 flex items-baseline justify-between gap-4">
+      <div className="mt-3 flex flex-wrap items-baseline justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{listing.title}</h1>
-        <span className="flex shrink-0 items-center gap-2">
+        <span className="flex shrink-0 flex-wrap items-center gap-2">
+          {business?.outback_verified && (
+            <span className="rounded-full border border-amber-400 bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-950">
+              ★ Outback Verified
+            </span>
+          )}
           {trustBadge && (
             <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-green-800">
               {trustBadge}
@@ -248,10 +252,56 @@ export default async function ServiceDetailPage({
 
       <p className="mt-2 text-sm text-neutral-600">
         {cat?.label ?? "—"} ·{" "}
+        {resolvedSuburb ? `${resolvedSuburb}, ` : ""}
         {listing.state ? `${listing.postcode} ${listing.state}` : `Postcode ${listing.postcode}`}{" "}
         · {postedVerb(listing.data_source)} {relativeTime(listing.created_at)} ·{" "}
         Expires {new Date(listing.expires_at).toLocaleDateString("en-AU")}
       </p>
+
+      {/* Top 1-Click Direct Contact Bar — no scrolling needed */}
+      {(phoneDigits || resolvedEmail || resolvedWebsite) && (
+        <div className="mt-4 flex flex-wrap items-center gap-2.5 rounded-2xl border border-green-300 bg-green-50/70 p-3.5 shadow-sm">
+          {phoneDigits && (
+            <a
+              href={`tel:${phoneDigits}`}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-green-700 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-green-800"
+            >
+              📞 Call {resolvedPhone}
+            </a>
+          )}
+          {phoneDigits && /^(\+?614|04)\d{8}$/.test(phoneDigits) && (
+            <a
+              href={`sms:${phoneDigits}?body=${encodeURIComponent(
+                `Hi ${listing.title}, saw your listing on Outback Connections (${listing.postcode}) — are you available for a quote?`
+              )}`}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-green-700 bg-white px-3.5 py-2 text-sm font-bold text-green-900 shadow-sm hover:bg-green-100"
+            >
+              💬 SMS
+            </a>
+          )}
+          {resolvedEmail && (
+            <a
+              href={`mailto:${resolvedEmail}?subject=${encodeURIComponent(
+                `Enquiry via Outback Connections: ${listing.title}`
+              )}`}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-sm font-semibold text-neutral-900 shadow-sm hover:border-green-700"
+            >
+              ✉️ Email
+            </a>
+          )}
+          {resolvedWebsite && (
+            <a
+              href={resolvedWebsite}
+              target="_blank"
+              rel="nofollow noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-sm font-semibold text-neutral-900 shadow-sm hover:border-green-700"
+            >
+              🌐 Website →
+            </a>
+          )}
+        </div>
+      )}
+
       {responded && (
         <p className="mt-2 inline-block rounded-lg border border-green-200 bg-green-50 px-3 py-1 text-sm text-green-900">
           {responded}
@@ -292,13 +342,17 @@ export default async function ServiceDetailPage({
             signInRedirect={`/services/listing/${listing.slug}`}
             listingId={listing.id}
             sourceUrlKind={sourceUrlKind}
+            contactPhone={resolvedPhone}
+            contactEmail={resolvedEmail}
+            websiteUrl={resolvedWebsite}
           />
         ) : (
           <ContactBlock
             signedIn={!!viewer}
-            contactEmail={contact?.contact_email ?? null}
-            contactPhone={contact?.contact_phone ?? null}
-            contactBestTime={contact?.contact_best_time ?? null}
+            contactEmail={resolvedEmail}
+            contactPhone={resolvedPhone}
+            contactBestTime={listing.contact_best_time ?? null}
+            websiteUrl={resolvedWebsite}
             signInRedirect={`/services/listing/${listing.slug}`}
           />
         )}

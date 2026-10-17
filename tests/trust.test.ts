@@ -3,7 +3,10 @@ import {
   availabilityStatusInfo,
   dealTypeLabel,
   formatAbn,
+  formatPhoneHref,
   insuranceBadgeLabel,
+  isAustralianMobile,
+  isCustomerTrustTag,
   isValidAvailabilityStatus,
   isValidAustralianAbn,
   isValidDealType,
@@ -45,10 +48,24 @@ describe("lib/trust ABN validation & formatting", () => {
 });
 
 describe("lib/trust rural tags, availability, and badges", () => {
-  it("validates and formats trust tags", () => {
+  it("validates and formats vendor and customer trust tags", () => {
     expect(isValidTrustTag("turned_up_on_time")).toBe(true);
+    expect(isValidTrustTag("clear_instructions")).toBe(true);
+    expect(isValidTrustTag("good_site_access")).toBe(true);
     expect(isValidTrustTag("not_a_tag")).toBe(false);
     expect(trustTagLabel("turned_up_on_time")).toBe("Turned up on time");
+    expect(isCustomerTrustTag("prompt_payment")).toBe(true);
+    expect(isCustomerTrustTag("clear_instructions")).toBe(true);
+    expect(isCustomerTrustTag("turned_up_on_time")).toBe(false);
+  });
+
+  it("formats phone hrefs and detects Australian mobile numbers for 1-click SMS", () => {
+    expect(formatPhoneHref("0421 572 245")).toBe("0421572245");
+    expect(formatPhoneHref("02 6882 3259")).toBe("0268823259");
+    expect(formatPhoneHref("")).toBeNull();
+    expect(isAustralianMobile("0421 572 245")).toBe(true);
+    expect(isAustralianMobile("+61 421 572 245")).toBe(true);
+    expect(isAustralianMobile("02 6882 3259")).toBe(false);
   });
 
   it("validates and formats deal types, insurances, and role tags", () => {
@@ -57,6 +74,8 @@ describe("lib/trust rural tags, availability, and badges", () => {
     expect(isValidInsuranceBadge("public_liability")).toBe(true);
     expect(insuranceBadgeLabel("public_liability")).toBe("Public Liability Insured");
     expect(isValidRoleTag("fencing_contractor")).toBe(true);
+    expect(isValidRoleTag("earthmoving_dam_contractor")).toBe(true);
+    expect(isValidRoleTag("bore_water_driller")).toBe(true);
     expect(roleTagLabel("fencing_contractor")).toBe("Fencing Contractor");
   });
 

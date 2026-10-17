@@ -62,7 +62,9 @@ export default async function PublicVendorProfilePage({
   // Determine whether `id` is a user_id or business_id
   const { data: bizRow } = await supabase
     .from("businesses")
-    .select("id, trading_name, legal_name, claimed_by")
+    .select(
+      "id, trading_name, legal_name, claimed_by, contact_phone, contact_email, website_url, suburb, postcode, state_code, outback_verified"
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -76,9 +78,9 @@ export default async function PublicVendorProfilePage({
     .select(
       `
       id, anonymised_id, slug, kind, side, title, description, postcode, state, created_at,
-      data_source, source_platform,
+      data_source, source_platform, contact_phone, contact_email,
       category:categories(slug, label),
-      business:businesses(claim_status),
+      business:businesses(claim_status, contact_phone, contact_email, website_url, suburb, outback_verified),
       job_details(direction, work_type, pay_type, pay_amount, tickets, travel_willingness, experience_years)
     `
     )
@@ -115,7 +117,10 @@ export default async function PublicVendorProfilePage({
       category: cat,
       data_source: r.data_source,
       source_platform: r.source_platform,
+      contact_phone: r.contact_phone,
+      contact_email: r.contact_email,
       business_claim_status: biz?.claim_status ?? null,
+      business: biz,
       job_meta: jd ?? null,
     };
   });
@@ -128,11 +133,14 @@ export default async function PublicVendorProfilePage({
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
-      <p className="text-sm">
-        <Link href="/" className="text-neutral-600 underline">
-          ← Back to Outback Connections
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <Link href="/profiles" className="font-medium text-neutral-600 underline hover:text-green-800">
+          ← All trusted profiles &amp; contractors
         </Link>
-      </p>
+        <Link href="/dashboard/settings" className="text-xs font-semibold text-green-800 underline">
+          Claim or edit your profile →
+        </Link>
+      </div>
 
       <VendorTrustSection
         userId={resolvedUserId}
@@ -146,13 +154,15 @@ export default async function PublicVendorProfilePage({
       <ShareListingBar
         title={fallbackTitle}
         path={`/profile/${id}`}
-        badge="Trusted Rural Profile & Reviews"
+        postcode={bizRow?.postcode ?? listings[0]?.postcode ?? null}
+        state={bizRow?.state_code ?? listings[0]?.state ?? null}
+        badge="Verified Rural Profile & Reviews"
       />
 
       <section className="mt-10">
         <div className="flex items-baseline justify-between gap-4">
           <h2 className="text-xl font-bold tracking-tight text-neutral-900">
-            Active listings ({listings.length})
+            Active listings &amp; services ({listings.length})
           </h2>
           <Link href="/post" className="text-xs font-semibold text-green-800 underline">
             Post a listing →
@@ -161,7 +171,7 @@ export default async function PublicVendorProfilePage({
 
         {listings.length === 0 ? (
           <div className="mt-4 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-6 text-center text-sm text-neutral-600">
-            No active listings right now.
+            No active listings right now — use the 1-click contact buttons above to reach {fallbackTitle} directly.
           </div>
         ) : (
           <div className="mt-4 space-y-3">
@@ -174,3 +184,4 @@ export default async function PublicVendorProfilePage({
     </div>
   );
 }
+

@@ -2,14 +2,32 @@
 // ABN validation, structured feedback tags, insurance badges, and deal types.
 
 export const TRUST_TAGS = [
+  { slug: "turned_up_on_time", label: "Turned up on time", side: "vendor" },
+  { slug: "accurate_description", label: "Stock / hay / gear as described", side: "vendor" },
+  { slug: "good_gear_well_maintained", label: "Good gear & well maintained", side: "vendor" },
+  { slug: "fair_price", label: "Fair price & honest weights", side: "vendor" },
+  { slug: "quality_fencing", label: "Quality workmanship", side: "vendor" },
+  { slug: "safe_operator", label: "Safe around stock & machinery", side: "vendor" },
+  { slug: "great_communication", label: "Easy to deal with", side: "both" },
+  { slug: "prompt_payment", label: "Paid on time", side: "customer" },
+  { slug: "clear_instructions", label: "Clear instructions & job brief", side: "customer" },
+  { slug: "good_site_access", label: "Good paddock & truck access", side: "customer" },
+  { slug: "good_quarters_tucker", label: "Good quarters / camp & conditions", side: "customer" },
+  { slug: "fair_property_boss", label: "Fair property / boss to work for", side: "customer" },
+] as const;
+
+export const VENDOR_QUICK_VOUCH_TAGS = [
   { slug: "turned_up_on_time", label: "Turned up on time" },
-  { slug: "accurate_description", label: "Stock / hay / gear as described" },
-  { slug: "good_gear_well_maintained", label: "Good gear & well maintained" },
-  { slug: "fair_price", label: "Fair price & honest weights" },
-  { slug: "prompt_payment", label: "Paid on time" },
-  { slug: "great_communication", label: "Easy to deal with" },
-  { slug: "safe_operator", label: "Safe around stock & machinery" },
   { slug: "quality_fencing", label: "Quality workmanship" },
+  { slug: "accurate_description", label: "As described" },
+  { slug: "great_communication", label: "Easy to deal with" },
+] as const;
+
+export const CUSTOMER_QUICK_VOUCH_TAGS = [
+  { slug: "prompt_payment", label: "Paid on time" },
+  { slug: "clear_instructions", label: "Clear instructions" },
+  { slug: "good_site_access", label: "Good paddock / truck access" },
+  { slug: "fair_property_boss", label: "Good property to work for" },
 ] as const;
 
 export type TrustTagSlug = (typeof TRUST_TAGS)[number]["slug"];
@@ -27,11 +45,11 @@ export function trustTagLabel(slug: string): string {
 }
 
 export const DEAL_TYPES = [
-  { slug: "bought_item", label: "Bought livestock, hay, grain or gear" },
-  { slug: "sold_item", label: "Sold to this buyer" },
-  { slug: "hired_worker", label: "Hired for farm / contracting work" },
-  { slug: "worked_for", label: "Worked for this property / employer" },
   { slug: "fencing_service", label: "Used for fencing or rural contracting" },
+  { slug: "hired_worker", label: "Hired for farm / contracting work" },
+  { slug: "worked_for", label: "Worked for this property / customer / employer" },
+  { slug: "bought_item", label: "Bought livestock, hay, grain or gear" },
+  { slug: "sold_item", label: "Sold to this customer / buyer" },
   { slug: "freight_load", label: "Moved freight / backload together" },
   { slug: "general", label: "General rural dealing / vouch" },
 ] as const;
@@ -72,11 +90,13 @@ export function insuranceBadgeLabel(slug: string): string {
 }
 
 export const ROLE_TAGS = [
-  { slug: "farmer_grazier", label: "Farmer / Grazier" },
   { slug: "fencing_contractor", label: "Fencing Contractor" },
   { slug: "truck_driver_carrier", label: "Truck Driver / Carrier" },
-  { slug: "machine_header_operator", label: "Header / Machine Operator" },
-  { slug: "station_hand_shearer", label: "Station Hand / Shearer" },
+  { slug: "machine_header_operator", label: "Header / Machine / Ag Contracting" },
+  { slug: "earthmoving_dam_contractor", label: "Earthmoving & Dam Contractor" },
+  { slug: "station_hand_shearer", label: "Shearer / Crutching / Station Hand" },
+  { slug: "bore_water_driller", label: "Bore Driller & Water Systems" },
+  { slug: "farmer_grazier", label: "Farmer / Grazier / Property" },
   { slug: "hay_grain_grower", label: "Hay & Grain Grower" },
   { slug: "machinery_steel_supplier", label: "Machinery & Rural Supplier" },
 ] as const;
@@ -164,6 +184,23 @@ export function availabilityStatusInfo(slug: string | null | undefined) {
   );
 }
 
+export function isCustomerTrustTag(slug: string): boolean {
+  const found = TRUST_TAGS.find((t) => t.slug === slug);
+  return found?.side === "customer";
+}
+
+export function formatPhoneHref(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  const cleaned = phone.replace(/[^\d+]/g, "");
+  return cleaned.length >= 6 ? cleaned : null;
+}
+
+export function isAustralianMobile(phone: string | null | undefined): boolean {
+  if (!phone) return false;
+  const cleaned = phone.replace(/\s+/g, "");
+  return /^(\+?614|04)\d{8}$/.test(cleaned);
+}
+
 export type VendorReviewRow = {
   id: string;
   created_at: string;
@@ -184,6 +221,7 @@ export type VendorTrustSummary = {
   display_name: string | null;
   trading_name: string | null;
   bio: string | null;
+  suburb?: string | null;
   postcode: string | null;
   state: string | null;
   member_since: string | null;
@@ -193,6 +231,11 @@ export type VendorTrustSummary = {
   abn: string | null;
   abn_entity_name: string | null;
   claim_status: string | null;
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  website_url?: string | null;
+  facebook_url?: string | null;
+  services_offered?: string[];
   insurances_held: string[];
   role_tags: string[];
   years_in_district: number | null;

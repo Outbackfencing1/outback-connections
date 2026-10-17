@@ -97,8 +97,9 @@ export default async function JobDetailPage({
       id, anonymised_id, slug, kind, title, description, postcode, state,
       created_at, expires_at, user_id, status,
       data_source, source_platform, source_url, business_id, metadata,
+      contact_email, contact_phone, contact_best_time,
       category:categories(slug, label),
-      business:businesses(claim_status, geo_lat, geo_lng),
+      business:businesses(claim_status, geo_lat, geo_lng, contact_phone, contact_email, website_url, suburb, outback_verified),
       job_details(direction, work_type, pay_type, pay_amount, start_date, duration_text, accommodation_provided, tickets, travel_willingness, experience_years)
     `
     )
@@ -114,8 +115,9 @@ export default async function JobDetailPage({
         id, anonymised_id, slug, kind, title, description, postcode, state,
         created_at, expires_at, user_id, status,
         data_source, source_platform, source_url, business_id, metadata,
+        contact_email, contact_phone, contact_best_time,
         category:categories(slug, label),
-        business:businesses(claim_status, geo_lat, geo_lng),
+        business:businesses(claim_status, geo_lat, geo_lng, contact_phone, contact_email, website_url, suburb, outback_verified),
         job_details(work_type, pay_type, pay_amount, start_date, duration_text, accommodation_provided)
       `
       )
@@ -127,14 +129,6 @@ export default async function JobDetailPage({
 
   if (!listing) notFound();
 
-  const { data: contact } = viewer
-    ? await supabase
-        .from("listings")
-        .select("contact_email, contact_phone, contact_best_time")
-        .eq("id", listing.id)
-        .maybeSingle()
-    : { data: null };
-
   const isOwner = viewer?.id === listing.user_id;
   if (!isOwner && (listing.status !== "active" || new Date(listing.expires_at) <= new Date())) {
     notFound();
@@ -144,6 +138,12 @@ export default async function JobDetailPage({
     ? listing.job_details[0]
     : listing.job_details) as JobDetail | null;
   const cat = Array.isArray(listing.category) ? listing.category[0] : listing.category;
+  const biz = Array.isArray(listing.business) ? listing.business[0] : listing.business;
+  const resolvedPhone = listing.contact_phone || biz?.contact_phone || null;
+  const resolvedEmail = listing.contact_email || biz?.contact_email || null;
+  const resolvedWebsite = biz?.website_url || null;
+  const resolvedSuburb = biz?.suburb || null;
+  const phoneDigits = resolvedPhone ? resolvedPhone.replace(/[^\d+]/g, "") : null;
 
   await logEvent({
     eventType: "listing_view",
@@ -157,7 +157,7 @@ export default async function JobDetailPage({
       direction: detail?.direction ?? "hiring",
     },
   });
-  if (viewer && listing.data_source !== "scraped" && (contact?.contact_email || contact?.contact_phone)) {
+  if (viewer && listing.data_source !== "scraped" && (resolvedEmail || resolvedPhone)) {
     await logEvent({
       eventType: "contact_reveal",
       entityType: "listing",
@@ -173,7 +173,6 @@ export default async function JobDetailPage({
   const isScraped = listing.data_source === "scraped";
   const isSyndicated = isScraped && listing.source_platform === "adzuna";
   const isWorkerProfile = detail?.direction === "available_for_work";
-  const biz = Array.isArray(listing.business) ? listing.business[0] : listing.business;
   const isUnclaimedScraped =
     isScraped && !isSyndicated && (!biz || biz.claim_status === "unclaimed");
   const pageUrl = `${BASE_URL}/jobs/${listing.slug}`;
@@ -229,33 +228,84 @@ export default async function JobDetailPage({
         </Link>
       </p>
 
-      <div className="mt-3 flex items-baseline justify-between gap-4">
+      <div className="mt-3 flex flex-wrap items-baseline justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
           {listing.title}
         </h1>
-        {badge ? (
-          <span
-            className={`shrink-0 rounded px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${
-              badge.isWorker
-                ? "bg-emerald-100 text-emerald-900"
-                : "bg-neutral-100 text-neutral-700"
-            }`}
-          >
-            {badge.label}
-          </span>
-        ) : (
-          <span className="shrink-0 rounded bg-neutral-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-neutral-700">
-            {kindLabel(listing.kind)}
-          </span>
-        )}
+        <span className="flex shrink-0 flex-wrap items-center gap-2">
+          {biz?.outback_verified && (
+            <span className="rounded-full border border-amber-400 bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-950">
+              ★ Outback Verified
+            </span>
+          )}
+          {badge ? (
+            <span
+              className={`rounded px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${
+                badge.isWorker
+                  ? "bg-emerald-100 text-emerald-900"
+                  : "bg-neutral-100 text-neutral-700"
+              }`}
+            >
+              {badge.label}
+            </span>
+          ) : (
+            <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-neutral-700">
+              {kindLabel(listing.kind)}
+            </span>
+          )}
+        </span>
       </div>
 
       <p className="mt-2 text-sm text-neutral-600">
         {cat?.label ?? "—"} ·{" "}
+        {resolvedSuburb ? `${resolvedSuburb}, ` : ""}
         {listing.state ? `${listing.postcode} ${listing.state}` : `Postcode ${listing.postcode}`}{" "}
         · Posted {relativeTime(listing.created_at)} ·{" "}
         Expires {new Date(listing.expires_at).toLocaleDateString("en-AU")}
       </p>
+
+      {!isSyndicated && (phoneDigits || resolvedEmail || resolvedWebsite) && (
+        <div className="mt-4 flex flex-wrap items-center gap-2.5 rounded-2xl border border-green-300 bg-green-50/70 p-3.5 shadow-sm">
+          {phoneDigits && (
+            <a
+              href={`tel:${phoneDigits}`}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-green-700 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-green-800"
+            >
+              📞 Call {resolvedPhone}
+            </a>
+          )}
+          {phoneDigits && /^(\+?614|04)\d{8}$/.test(phoneDigits) && (
+            <a
+              href={`sms:${phoneDigits}?body=${encodeURIComponent(
+                `Hi ${listing.title}, saw your listing on Outback Connections (${listing.postcode}) — are you available?`
+              )}`}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-green-700 bg-white px-3.5 py-2 text-sm font-bold text-green-900 shadow-sm hover:bg-green-100"
+            >
+              💬 SMS
+            </a>
+          )}
+          {resolvedEmail && (
+            <a
+              href={`mailto:${resolvedEmail}?subject=${encodeURIComponent(
+                `Work Enquiry via Outback Connections: ${listing.title}`
+              )}`}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-sm font-semibold text-neutral-900 shadow-sm hover:border-green-700"
+            >
+              ✉️ Email
+            </a>
+          )}
+          {resolvedWebsite && (
+            <a
+              href={resolvedWebsite}
+              target="_blank"
+              rel="nofollow noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-sm font-semibold text-neutral-900 shadow-sm hover:border-green-700"
+            >
+              🌐 Website →
+            </a>
+          )}
+        </div>
+      )}
 
       <ShareListingBar
         title={listing.title}
@@ -300,13 +350,17 @@ export default async function JobDetailPage({
             signedIn={!!viewer}
             signInRedirect={`/jobs/${listing.slug}`}
             listingId={listing.id}
+            contactPhone={resolvedPhone}
+            contactEmail={resolvedEmail}
+            websiteUrl={resolvedWebsite}
           />
         ) : (
           <ContactBlock
             signedIn={!!viewer}
-            contactEmail={contact?.contact_email ?? null}
-            contactPhone={contact?.contact_phone ?? null}
-            contactBestTime={contact?.contact_best_time ?? null}
+            contactEmail={resolvedEmail}
+            contactPhone={resolvedPhone}
+            contactBestTime={listing.contact_best_time ?? null}
+            websiteUrl={resolvedWebsite}
             signInRedirect={`/jobs/${listing.slug}`}
           />
         )}

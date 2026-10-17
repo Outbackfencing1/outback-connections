@@ -65,6 +65,8 @@ type SaleDetailRow = {
   proof_badges?: string[] | null;
 };
 
+import { formatPhoneHref, isAustralianMobile } from "@/lib/trust";
+
 type SaleListingRow = {
   anonymised_id: string;
   slug: string;
@@ -75,6 +77,8 @@ type SaleListingRow = {
   postcode: string;
   state: string | null;
   created_at: string;
+  contact_phone?: string | null;
+  contact_email?: string | null;
   category: { slug: string; label: string } | { slug: string; label: string }[] | null;
   sale_details: SaleDetailRow | SaleDetailRow[] | null;
 };
@@ -122,7 +126,7 @@ export default async function SaleBrowsePage({ searchParams }: { searchParams: P
     .from("listings")
     .select(
       `
-      anonymised_id, slug, kind, side, title, description, postcode, state, created_at,
+      anonymised_id, slug, kind, side, title, description, postcode, state, created_at, contact_phone, contact_email,
       category:categories(slug, label),
       sale_details!inner(price_cents, price_type, quantity, unit, condition, delivery, sold_at, sub_category, harvest_season, proof_badges)
     `,
@@ -146,7 +150,7 @@ export default async function SaleBrowsePage({ searchParams }: { searchParams: P
       .from("listings")
       .select(
         `
-        anonymised_id, slug, kind, side, title, description, postcode, state, created_at,
+        anonymised_id, slug, kind, side, title, description, postcode, state, created_at, contact_phone, contact_email,
         category:categories(slug, label),
         sale_details!inner(price_cents, price_type, quantity, unit, condition, delivery, sold_at)
       `,
@@ -447,12 +451,14 @@ export default async function SaleBrowsePage({ searchParams }: { searchParams: P
               const isWanted = l.side === "demand";
               const proofs = Array.isArray(d?.proof_badges) ? d.proof_badges : [];
               const lot = d ? estimateLotSummary(d) : null;
+              const phoneHref = formatPhoneHref(l.contact_phone);
+              const canSms = isAustralianMobile(l.contact_phone);
               return (
-                <li key={l.anonymised_id}>
-                  <Link
-                    href={`/sale/${l.slug}`}
-                    className="block rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm transition hover:border-green-700 hover:shadow-md"
-                  >
+                <li
+                  key={l.anonymised_id}
+                  className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm transition hover:border-green-700 hover:shadow-md"
+                >
+                  <Link href={`/sale/${l.slug}`} className="block group">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <span
@@ -464,7 +470,7 @@ export default async function SaleBrowsePage({ searchParams }: { searchParams: P
                         >
                           {isWanted ? "Wanted to Buy" : "For Sale"}
                         </span>
-                        <h3 className="min-w-0 text-base font-semibold text-neutral-900 [overflow-wrap:anywhere] sm:text-lg">
+                        <h3 className="min-w-0 text-base font-semibold text-neutral-900 group-hover:text-green-800 [overflow-wrap:anywhere] sm:text-lg">
                           {l.title}
                         </h3>
                       </div>
@@ -496,6 +502,47 @@ export default async function SaleBrowsePage({ searchParams }: { searchParams: P
                     )}
                     <p className="mt-3 text-sm text-neutral-700">{teaser(l.description, 160)}</p>
                   </Link>
+
+                  {(phoneHref || l.contact_email) && (
+                    <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 pt-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {phoneHref && (
+                          <a
+                            href={`tel:${phoneHref}`}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-green-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-green-800"
+                          >
+                            📞 Call {l.contact_phone}
+                          </a>
+                        )}
+                        {phoneHref && canSms && (
+                          <a
+                            href={`sms:${phoneHref}?body=${encodeURIComponent(
+                              `Hi, saw your listing "${l.title}" on Outback Connections (${l.postcode}) — is it still available?`
+                            )}`}
+                            className="inline-flex items-center gap-1 rounded-lg border border-green-700 bg-green-50 px-2.5 py-1.5 text-xs font-semibold text-green-900 hover:bg-green-100"
+                          >
+                            💬 SMS
+                          </a>
+                        )}
+                        {l.contact_email && (
+                          <a
+                            href={`mailto:${l.contact_email}?subject=${encodeURIComponent(
+                              `Enquiry via Outback Connections: ${l.title}`
+                            )}`}
+                            className="inline-flex items-center gap-1 rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-neutral-800 hover:border-green-700 hover:text-green-800"
+                          >
+                            ✉️ Email
+                          </a>
+                        )}
+                      </div>
+                      <Link
+                        href={`/sale/${l.slug}`}
+                        className="text-xs font-semibold text-green-800 hover:underline"
+                      >
+                        Details &amp; reviews →
+                      </Link>
+                    </div>
+                  )}
                 </li>
               );
             })}

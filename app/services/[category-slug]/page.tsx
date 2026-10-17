@@ -94,9 +94,9 @@ export default async function ServiceCategoryPage({
     .select(
       `
       anonymised_id, slug, kind, title, description, postcode, state, created_at,
-      data_source, source_platform,
+      data_source, source_platform, contact_phone, contact_email,
       category:categories(slug, label),
-      business:businesses(claim_status),
+      business:businesses(claim_status, contact_phone, contact_email, website_url, suburb, outback_verified),
       service_details!inner(direction, rate_type, rate_amount, travel_willingness)
     `,
       { count: "exact" }
@@ -266,28 +266,32 @@ export default async function ServiceCategoryPage({
           </div>
         ) : (
           <ul className="space-y-4">
-            {listings.map((l) => (
-              <li key={l.anonymised_id}>
-                <ListingCard
-                  listing={{
-                    anonymised_id: l.anonymised_id,
-                    slug: l.slug,
-                    kind: l.kind,
-                    title: l.title,
-                    description: l.description,
-                    postcode: l.postcode,
-                    state: l.state,
-                    created_at: l.created_at,
-                    category: Array.isArray(l.category) ? l.category[0] ?? null : l.category,
-                    data_source: l.data_source,
-                    source_platform: l.source_platform,
-                    business_claim_status: Array.isArray(l.business)
-                      ? l.business[0]?.claim_status ?? null
-                      : (l.business as { claim_status?: string } | null)?.claim_status ?? null,
-                  }}
-                />
-              </li>
-            ))}
+            {listings.map((l) => {
+              const biz = Array.isArray(l.business) ? l.business[0] ?? null : l.business;
+              return (
+                <li key={l.anonymised_id}>
+                  <ListingCard
+                    listing={{
+                      anonymised_id: l.anonymised_id,
+                      slug: l.slug,
+                      kind: l.kind,
+                      title: l.title,
+                      description: l.description,
+                      postcode: l.postcode,
+                      state: l.state,
+                      created_at: l.created_at,
+                      category: Array.isArray(l.category) ? l.category[0] ?? null : l.category,
+                      data_source: l.data_source,
+                      source_platform: l.source_platform,
+                      contact_phone: l.contact_phone,
+                      contact_email: l.contact_email,
+                      business_claim_status: biz?.claim_status ?? null,
+                      business: biz,
+                    }}
+                  />
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

@@ -77,6 +77,7 @@ export default async function SaleDetailPage({
       `
       id, anonymised_id, slug, kind, side, title, description, postcode, state,
       created_at, expires_at, user_id, status,
+      contact_email, contact_phone, contact_best_time,
       category:categories(slug, label),
       sale_details(price_cents, price_type, quantity, unit, condition, delivery, sold_at, sub_category, harvest_season, proof_badges)
     `
@@ -92,6 +93,7 @@ export default async function SaleDetailPage({
         `
         id, anonymised_id, slug, kind, side, title, description, postcode, state,
         created_at, expires_at, user_id, status,
+        contact_email, contact_phone, contact_best_time,
         category:categories(slug, label),
         sale_details(price_cents, price_type, quantity, unit, condition, delivery, sold_at)
       `
@@ -103,10 +105,6 @@ export default async function SaleDetailPage({
   }
 
   if (!listing) notFound();
-
-  const { data: contact } = viewer
-    ? await supabase.from("listings").select("contact_email, contact_phone, contact_best_time").eq("id", listing.id).maybeSingle()
-    : { data: null };
 
   const isOwner = viewer?.id === listing.user_id;
   if (!isOwner && (listing.status !== "active" || new Date(listing.expires_at) <= new Date())) {
@@ -132,7 +130,7 @@ export default async function SaleDetailPage({
     userId: viewer?.id ?? null,
     properties: { slug: listing.slug, sub_category: d?.sub_category ?? null },
   });
-  if (viewer && (contact?.contact_email || contact?.contact_phone)) {
+  if (viewer && (listing.contact_email || listing.contact_phone)) {
     await logEvent({ eventType: "contact_reveal", entityType: "listing", entityId: listing.id, vertical: "sale", userId: viewer.id });
   }
 
@@ -296,9 +294,9 @@ export default async function SaleDetailPage({
       <section className="mt-8">
         <ContactBlock
           signedIn={!!viewer}
-          contactEmail={contact?.contact_email ?? null}
-          contactPhone={contact?.contact_phone ?? null}
-          contactBestTime={contact?.contact_best_time ?? null}
+          contactEmail={listing.contact_email ?? null}
+          contactPhone={listing.contact_phone ?? null}
+          contactBestTime={listing.contact_best_time ?? null}
           signInRedirect={`/sale/${listing.slug}`}
         />
         <p className="mt-3 text-xs text-neutral-500">

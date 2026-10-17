@@ -1,96 +1,102 @@
 // components/detail/ContactBlock.tsx — server component.
-// Public-safe gated contact display: only renders raw email/phone when
-// the viewer is signed in. Anonymous viewers see a sign-in CTA.
+// Immediate 1-click contact display so customers can Call, SMS, Email, or
+// visit the vendor's website with zero friction.
 import Link from "next/link";
+import { formatPhoneHref, isAustralianMobile } from "@/lib/trust";
 
 type Props = {
-  signedIn: boolean;
+  signedIn?: boolean;
   contactEmail: string | null;
   contactPhone: string | null;
   contactBestTime: string | null;
-  signInRedirect: string;
+  websiteUrl?: string | null;
+  signInRedirect?: string;
 };
 
 export default function ContactBlock({
-  signedIn,
   contactEmail,
   contactPhone,
   contactBestTime,
-  signInRedirect,
+  websiteUrl = null,
 }: Props) {
-  // Signed-out pages deliberately do not fetch restricted contact columns.
-  // Only an authenticated empty result proves that this listing currently has
-  // no owner-confirmed contact. Never fall back to raw scraped source data.
-  if (signedIn && !contactEmail && !contactPhone && !contactBestTime) {
+  const phoneHref = formatPhoneHref(contactPhone);
+  const canSms = isAustralianMobile(contactPhone);
+
+  if (!contactEmail && !contactPhone && !websiteUrl && !contactBestTime) {
     return (
       <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-5">
-        <p className="font-semibold text-neutral-900">Contact</p>
+        <p className="font-semibold text-neutral-900">Direct contact</p>
         <p className="mt-2 text-sm text-neutral-700">
-          Contact details are being updated. Please check back soon.
+          Use the enquiry / quote form below to message this listing directly.
         </p>
-      </div>
-    );
-  }
-
-  if (!signedIn) {
-    return (
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
-        <p className="font-semibold text-amber-900">Contact details</p>
-        <p className="mt-2 text-sm text-amber-900">
-          Sign in to check the available contact options — we keep contact
-          details private to reduce spam.
-        </p>
-        <Link
-          href={`/signin?next=${encodeURIComponent(signInRedirect)}`}
-          className="mt-3 inline-block rounded-lg bg-green-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-800"
-        >
-          Sign in to see contact
-        </Link>
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-5">
-      <p className="font-semibold text-neutral-900">Contact</p>
-      <ul className="mt-3 space-y-2 text-sm text-neutral-800">
-        {contactEmail && (
-          <li>
-            <span className="text-neutral-600">Email: </span>
-            <a href={`mailto:${contactEmail}`} className="font-medium underline">
-              {contactEmail}
-            </a>
-          </li>
-        )}
-        {contactPhone && (
-          <li>
-            <span className="text-neutral-600">Phone: </span>
-            <a
-              href={`tel:${contactPhone.replace(/\s+/g, "")}`}
-              className="font-medium underline"
-            >
-              {contactPhone}
-            </a>
-          </li>
-        )}
+    <div className="rounded-2xl border border-green-300 bg-green-50/50 p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-green-800">
+            Direct Contact — 0 Commission
+          </p>
+          <p className="mt-0.5 text-base font-bold text-neutral-900">
+            Reach out directly by phone, text or email
+          </p>
+        </div>
         {contactBestTime && (
-          <li>
-            <span className="text-neutral-600">Best time: </span>
-            {contactBestTime}
-          </li>
+          <span className="rounded-full border border-green-200 bg-white px-3 py-1 text-xs font-medium text-neutral-700">
+            🕒 Best time: {contactBestTime}
+          </span>
         )}
-      </ul>
-      <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
-        <p>
-          Contact details are visible only to signed-in users. Outback
-          Connections doesn&apos;t broker the connection — you&apos;re
-          reaching out directly.{" "}
-          <strong>Don&apos;t share these details publicly</strong>, don&apos;t
-          add them to mailing lists, and don&apos;t use them for any
-          purpose other than responding to this listing. Contact harvesting
-          can get your account terminated and may breach the Spam Act 2003.
-        </p>
       </div>
+
+      {/* 1-Click Action Buttons */}
+      <div className="mt-4 flex flex-wrap gap-2.5">
+        {phoneHref && (
+          <a
+            href={`tel:${phoneHref}`}
+            className="inline-flex items-center gap-2 rounded-xl bg-green-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-green-800"
+          >
+            📞 Call {contactPhone}
+          </a>
+        )}
+        {phoneHref && canSms && (
+          <a
+            href={`sms:${phoneHref}`}
+            className="inline-flex items-center gap-2 rounded-xl border border-green-700 bg-white px-4 py-2.5 text-sm font-bold text-green-900 shadow-sm hover:bg-green-100"
+          >
+            💬 Send SMS
+          </a>
+        )}
+        {contactEmail && (
+          <a
+            href={`mailto:${contactEmail}`}
+            className="inline-flex items-center gap-2 rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-900 shadow-sm hover:border-green-700 hover:text-green-900"
+          >
+            ✉️ {contactEmail}
+          </a>
+        )}
+        {websiteUrl && (
+          <a
+            href={websiteUrl}
+            target="_blank"
+            rel="nofollow noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-900 shadow-sm hover:border-green-700 hover:text-green-900"
+          >
+            🌐 Visit Website →
+          </a>
+        )}
+      </div>
+
+      <p className="mt-3 text-xs text-neutral-600">
+        Outback Connections connects rural Australians directly — no middleman fees. Please respect rural working hours and never add numbers to marketing lists. Need a hand?{" "}
+        <Link href="/report" className="underline">
+          Report an issue
+        </Link>
+        .
+      </p>
     </div>
   );
 }
+
