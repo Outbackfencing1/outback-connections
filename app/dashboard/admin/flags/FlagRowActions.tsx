@@ -1,5 +1,5 @@
 "use client";
-import { hideListing, clearFlags } from "./actions";
+import { approvePendingListing, hideListing, clearFlags } from "./actions";
 
 type Props = {
   listingId: string;
@@ -19,9 +19,22 @@ export default function FlagRowActions({ listingId, status, listingTitle }: Prop
     }
   }
 
+  const isPending = status === "pending_review" || status === "pending_verification";
+
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {status === "active" && (
+      {isPending && (
+        <form action={approvePendingListing}>
+          <input type="hidden" name="listing_id" value={listingId} />
+          <button
+            type="submit"
+            className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800"
+          >
+            Approve &amp; publish
+          </button>
+        </form>
+      )}
+      {(status === "active" || isPending) && (
         <form action={hideListing} onSubmit={confirmHide}>
           <input type="hidden" name="listing_id" value={listingId} />
           <button
@@ -32,15 +45,17 @@ export default function FlagRowActions({ listingId, status, listingTitle }: Prop
           </button>
         </form>
       )}
-      <form action={clearFlags} onSubmit={confirmClear}>
-        <input type="hidden" name="listing_id" value={listingId} />
-        <button
-          type="submit"
-          className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-neutral-50"
-        >
-          Clear flags
-        </button>
-      </form>
+      {!isPending && (
+        <form action={clearFlags} onSubmit={confirmClear}>
+          <input type="hidden" name="listing_id" value={listingId} />
+          <button
+            type="submit"
+            className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-neutral-50"
+          >
+            Clear flags
+          </button>
+        </form>
+      )}
     </div>
   );
 }

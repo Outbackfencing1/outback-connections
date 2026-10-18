@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { listingHref } from "@/lib/format";
+import { isRuralPostcode } from "@/lib/rural-postcodes";
+import { breadcrumbJsonLd, itemListJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/seo/JsonLd";
 import {
   ROLE_TAGS,
   availabilityStatusInfo,
@@ -98,9 +101,9 @@ export default async function TrustedProfilesDirectoryPage({
     p_limit: 200,
   });
 
-  let allProfiles: TrustedProfileItem[] = Array.isArray(rpcData)
-    ? (rpcData as TrustedProfileItem[])
-    : [];
+  let allProfiles: TrustedProfileItem[] = (
+    Array.isArray(rpcData) ? (rpcData as TrustedProfileItem[]) : []
+  ).filter((p) => !p.postcode || isRuralPostcode(p.postcode, p.state));
 
   if (role === "earthmoving_dam_contractor") {
     allProfiles = allProfiles.filter((p) => {
@@ -163,9 +166,24 @@ export default async function TrustedProfilesDirectoryPage({
   }
 
   const withPhoneCount = allProfiles.filter((p) => !!p.contact_phone).length;
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
+  const profilesItemList = itemListJsonLd({
+    name: "Verified Rural Contractors, Carriers & Skilled Labour Profiles",
+    url: `${baseUrl}/profiles`,
+    items: allProfiles.slice(0, 50).map((p) => ({
+      name: p.name,
+      url: `${baseUrl}/profile/${p.profile_id}`,
+    })),
+  });
+  const profilesBreadcrumbs = breadcrumbJsonLd([
+    { name: "Home", url: `${baseUrl}/` },
+    { name: "Trusted Profiles", url: `${baseUrl}/profiles` },
+  ]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
+      <JsonLd data={[profilesItemList, profilesBreadcrumbs]} />
       {/* Hero Header */}
       <div className="rounded-3xl border border-green-900/15 bg-gradient-to-br from-green-950 via-green-900 to-emerald-900 p-6 text-white shadow-md sm:p-8">
         <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">

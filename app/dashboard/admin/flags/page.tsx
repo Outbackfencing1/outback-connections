@@ -61,7 +61,7 @@ export default async function AdminFlagQueuePage() {
   const { data: rows } = await supabase
     .from("listings")
     .select("id, slug, kind, title, postcode, status, flag_count, created_at, user_id")
-    .gt("flag_count", 0)
+    .or("flag_count.gt.0,status.eq.pending_review,status.eq.pending_verification")
     .order("flag_count", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(100);
@@ -71,7 +71,7 @@ export default async function AdminFlagQueuePage() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
       <div className="flex items-baseline justify-between gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">Flag queue</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Verification &amp; flag queue</h1>
         <Link href="/dashboard/admin/moderation" className="text-sm underline">
           Moderation history →
         </Link>

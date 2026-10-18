@@ -50,6 +50,9 @@ export default async function MyListingsPage() {
   const listings: ListingRow[] = (rows ?? []) as unknown as ListingRow[];
   const now = await requestTimestamp();
 
+  const pending = listings.filter(
+    (l) => l.status === "pending_review" || l.status === "pending_verification"
+  );
   const active = listings.filter(
     (l) => l.status === "active" && new Date(l.expires_at).getTime() > now
   );
@@ -79,6 +82,20 @@ export default async function MyListingsPage() {
         </div>
       )}
 
+      {pending.length > 0 && !flash && (
+        <div role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <p className="font-semibold">
+            Your listing is saved and queued! Confirm your email/phone or ABN to publish immediately, or our team will approve it shortly.
+          </p>
+          <p className="mt-1 text-xs text-amber-900">
+            Want to fast-track approval right now?{" "}
+            <Link href="/dashboard/profile" className="font-semibold underline">
+              Add your ABN or verify your phone on your profile →
+            </Link>
+          </p>
+        </div>
+      )}
+
       {listings.length === 0 ? (
         <div className="mt-8 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center">
           <p className="text-sm text-neutral-700">You haven&apos;t posted anything yet.</p>
@@ -91,9 +108,14 @@ export default async function MyListingsPage() {
         </div>
       ) : (
         <>
+          <ListingGroup
+            title="Pending Verification"
+            subtitle="Saved and queued for verification. Confirm your email/phone or ABN on your profile to publish immediately, or our team will approve it shortly."
+            rows={pending}
+          />
           <ListingGroup title="Active" subtitle="Visible on the public marketplace." rows={active} showClose />
           <ListingGroup title="Closed" subtitle="You marked these as filled or withdrawn. Kept here for your records." rows={closed} />
-          <ListingGroup title="Expired" subtitle="Past 30 days; not visible publicly. Edit + repost if you want them back up." rows={expired} />
+          <ListingGroup title="Expired" subtitle="Past 30 days; archived publicly so search links continue to work. Edit + repost if you want them active again." rows={expired} />
           <ListingGroup title="Hidden" subtitle="Hidden by moderation. Email support if you think this is wrong." rows={hidden} />
         </>
       )}

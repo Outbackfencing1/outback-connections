@@ -8,17 +8,19 @@ import ContactBlock from "@/components/detail/ContactBlock";
 import ScrapedNotice from "@/components/detail/ScrapedNotice";
 import TradeOfferCard from "@/components/detail/TradeOfferCard";
 import EnquiryForm from "@/components/detail/EnquiryForm";
+import ExpiredListingBanner from "@/components/detail/ExpiredListingBanner";
 import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
 import VendorTrustSection from "@/components/detail/VendorTrustSection";
 import ShareListingBar from "@/components/detail/ShareListingBar";
+import JsonLd from "@/components/seo/JsonLd";
 import { kindLabel, postedVerb, relativeTime } from "@/lib/format";
 import {
   buildDescription,
   buildDirectoryDescription,
   buildTitle,
-  jsonLdScript,
+  formatListingDescription,
   serviceJsonLd,
   localBusinessJsonLd,
   breadcrumbJsonLd,
@@ -40,12 +42,30 @@ export async function generateMetadata({
 }) {
   const { slug } = await params;
   const supabase = createClient();
-  const { data } = await supabase
+  let { data } = await supabase
     .from("listings")
-    .select(`title, description, postcode, state, kind, data_source, category:categories(label)`)
+    .select(
+      `title, description, postcode, state, kind, status, data_source, category:categories(label), business:businesses(suburb, claim_status)`
+    )
     .eq("slug", slug)
     .in("kind", ["service_offering", "service_request"])
     .maybeSingle();
+
+  if (!data) {
+    const admin = createAdminClient();
+    if (admin) {
+      const fb = await admin
+        .from("listings")
+        .select(
+          `title, description, postcode, state, kind, status, data_source, category:categories(label), business:businesses(suburb, claim_status)`
+        )
+        .eq("slug", slug)
+        .in("kind", ["service_offering", "service_request"])
+        .in("status", ["active", "expired", "closed"])
+        .maybeSingle();
+      data = fb.data as typeof data;
+    }
+  }
 
   if (!data) {
     return {
@@ -54,6 +74,7 @@ export async function generateMetadata({
     };
   }
   const cat = Array.isArray(data.category) ? data.category[0] : data.category;
+  const biz = Array.isArray(data.business) ? data.business[0] : data.business;
   const title = buildTitle({
     listingTitle: data.title,
     categoryLabel: cat?.label ?? "Services",
@@ -64,11 +85,13 @@ export async function generateMetadata({
   if (data.kind === "service_offering" && data.data_source !== "manual") {
     const region = (await regionsForPostcodes([data.postcode])).get(data.postcode);
     description = buildDirectoryDescription({
+      businessName: data.title,
       categoryLabel: cat?.label ?? "Rural service",
       regionName: region?.region_name,
+      suburb: biz?.suburb ?? null,
       state: data.state,
       postcode: data.postcode,
-      unclaimed: data.data_source === "scraped",
+      unclaimed: data.data_source === "scraped" && (!biz || biz.claim_status === "unclaimed"),
     });
   } else {
     description = buildDescription(data.description);
@@ -94,25 +117,39 @@ export default async function ServiceDetailPage({
   const { data: userData } = await supabase.auth.getUser();
   const viewer = userData.user;
 
-  const { data: listing } = await supabase
-    .from("listings")
-    .select(
-      `
+  const selectCols = `
       id, anonymised_id, slug, kind, title, description, postcode, state,
-      created_at, expires_at, user_id, status,
+      created_at, expires_at, user_id, status, category_id,
       data_source, source_platform, source_url, business_id, metadata,
       contact_email, contact_phone, contact_best_time,
       category:categories(slug, label),
       business:businesses(claim_status, geo_lat, geo_lng, contact_phone, contact_email, website_url, suburb, outback_verified),
       service_details(direction, rate_type, rate_amount, travel_willingness)
-    `
-    )
+    `;
+
+  let { data: listing } = await supabase
+    .from("listings")
+    .select(selectCols)
     .eq("slug", slug)
     .in("kind", ["service_offering", "service_request"])
     .maybeSingle();
 
   if (!listing) {
     await redirectToCanonical(slug);
+    const admin = createAdminClient();
+    if (admin) {
+      const fb = await admin
+        .from("listings")
+        .select(selectCols)
+        .eq("slug", slug)
+        .in("kind", ["service_offering", "service_request"])
+        .in("status", ["active", "expired", "closed"])
+        .maybeSingle();
+      listing = fb.data as typeof listing;
+    }
+  }
+
+  if (!listing) {
     notFound();
   }
 
@@ -122,10 +159,23 @@ export default async function ServiceDetailPage({
       : { data: null };
 
   const isOwner = viewer?.id === listing.user_id;
-  if (!isOwner && (listing.status !== "active" || new Date(listing.expires_at) <= new Date())) {
+  const isExpiredOrFilled =
+    listing.status === "expired" ||
+    listing.status === "closed" ||
+    (listing.status === "active" && new Date(listing.expires_at) <= new Date());
+  const isPubliclyVisible =
+    (listing.status === "active" && new Date(listing.expires_at) > new Date()) ||
+    isExpiredOrFilled;
+
+  if (!isOwner && !isPubliclyVisible) {
     await redirectToCanonical(slug);
     notFound();
   }
+  if (!isOwner && isExpiredOrFilled) {
+    // Still honour a canonical 301 redirect if this row was merged into a newer active listing
+    await redirectToCanonical(slug);
+  }
+
   const sourceUrlKind =
     listing.metadata && typeof listing.metadata === "object"
       ? ((listing.metadata as Record<string, unknown>).source_url_kind as
@@ -158,15 +208,25 @@ export default async function ServiceDetailPage({
   const resolvedSuburb = business?.suburb || null;
   const phoneDigits = resolvedPhone ? resolvedPhone.replace(/[^\d+]/g, "") : null;
 
+  const displayDescription = formatListingDescription({
+    description: listing.description,
+    businessName: listing.title,
+    categoryName: cat?.label,
+    suburb: resolvedSuburb,
+    postcode: listing.postcode,
+    state: listing.state,
+    unclaimed: isUnclaimedScraped,
+  });
+
   await logEvent({
     eventType: "listing_view",
     entityType: "listing",
     entityId: listing.id,
     vertical: "service",
     userId: viewer?.id ?? null,
-    properties: { slug: listing.slug },
+    properties: { slug: listing.slug, expired: isExpiredOrFilled },
   });
-  if (viewer && !isUnclaimedScraped && (resolvedEmail || resolvedPhone)) {
+  if (viewer && !isUnclaimedScraped && !isExpiredOrFilled && (resolvedEmail || resolvedPhone)) {
     await logEvent({
       eventType: "contact_reveal",
       entityType: "listing",
@@ -176,16 +236,16 @@ export default async function ServiceDetailPage({
     });
   }
 
-  // Offerings -> Service + LocalBusiness (a real provider). Requests are
-  // demand-side and get neither (no clean schema mapping). Breadcrumb always.
+  // Offerings -> Service + LocalBusiness / HomeAndConstructionBusiness.
   const pageUrl = `${BASE_URL}/services/listing/${listing.slug}`;
   const jsonLdBlocks: Record<string, unknown>[] = [];
   if (listing.kind === "service_offering") {
     jsonLdBlocks.push(
       serviceJsonLd({
         title: listing.title,
-        description: listing.description,
+        description: displayDescription,
         postcode: listing.postcode,
+        suburb: resolvedSuburb,
         state: listing.state,
         category: cat?.label ?? "Service",
         rateType: detail?.rate_type ?? null,
@@ -196,10 +256,13 @@ export default async function ServiceDetailPage({
       localBusinessJsonLd({
         name: listing.title,
         postcode: listing.postcode,
+        suburb: resolvedSuburb,
         state: listing.state,
+        telephone: !isExpiredOrFilled ? resolvedPhone : null,
         geoLat: business?.geo_lat ?? null,
         geoLng: business?.geo_lng ?? null,
         category: cat?.label ?? null,
+        categorySlug: cat?.slug ?? null,
         url: pageUrl,
       })
     );
@@ -215,13 +278,7 @@ export default async function ServiceDetailPage({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
-      {jsonLdBlocks.map((ld, i) => (
-        <script
-          key={i}
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: jsonLdScript(ld) }}
-        />
-      ))}
+      <JsonLd data={jsonLdBlocks} />
       <p className="text-sm">
         <Link
           href={cat ? `/services/${cat.slug}` : "/services"}
@@ -234,9 +291,19 @@ export default async function ServiceDetailPage({
       <div className="mt-3 flex flex-wrap items-baseline justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{listing.title}</h1>
         <span className="flex shrink-0 flex-wrap items-center gap-2">
+          {isExpiredOrFilled && (
+            <span className="rounded-full bg-amber-900 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-white">
+              Archived / Expired
+            </span>
+          )}
           {business?.outback_verified && (
             <span className="rounded-full border border-amber-400 bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-950">
               ★ Outback Verified
+            </span>
+          )}
+          {isUnclaimedScraped && (
+            <span className="rounded border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-900">
+              Unclaimed Profile — Is this your business? Claim for free
             </span>
           )}
           {trustBadge && (
@@ -255,54 +322,69 @@ export default async function ServiceDetailPage({
         {resolvedSuburb ? `${resolvedSuburb}, ` : ""}
         {listing.state ? `${listing.postcode} ${listing.state}` : `Postcode ${listing.postcode}`}{" "}
         · {postedVerb(listing.data_source)} {relativeTime(listing.created_at)} ·{" "}
-        Expires {new Date(listing.expires_at).toLocaleDateString("en-AU")}
+        {isExpiredOrFilled
+          ? `Expired ${new Date(listing.expires_at).toLocaleDateString("en-AU")}`
+          : `Expires ${new Date(listing.expires_at).toLocaleDateString("en-AU")}`}
       </p>
 
-      {/* Top 1-Click Direct Contact Bar — no scrolling needed */}
-      {(phoneDigits || resolvedEmail || resolvedWebsite) && (
-        <div className="mt-4 flex flex-wrap items-center gap-2.5 rounded-2xl border border-green-300 bg-green-50/70 p-3.5 shadow-sm">
-          {phoneDigits && (
-            <a
-              href={`tel:${phoneDigits}`}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-green-700 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-green-800"
-            >
-              📞 Call {resolvedPhone}
-            </a>
-          )}
-          {phoneDigits && /^(\+?614|04)\d{8}$/.test(phoneDigits) && (
-            <a
-              href={`sms:${phoneDigits}?body=${encodeURIComponent(
-                `Hi ${listing.title}, saw your listing on Outback Connections (${listing.postcode}) — are you available for a quote?`
-              )}`}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-green-700 bg-white px-3.5 py-2 text-sm font-bold text-green-900 shadow-sm hover:bg-green-100"
-            >
-              💬 SMS
-            </a>
-          )}
-          {resolvedEmail && (
-            <a
-              href={`mailto:${resolvedEmail}?subject=${encodeURIComponent(
-                `Enquiry via Outback Connections: ${listing.title}`
-              )}`}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-sm font-semibold text-neutral-900 shadow-sm hover:border-green-700"
-            >
-              ✉️ Email
-            </a>
-          )}
-          {resolvedWebsite && (
-            <a
-              href={resolvedWebsite}
-              target="_blank"
-              rel="nofollow noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-sm font-semibold text-neutral-900 shadow-sm hover:border-green-700"
-            >
-              🌐 Website →
-            </a>
-          )}
-        </div>
+      {isExpiredOrFilled ? (
+        <ExpiredListingBanner
+          listingId={listing.id}
+          kind={listing.kind}
+          categoryId={listing.category_id}
+          categoryName={cat?.label ?? "Rural service"}
+          suburb={resolvedSuburb}
+          postcode={listing.postcode}
+          state={listing.state}
+          browseHref={cat ? `/services/${cat.slug}` : "/services"}
+        />
+      ) : (
+        /* Top 1-Click Direct Contact Bar — no scrolling needed */
+        (phoneDigits || resolvedEmail || resolvedWebsite) && (
+          <div className="mt-4 flex flex-wrap items-center gap-2.5 rounded-2xl border border-green-300 bg-green-50/70 p-3.5 shadow-sm">
+            {phoneDigits && (
+              <a
+                href={`tel:${phoneDigits}`}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-green-700 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-green-800"
+              >
+                📞 Call {resolvedPhone}
+              </a>
+            )}
+            {phoneDigits && /^(\+?614|04)\d{8}$/.test(phoneDigits) && (
+              <a
+                href={`sms:${phoneDigits}?body=${encodeURIComponent(
+                  `Hi ${listing.title}, saw your listing on Outback Connections (${listing.postcode}) — are you available for a quote?`
+                )}`}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-green-700 bg-white px-3.5 py-2 text-sm font-bold text-green-900 shadow-sm hover:bg-green-100"
+              >
+                💬 SMS
+              </a>
+            )}
+            {resolvedEmail && (
+              <a
+                href={`mailto:${resolvedEmail}?subject=${encodeURIComponent(
+                  `Enquiry via Outback Connections: ${listing.title}`
+                )}`}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-sm font-semibold text-neutral-900 shadow-sm hover:border-green-700"
+              >
+                ✉️ Email
+              </a>
+            )}
+            {resolvedWebsite && (
+              <a
+                href={resolvedWebsite}
+                target="_blank"
+                rel="nofollow noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-sm font-semibold text-neutral-900 shadow-sm hover:border-green-700"
+              >
+                🌐 Website →
+              </a>
+            )}
+          </div>
+        )
       )}
 
-      {responded && (
+      {responded && !isExpiredOrFilled && (
         <p className="mt-2 inline-block rounded-lg border border-green-200 bg-green-50 px-3 py-1 text-sm text-green-900">
           {responded}
         </p>
@@ -318,55 +400,71 @@ export default async function ServiceDetailPage({
         <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-700">
           Description
         </h2>
-        <p className="mt-2 whitespace-pre-line text-neutral-800">{listing.description}</p>
+        <p className="mt-2 whitespace-pre-line text-neutral-800">{displayDescription}</p>
       </section>
 
       {detail && <ServiceDetails detail={detail} />}
 
-      <ShareListingBar
-        title={listing.title}
-        path={`/services/listing/${listing.slug}`}
-        postcode={listing.postcode}
-        state={listing.state}
-        badge={cat?.label ?? kindLabel(listing.kind)}
-      />
-
-      <section className="mt-8">
-        {isUnclaimedScraped ? (
-          <ScrapedNotice
+      {!isExpiredOrFilled && (
+        <>
+          <ShareListingBar
             title={listing.title}
-            sourcePlatform={listing.source_platform}
-            sourceUrl={listing.source_url}
-            businessId={listing.business_id}
-            signedIn={!!viewer}
-            signInRedirect={`/services/listing/${listing.slug}`}
-            listingId={listing.id}
-            sourceUrlKind={sourceUrlKind}
-            contactPhone={resolvedPhone}
-            contactEmail={resolvedEmail}
-            websiteUrl={resolvedWebsite}
+            path={`/services/listing/${listing.slug}`}
+            postcode={listing.postcode}
+            state={listing.state}
+            badge={cat?.label ?? kindLabel(listing.kind)}
           />
-        ) : (
-          <ContactBlock
-            signedIn={!!viewer}
-            contactEmail={resolvedEmail}
-            contactPhone={resolvedPhone}
-            contactBestTime={listing.contact_best_time ?? null}
-            websiteUrl={resolvedWebsite}
-            signInRedirect={`/services/listing/${listing.slug}`}
-          />
-        )}
-      </section>
 
-      {!isOwner && listing.kind === "service_offering" && (
-        <section className="mt-6">
-          <EnquiryForm
-            listingId={listing.id}
-            businessName={listing.title}
-            claimed={!isUnclaimedScraped}
-            returnTo={`/services/listing/${listing.slug}`}
-            notice={enquiryNotice}
-          />
+          <section className="mt-8">
+            {isUnclaimedScraped ? (
+              <ScrapedNotice
+                title={listing.title}
+                sourcePlatform={listing.source_platform}
+                sourceUrl={listing.source_url}
+                businessId={listing.business_id}
+                signedIn={!!viewer}
+                signInRedirect={`/services/listing/${listing.slug}`}
+                listingId={listing.id}
+                sourceUrlKind={sourceUrlKind}
+                contactPhone={resolvedPhone}
+                contactEmail={resolvedEmail}
+                websiteUrl={resolvedWebsite}
+              />
+            ) : (
+              <ContactBlock
+                signedIn={!!viewer}
+                contactEmail={resolvedEmail}
+                contactPhone={resolvedPhone}
+                contactBestTime={listing.contact_best_time ?? null}
+                websiteUrl={resolvedWebsite}
+                signInRedirect={`/services/listing/${listing.slug}`}
+              />
+            )}
+          </section>
+
+          {!isOwner && listing.kind === "service_offering" && (
+            <section className="mt-6">
+              <EnquiryForm
+                listingId={listing.id}
+                businessName={listing.title}
+                claimed={!isUnclaimedScraped}
+                returnTo={`/services/listing/${listing.slug}`}
+                notice={enquiryNotice}
+              />
+            </section>
+          )}
+        </>
+      )}
+
+      {isExpiredOrFilled && (
+        <section className="mt-6 rounded-xl border border-neutral-200 bg-neutral-100 p-4">
+          <button
+            type="button"
+            disabled
+            className="w-full cursor-not-allowed rounded-xl bg-neutral-300 px-4 py-2.5 text-sm font-semibold text-neutral-600"
+          >
+            Quote &amp; Contact Disabled — Listing Expired or Filled
+          </button>
         </section>
       )}
 

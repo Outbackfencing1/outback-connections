@@ -10,13 +10,18 @@ import { listingHref } from "./format";
 import { dollarsToCents, parseProofBadges, PRICE_TYPES } from "@/lib/sale";
 import { JOB_DIRECTIONS, parseWorkerTickets, TRAVEL_RADII } from "@/lib/work-board";
 import { DEFAULT_FROM, sendEmail } from "@/lib/email";
+import { isValidAustralianAbn, normaliseAbn } from "@/lib/trust";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
 
+export const PENDING_VERIFICATION_CONFIRMATION =
+  "Your listing is saved and queued! Confirm your email/phone or ABN to publish immediately, or our team will approve it shortly.";
+
 // ============================================================
-// Posting guards — caller must be signed in and email verified.
-// Returns user or a typed rejection.
+// Posting guards — caller must be signed in (and not in lockdown).
+// Newly registered or unverified users are allowed to submit immediately;
+// their listing is saved as `pending_review` unless fast-tracked by ABN.
 // ============================================================
 
 export type PostingGuardOk = {
@@ -24,6 +29,7 @@ export type PostingGuardOk = {
   userId: string;
   email: string;
   accountAgeDays: number;
+  emailVerified: boolean;
 };
 
 export type PostingGuardFail =
@@ -32,18 +38,14 @@ export type PostingGuardFail =
   | { ok: false; reason: "account_too_new"; message: string; accountAgeDays: number }
   | { ok: false; reason: "lockdown"; message: string };
 
-// Set to 0 (Oct 2026) so verified rural users coming from Facebook can post
-// their skills, jobs, livestock, or harvest immediately on Day 1.
-const ACCOUNT_AGE_REQUIREMENT_HOURS = 0;
-
 export type PostingGuardOptions = {
-  /** Demand-side posts (a farmer describing a job) skip the 24h account-age
-   *  wait. Sign-in, verified email, lockdown and rate limits still apply. */
+  /** Retained for backwards compatibility; all signed-in users may now submit
+   *  immediately (queued for verification if newly registered / unverified). */
   skipAccountAge?: boolean;
 };
 
 export async function checkPostingGuard(
-  opts: PostingGuardOptions = {}
+  _opts: PostingGuardOptions = {}
 ): Promise<PostingGuardOk | PostingGuardFail> {
   // Lockdown short-circuit. Lookup is cached for 30s.
   const { getLockdownState } = await import("./lockdown");
@@ -66,32 +68,15 @@ export async function checkPostingGuard(
     };
   }
   const user = data.user;
-  if (!user.email_confirmed_at) {
-    return {
-      ok: false,
-      reason: "email_unverified",
-      message:
-        "Your email address isn't verified yet. Click the link we emailed you, then come back here.",
-    };
-  }
   const created = new Date(user.created_at).getTime();
   const ageMs = Date.now() - created;
-  const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
   const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
-  if (!opts.skipAccountAge && ageHours < ACCOUNT_AGE_REQUIREMENT_HOURS) {
-    return {
-      ok: false,
-      reason: "account_too_new",
-      message:
-        "Your account needs to be at least 24 hours old before posting. Tomorrow you'll be good to go.",
-      accountAgeDays: ageDays,
-    };
-  }
   return {
     ok: true,
     userId: user.id,
     email: user.email!,
     accountAgeDays: ageDays,
+    emailVerified: Boolean(user.email_confirmed_at),
   };
 }
 
@@ -296,6 +281,16 @@ const baseSchema = z
       ),
     contact_phone: z.string().trim().max(40).optional().default(""),
     contact_best_time: z.string().trim().max(200).optional().default(""),
+    abn: z
+      .string()
+      .trim()
+      .max(30)
+      .optional()
+      .default("")
+      .refine(
+        (v) => v === "" || isValidAustralianAbn(v),
+        "Enter a valid 11-digit Australian Business Number (ABN), or leave blank"
+      ),
   })
   .refine(
     (d) => d.contact_email !== "" || d.contact_phone !== "",
@@ -409,15 +404,10 @@ export const saleSchema = baseSchema
 
 // ============================================================
 // Insert helper — sequential listings + detail with rollback on failure.
-//
-// Note: not a true transaction. If detail insert fails we DELETE the
-// orphaned listings row to clean up. Acceptable for V1 because Zod has
-// already validated the data; the second insert failing is rare.
-// Phase 2 might switch to a Postgres function if we observe issues.
 // ============================================================
 
 export type InsertResult =
-  | { ok: true; slug: string }
+  | { ok: true; slug: string; pendingVerification: boolean }
   | { ok: false; message: string };
 
 type ListingsInsert = {
@@ -435,6 +425,12 @@ type ListingsInsert = {
   state: string | null;
   /** User's account email — used to send the first-listing email on success */
   user_email?: string;
+  /** Optional 11-digit ABN submitted on the posting form to fast-track trust */
+  abn?: string | null;
+  /** Whether the user's email address is confirmed */
+  email_verified?: boolean;
+  /** Account age in days */
+  account_age_days?: number;
 };
 
 export async function insertListing<DetailRow extends Record<string, unknown>>(
@@ -447,8 +443,49 @@ export async function insertListing<DetailRow extends Record<string, unknown>>(
     return { ok: false, message: "Listing storage isn't configured. Try again later." };
   }
 
-  // Strip user_email before inserting — it's not a column on listings
-  const { user_email: _user_email, side: explicitSide, ...listingRow } = listing;
+  // Strip helper fields before inserting — they are not columns on listings
+  const {
+    user_email: _user_email,
+    side: explicitSide,
+    abn: rawAbn,
+    email_verified: emailVerified,
+    account_age_days: accountAgeDays,
+    ...listingRow
+  } = listing;
+
+  const cleanAbn = normaliseAbn(rawAbn);
+  if (cleanAbn) {
+    // Fast-track user profile ABN verification when a valid 11-digit ABN is provided
+    await supa
+      .from("user_profiles")
+      .upsert(
+        {
+          user_id: listing.user_id,
+          abn: cleanAbn,
+          abn_verified: true,
+        },
+        { onConflict: "user_id" }
+      );
+  }
+
+  const { data: userProfile } = await supa
+    .from("user_profiles")
+    .select("is_admin, phone_verified, abn_verified, abn")
+    .eq("user_id", listing.user_id)
+    .maybeSingle();
+
+  const hasFastTrackTrust = Boolean(
+    cleanAbn ||
+      userProfile?.is_admin ||
+      userProfile?.abn_verified ||
+      userProfile?.phone_verified
+  );
+
+  const isEstablishedVerifiedAccount =
+    emailVerified !== false && (accountAgeDays ?? 7) >= 7;
+
+  const shouldQueueForVerification = !hasFastTrackTrust && !isEstablishedVerifiedAccount;
+  const initialStatus = shouldQueueForVerification ? "pending_review" : "active";
 
   // Spine classification (Migration 2). vertical derives from kind; side is the
   // market side of the resource transacted. For job and freight, side comes from
@@ -483,7 +520,13 @@ export async function insertListing<DetailRow extends Record<string, unknown>>(
   const placeholderSlug = `pending-${listing.postcode}-${Math.random().toString(36).slice(2, 10)}`;
   const { data: inserted, error: listingErr } = await supa
     .from("listings")
-    .insert({ ...listingRow, slug: placeholderSlug, vertical, side })
+    .insert({
+      ...listingRow,
+      slug: placeholderSlug,
+      vertical,
+      side,
+      status: initialStatus,
+    })
     .select("id, anonymised_id, expires_at")
     .single();
 
@@ -516,29 +559,84 @@ export async function insertListing<DetailRow extends Record<string, unknown>>(
     return { ok: false, message: "Couldn't save the listing details. Please try again." };
   }
 
-  // Item 11: best-effort first-listing email (no-op if not first)
-  if (listing.user_email) {
-    void sendFirstListingEmail({
-      userEmail: listing.user_email,
-      userId: listing.user_id,
-      listingTitle: listing.title,
-      listingKind: listing.kind,
+  if (shouldQueueForVerification) {
+    void notifyAdminPendingListing({
+      listingId: inserted.id,
+      title: listing.title,
+      kind: listing.kind,
+      postcode: listing.postcode,
       slug: realSlug,
-      expiresAt: inserted.expires_at,
+      userEmail: listing.user_email ?? listing.contact_email ?? "unknown",
+      contactPhone: listing.contact_phone,
+    });
+  } else {
+    // Item 11: best-effort first-listing email (no-op if not first)
+    if (listing.user_email) {
+      void sendFirstListingEmail({
+        userEmail: listing.user_email,
+        userId: listing.user_id,
+        listingTitle: listing.title,
+        listingKind: listing.kind,
+        slug: realSlug,
+        expiresAt: inserted.expires_at,
+      });
+    }
+
+    // Best-effort: notify any saved search alerts matching this vertical/postcode/signal
+    void notifyMatchingSearchAlerts({
+      vertical,
+      postcode: listing.postcode,
+      title: listing.title,
+      kind: listing.kind,
+      slug: realSlug,
+      detail: detail as Record<string, unknown>,
     });
   }
 
-  // Best-effort: notify any saved search alerts matching this vertical/postcode/signal
-  void notifyMatchingSearchAlerts({
-    vertical,
-    postcode: listing.postcode,
-    title: listing.title,
-    kind: listing.kind,
+  return {
+    ok: true,
     slug: realSlug,
-    detail: detail as Record<string, unknown>,
-  });
+    pendingVerification: shouldQueueForVerification,
+  };
+}
 
-  return { ok: true, slug: realSlug };
+async function notifyAdminPendingListing(args: {
+  listingId: string;
+  title: string;
+  kind: "job" | "freight" | "service_offering" | "service_request" | "for_sale";
+  postcode: string;
+  slug: string;
+  userEmail: string;
+  contactPhone: string | null;
+}): Promise<void> {
+  try {
+    const adminTo =
+      process.env.ADMIN_ALERT_EMAIL ||
+      process.env.SUPPORT_EMAIL ||
+      "support@outbackconnections.com.au";
+    const queueUrl = `${BASE_URL}/dashboard/admin/flags`;
+    const listingUrl = `${BASE_URL}${listingHref(args.kind, args.slug)}`;
+    await sendEmail({
+      to: adminTo,
+      from: DEFAULT_FROM,
+      subject: `[Verification Queue] New listing queued: ${args.title} (${args.postcode})`,
+      text: [
+        `A newly registered user submitted a listing into the verification queue (pending_review):`,
+        ``,
+        `Title: ${args.title}`,
+        `Kind: ${args.kind}`,
+        `Postcode: ${args.postcode}`,
+        `User email: ${args.userEmail}`,
+        `Phone: ${args.contactPhone ?? "—"}`,
+        ``,
+        `Review & approve in Admin Queue: ${queueUrl}`,
+        `Listing URL: ${listingUrl}`,
+      ].join("\n"),
+      html: `<p>A newly registered user submitted a listing into the verification queue (<code>pending_review</code>):</p><ul><li><strong>Title:</strong> ${escapeHtml(args.title)}</li><li><strong>Kind:</strong> ${escapeHtml(args.kind)}</li><li><strong>Postcode:</strong> ${escapeHtml(args.postcode)}</li><li><strong>User email:</strong> ${escapeHtml(args.userEmail)}</li><li><strong>Phone:</strong> ${escapeHtml(args.contactPhone ?? "—")}</li></ul><p><a href="${queueUrl}"><strong>Approve in Admin Queue →</strong></a></p>`,
+    });
+  } catch (e) {
+    console.error("[posting] admin pending-listing notification failed:", e);
+  }
 }
 
 async function notifyMatchingSearchAlerts(args: {

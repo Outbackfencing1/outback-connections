@@ -23,12 +23,23 @@ export function buildTitle(args: {
  * unclaimed state.
  */
 export function buildDirectoryDescription(args: {
+  businessName?: string | null;
   categoryLabel: string;
   regionName?: string | null;
+  suburb?: string | null;
   state?: string | null;
   postcode: string;
   unclaimed: boolean;
 }): string {
+  if (args.unclaimed && args.businessName) {
+    return buildUnclaimedListingCopy({
+      businessName: args.businessName,
+      categoryName: args.categoryLabel,
+      suburb: args.suburb || args.regionName,
+      postcode: args.postcode,
+      state: args.state,
+    });
+  }
   const cat = args.categoryLabel.replace(/\s*\(.*\)\s*$/, "").trim();
   const where = args.regionName
     ? `${args.regionName}, ${args.state ?? ""}`.replace(/, $/, "")
@@ -36,8 +47,86 @@ export function buildDirectoryDescription(args: {
       ? `${args.state} ${args.postcode}`
       : `postcode ${args.postcode}`;
   return args.unclaimed
-    ? `${cat} in ${where}. Unclaimed directory entry on Outback Connections: ask for a quote and we pass it on.`
+    ? `${cat} in ${where}. Direct regional contact and quote requests on Outback Connections.`
     : `${cat} in ${where}. On Outback Connections, the free rural directory: no lead fees, contact them direct.`;
+}
+
+/**
+ * Dynamic, non-repetitive copy for unclaimed regional contractor listings.
+ * Deterministically picks between 2 variations based on businessName + postcode
+ * so each card reads naturally and uniquely without boilerplate.
+ */
+export function buildUnclaimedListingCopy(args: {
+  businessName: string;
+  categoryName?: string | null;
+  suburb?: string | null;
+  postcode: string;
+  state?: string | null;
+}): string {
+  const businessName = args.businessName.trim() || "Local Contractor";
+  const rawCat = (args.categoryName || "rural contractor")
+    .replace(/\s*\(.*\)\s*$/, "")
+    .trim()
+    .toLowerCase();
+  const categoryName = rawCat || "rural contractor";
+  const postcode = (args.postcode || "").trim();
+  const state = (args.state || "NSW").trim() || "NSW";
+  const suburb = (args.suburb || "").trim() || `Postcode ${postcode}`;
+
+  // Simple deterministic hash from businessName + postcode
+  let hash = 0;
+  const key = `${businessName.toLowerCase()}:${postcode}`;
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  }
+
+  if (hash % 2 === 0) {
+    return `${businessName} operates as a local ${categoryName} servicing ${suburb} (${postcode}) and surrounding regional properties in ${state}. Request a direct quote or claim this business profile to update service details.`;
+  }
+  return `Regional ${categoryName} based in ${suburb}, ${state} ${postcode}. Connect directly with ${businessName} for rural property work, contracting, and local quotes with zero lead fees.`;
+}
+
+export function isBoilerplateUnclaimedDescription(desc: string | null | undefined): boolean {
+  if (!desc) return true;
+  const s = desc.trim();
+  if (!s) return true;
+  return (
+    /unclaimed directory (listing|entry)/i.test(s) ||
+    /yellow\s*pages/i.test(s) ||
+    /wasn['’]t posted by the business/i.test(s) ||
+    /we found listed on/i.test(s)
+  );
+}
+
+export function formatListingDescription(args: {
+  description: string | null | undefined;
+  businessName: string;
+  categoryName?: string | null;
+  suburb?: string | null;
+  postcode: string;
+  state?: string | null;
+  unclaimed?: boolean;
+}): string {
+  const raw = (args.description ?? "").trim();
+  if (args.unclaimed && isBoilerplateUnclaimedDescription(raw)) {
+    return buildUnclaimedListingCopy({
+      businessName: args.businessName,
+      categoryName: args.categoryName,
+      suburb: args.suburb,
+      postcode: args.postcode,
+      state: args.state,
+    });
+  }
+  if (/yellow\s*pages/i.test(raw)) {
+    return buildUnclaimedListingCopy({
+      businessName: args.businessName,
+      categoryName: args.categoryName,
+      suburb: args.suburb,
+      postcode: args.postcode,
+      state: args.state,
+    });
+  }
+  return raw;
 }
 
 /** "Fencing contractor (construction)" -> "Fencing contractors" */
@@ -103,12 +192,14 @@ export function jobPostingJsonLd(args: {
   title: string;
   description: string;
   postcode: string;
+  suburb?: string | null;
   state: string | null;
   createdAt: string;
   expiresAt: string;
   workType?: string | null;
   payType?: string | null;
   payAmount?: number | null;
+  hiringOrganizationName?: string | null;
   baseUrl: string;
   slug: string;
 }): Record<string, unknown> {
@@ -121,13 +212,14 @@ export function jobPostingJsonLd(args: {
     validThrough: args.expiresAt,
     hiringOrganization: {
       "@type": "Organization",
-      name: "Posted via Outback Connections",
+      name: args.hiringOrganizationName?.trim() || "Posted via Outback Connections",
       sameAs: "https://www.outbackconnections.com.au",
     },
     jobLocation: {
       "@type": "Place",
       address: {
         "@type": "PostalAddress",
+        ...(args.suburb ? { addressLocality: args.suburb } : {}),
         postalCode: args.postcode,
         addressRegion: args.state ?? undefined,
         addressCountry: "AU",
@@ -169,6 +261,7 @@ export function serviceJsonLd(args: {
   title: string;
   description: string;
   postcode: string;
+  suburb?: string | null;
   state: string | null;
   category: string;
   rateType?: string | null;
@@ -182,8 +275,6 @@ export function serviceJsonLd(args: {
     name: args.title,
     description: args.description,
     serviceType: args.category,
-    // The provider is the business the entry is about (its name is the
-    // listing title), not us. Found-online rows were never posted by anyone.
     provider: {
       "@type": "LocalBusiness",
       name: args.title,
@@ -192,6 +283,7 @@ export function serviceJsonLd(args: {
       "@type": "Place",
       address: {
         "@type": "PostalAddress",
+        ...(args.suburb ? { addressLocality: args.suburb } : {}),
         postalCode: args.postcode,
         addressRegion: args.state ?? undefined,
         addressCountry: "AU",
@@ -239,31 +331,55 @@ export function organizationJsonLd(baseUrl: string): Record<string, unknown> {
   };
 }
 
-// LocalBusiness for directory (scraped) + services listing pages. Deliberately
-// carries NO telephone/email: contact details are gated behind sign-in on the
-// site, so they must never leak into public structured data. Location (postcode/
-// region/country) and geo are public; contact is not.
 export function localBusinessJsonLd(args: {
   name: string;
   postcode: string;
+  suburb?: string | null;
   state: string | null;
+  telephone?: string | null;
+  areaServed?: string | null;
   geoLat?: number | null;
   geoLng?: number | null;
   category?: string | null;
-  url: string;
+  categoryLabel?: string | null;
+  categorySlug?: string | null;
+  url?: string;
 }): Record<string, unknown> {
+  const resolvedCategory = args.category ?? args.categoryLabel ?? null;
+  const catText = `${args.categorySlug ?? ""} ${resolvedCategory ?? ""}`.toLowerCase();
+  const isConstruction =
+    /fenc|earthwork|shed|yard|bore|pump|water|welding|fabricat|concret|slash|clearing/.test(
+      catText
+    );
+  const schemaType = isConstruction ? "HomeAndConstructionBusiness" : "LocalBusiness";
+  const suburb = args.suburb?.trim() || null;
+  const state = args.state?.trim() || "NSW";
+  const areaServedText =
+    args.areaServed?.trim() ||
+    (suburb
+      ? `${suburb} (${args.postcode}) and surrounding regional ${state}`
+      : `Regional ${state} (${args.postcode})`);
+
   const ld: Record<string, unknown> = {
     "@context": "https://schema.org",
-    "@type": "LocalBusiness",
+    "@type": schemaType,
     name: args.name,
     address: {
       "@type": "PostalAddress",
+      ...(suburb ? { addressLocality: suburb } : {}),
+      addressRegion: state,
       postalCode: args.postcode,
-      addressRegion: args.state ?? undefined,
       addressCountry: "AU",
+    },
+    areaServed: {
+      "@type": "AdministrativeArea",
+      name: areaServedText,
     },
     url: args.url,
   };
+  if (args.telephone && args.telephone.trim()) {
+    ld.telephone = args.telephone.trim();
+  }
   if (args.category) ld.description = `${args.category} — listed on Outback Connections`;
   if (
     args.geoLat !== null &&
@@ -278,6 +394,43 @@ export function localBusinessJsonLd(args: {
     };
   }
   return ld;
+}
+
+export function itemListJsonLd(args: {
+  name: string;
+  url: string;
+  items: Array<{ name: string; url: string; position?: number }>;
+}): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: args.name,
+    url: args.url,
+    numberOfItems: args.items.length,
+    itemListElement: args.items.map((it, idx) => ({
+      "@type": "ListItem",
+      position: it.position ?? idx + 1,
+      name: it.name,
+      url: it.url,
+    })),
+  };
+}
+
+export function faqPageJsonLd(
+  faqs: Array<{ question: string; answer: string }>
+): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqs.map((f) => ({
+      "@type": "Question",
+      name: f.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: f.answer,
+      },
+    })),
+  };
 }
 
 export function breadcrumbJsonLd(
@@ -312,16 +465,18 @@ export function hasFilterParams(params: SearchParamsLike, ignore: string[] = ["p
 }
 
 /**
- * Robots for a browse page: noindex (links still followed) when it has no
- * live listings or a filter is applied, so search engines index the clean
- * page with real entries instead of empty shells and endless filter variants.
- * An unknown count (database error) never noindexes: a blip must not drop a
- * real page from the index.
+ * Robots for a browse page:
+ * - If `liveCount === 0` or a filter is applied: `{ index: false, follow: true }` (`noindex, follow`)
+ * - If `liveCount >= 1` and unfiltered: `{ index: true, follow: true }` (`index, follow`)
+ * - If `liveCount === null` (unknown count / database blip): `undefined`
  */
 export function browseRobots(args: {
   liveCount: number | null;
   filtered?: boolean;
-}): { index: false; follow: true } | undefined {
+}): { index: boolean; follow: true } | undefined {
   if (args.filtered || args.liveCount === 0) return { index: false, follow: true };
+  if (typeof args.liveCount === "number" && args.liveCount >= 1) {
+    return { index: true, follow: true };
+  }
   return undefined;
 }

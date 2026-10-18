@@ -10,6 +10,7 @@ import {
   type SourcePlatform,
   type SourceUrlKind,
 } from "./source-platforms";
+import { isRuralPostcode } from "./rural-postcodes";
 
 export const DIRECTORY_VERTICALS = ["service", "job", "freight"] as const;
 export type DirectoryVertical = (typeof DIRECTORY_VERTICALS)[number];
@@ -108,7 +109,11 @@ export function buildDirectoryRecord(
 
   if (name.length < 2 || name.length > 120) errors.name = "Business name: 2 to 120 characters.";
   if (!DIRECTORY_VERTICALS.includes(vertical)) errors.vertical = "Pick which directory it belongs in.";
-  if (!/^[0-9]{4}$/.test(postcode)) errors.postcode = "Postcode: 4 digits.";
+  if (!/^[0-9]{4}$/.test(postcode)) {
+    errors.postcode = "Postcode: 4 digits.";
+  } else if (!isRuralPostcode(postcode, state || "NSW")) {
+    errors.postcode = "Metro postcode excluded — rural and regional postcodes only.";
+  }
   if (suburb.length > 80) errors.suburb = "Town or area: under 80 characters.";
   if (state && !(AU_STATES as readonly string[]).includes(state)) errors.state = "Pick a state.";
   if (!platform) errors.platform = "Tell us where you found it.";

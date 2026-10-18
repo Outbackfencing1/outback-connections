@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { setFlash } from "@/lib/posting";
 
 async function requireAdmin() {
@@ -21,6 +22,36 @@ async function requireAdmin() {
     redirect("/dashboard");
   }
   return supabase;
+}
+
+export async function approvePendingListing(formData: FormData): Promise<void> {
+  const id = formData.get("listing_id");
+  if (typeof id !== "string" || !id) redirect("/dashboard/admin/flags");
+
+  await requireAdmin();
+  const admin = createAdminClient();
+  if (!admin) {
+    await setFlash("Admin database client unavailable.");
+    redirect("/dashboard/admin/flags");
+  }
+
+  const { error } = await admin
+    .from("listings")
+    .update({ status: "active" })
+    .eq("id", id);
+
+  if (error) {
+    console.error("[admin] approve pending listing failed:", error.message);
+    await setFlash("Couldn't approve listing.");
+  } else {
+    await setFlash("Listing approved and published live.");
+    revalidatePath("/dashboard/admin/flags");
+    revalidatePath("/jobs");
+    revalidatePath("/freight");
+    revalidatePath("/services");
+    revalidatePath("/sale");
+  }
+  redirect("/dashboard/admin/flags");
 }
 
 export async function hideListing(formData: FormData): Promise<void> {

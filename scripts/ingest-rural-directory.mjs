@@ -52,12 +52,32 @@ if (!Array.isArray(records)) {
   process.exit(1);
 }
 
+function isRuralPostcode(pc, state = "NSW") {
+  if (!/^\d{4}$/.test(String(pc || ""))) return false;
+  const n = Number(pc);
+  const st = String(state || "NSW").toUpperCase();
+  if (st === "NSW" || (n >= 1000 && n <= 2999)) {
+    if (n >= 1000 && n <= 1999) return false;
+    if (n >= 2000 && n <= 2263) return false;
+    if (n >= 2280 && n <= 2308) return false;
+    if (n >= 2500 && n <= 2530) return false;
+    if (n >= 2555 && n <= 2570) return false;
+    if (n >= 2745 && n <= 2770) return false;
+  }
+  return true;
+}
+
 const counts = { created: 0, updated: 0, error: 0, skipped: 0 };
 
 for (let i = 0; i < records.length; i++) {
   const r = records[i];
   if (!r?.source_external_id || !r?.name || !r?.postcode || !r?.source_url) {
     console.error(`[${i}] skipped (missing required field): ${r?.name ?? "(no name)"}`);
+    counts.skipped++;
+    continue;
+  }
+  if (!isRuralPostcode(r.postcode, r.state)) {
+    console.error(`[${i}] skipped (excluded metro postcode ${r.postcode}): ${r.name}`);
     counts.skipped++;
     continue;
   }

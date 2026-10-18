@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { createAnonClient } from "./supabase/anon";
+import { isRuralPostcode } from "./rural-postcodes";
 
 export type Pillar = "services" | "jobs" | "freight" | "sale";
 
@@ -19,7 +20,7 @@ async function fetchCountsByPillar(): Promise<CountsByPillar> {
 
   const { data, error } = await supabase
     .from("listings")
-    .select("category_id, category:categories!inner(pillar)")
+    .select("category_id, postcode, state, category:categories!inner(pillar)")
     .eq("status", "active")
     .gt("expires_at", nowIso);
 
@@ -37,6 +38,7 @@ async function fetchCountsByPillar(): Promise<CountsByPillar> {
   }
 
   for (const row of data ?? []) {
+    if (!isRuralPostcode(row.postcode, row.state)) continue;
     const cat = Array.isArray(row.category) ? row.category[0] : row.category;
     const pillar = cat?.pillar as Pillar | undefined;
     if (!pillar || !(pillar in out)) continue;

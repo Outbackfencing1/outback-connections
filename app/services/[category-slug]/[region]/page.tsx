@@ -6,10 +6,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ListingCard from "@/components/browse/ListingCard";
-import { breadcrumbJsonLd, browseRobots, humanCategory, jsonLdScript, socialMeta } from "@/lib/seo";
+import JsonLd from "@/components/seo/JsonLd";
+import {
+  breadcrumbJsonLd,
+  browseRobots,
+  humanCategory,
+  itemListJsonLd,
+  socialMeta,
+} from "@/lib/seo";
 import { liveListingCount } from "@/lib/live-counts";
 import { getRegionBySlug, regionLabel } from "@/lib/regions";
 import { logSearch } from "@/lib/analytics";
+import { filterRuralRecords } from "@/lib/rural-postcodes";
 
 export const dynamic = "force-dynamic";
 
@@ -39,8 +47,6 @@ export async function generateMetadata({ params }: { params: Params }) {
   });
   const path = `/services/${p["category-slug"]}/${p.region}`;
   const title = `${humanCategory(cat.label)} in ${regionLabel(region)} — Outback Connections`;
-  // Most entries here are unclaimed (found online), so "contact them
-  // directly" isn't true; the quote form is the way in.
   const description = `${humanCategory(cat.label)} around ${region.region_name}, ${region.state}. Free rural directory, no lead fees: ask for a quote without an account.`;
   return {
     title,
@@ -83,7 +89,7 @@ export default async function ServiceRegionPage({ params }: { params: Params }) 
     .order("created_at", { ascending: false })
     .limit(LIMIT);
 
-  const rows = listings ?? [];
+  const rows = filterRuralRecords(listings ?? []);
   await logSearch({
     vertical: "service",
     filters: { category: cat.slug, region: p.region },
@@ -99,13 +105,22 @@ export default async function ServiceRegionPage({ params }: { params: Params }) 
     { name: cat.label, url: `${BASE_URL}/services/${cat.slug}` },
     { name: regionLabel(region), url: pageUrl },
   ]);
+  const itemList =
+    rows.length > 0
+      ? itemListJsonLd({
+          name: `${heading} — Outback Connections`,
+          url: pageUrl,
+          items: rows.map((l, idx) => ({
+            position: idx + 1,
+            name: l.title,
+            url: `${BASE_URL}/services/listing/${l.slug}`,
+          })),
+        })
+      : null;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumb) }}
-      />
+      <JsonLd data={[breadcrumb, itemList]} />
       <p className="text-sm">
         <Link href={`/services/${cat.slug}`} className="text-neutral-600 underline">
           ← All {humanCategory(cat.label).toLowerCase()}

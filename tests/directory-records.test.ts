@@ -10,8 +10,8 @@ describe("buildDirectoryRecord", () => {
         name: "Kings Fencing & Gates",
         vertical: "service",
         category_slug: "fencing-contractor",
-        postcode: "2560",
-        suburb: "Appin",
+        postcode: "2800",
+        suburb: "Orange",
         state: "nsw",
         platform: "Facebook",
         phone: "0401 616 004",
@@ -23,7 +23,7 @@ describe("buildDirectoryRecord", () => {
     if (!r.ok) return;
     expect(r.urlKind).toBe("search");
     expect(r.record.source_platform).toBe("facebook");
-    expect(r.record.source_external_id).toBe("facebook:kings-fencing-and-gates:2560");
+    expect(r.record.source_external_id).toBe("facebook:kings-fencing-and-gates:2800");
     expect(r.record.source_url).toContain("facebook.com/search");
     expect(r.record.state).toBe("NSW");
     expect(r.record.raw_payload.phone).toBe("0401 616 004");
@@ -32,6 +32,27 @@ describe("buildDirectoryRecord", () => {
     // Nothing that could leak into public columns is on the record itself.
     expect("phone" in r.record).toBe(false);
     expect("email" in r.record).toBe(false);
+  });
+
+  it("rejects excluded NSW metro postcodes automatically", () => {
+    for (const metroPostcode of ["2000", "2100", "2160", "2200", "2290", "2500", "2560", "2770"]) {
+      const r = buildDirectoryRecord(
+        {
+          name: "Sydney Metro Contractor",
+          vertical: "service",
+          category_slug: "fencing-contractor",
+          postcode: metroPostcode,
+          suburb: "Metro",
+          state: "NSW",
+          platform: "Facebook",
+        },
+        meta
+      );
+      expect(r.ok).toBe(false);
+      if (!r.ok) {
+        expect(r.errors.postcode).toContain("Metro postcode excluded");
+      }
+    }
   });
 
   it("uses the given page URL as the exact source and website for official sites", () => {

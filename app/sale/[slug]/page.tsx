@@ -1,15 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import ContactBlock from "@/components/detail/ContactBlock";
+import ExpiredListingBanner from "@/components/detail/ExpiredListingBanner";
 import FlagForm from "@/components/detail/FlagForm";
 import LegalConcernForm from "@/components/detail/LegalConcernForm";
 import OwnerActions from "@/components/detail/OwnerActions";
 import EnquiryForm from "@/components/detail/EnquiryForm";
 import VendorTrustSection from "@/components/detail/VendorTrustSection";
 import ShareListingBar from "@/components/detail/ShareListingBar";
+import JsonLd from "@/components/seo/JsonLd";
 import { relativeTime } from "@/lib/format";
-import { buildDescription, buildTitle, breadcrumbJsonLd, jsonLdScript } from "@/lib/seo";
+import { buildDescription, buildTitle, breadcrumbJsonLd } from "@/lib/seo";
 import { logEvent } from "@/lib/analytics";
 import { enquiryNoticeFrom } from "@/lib/enquiry-fallback";
 import {
@@ -32,12 +35,27 @@ const BASE_URL =
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const supabase = createClient();
-  const { data } = await supabase
+  let { data } = await supabase
     .from("listings")
-    .select(`title, description, postcode, category:categories(label)`)
+    .select(`title, description, postcode, status, category:categories(label)`)
     .eq("slug", slug)
     .eq("kind", "for_sale")
     .maybeSingle();
+
+  if (!data) {
+    const admin = createAdminClient();
+    if (admin) {
+      const fb = await admin
+        .from("listings")
+        .select(`title, description, postcode, status, category:categories(label)`)
+        .eq("slug", slug)
+        .eq("kind", "for_sale")
+        .in("status", ["active", "expired", "closed"])
+        .maybeSingle();
+      data = fb.data as typeof data;
+    }
+  }
+
   if (!data) return { title: "Listing not found — Outback Connections" };
   const cat = Array.isArray(data.category) ? data.category[0] : data.category;
   const title = buildTitle({ listingTitle: data.title, categoryLabel: cat?.label ?? "For sale", postcode: data.postcode });
@@ -71,17 +89,17 @@ export default async function SaleDetailPage({
   const { data: userData } = await supabase.auth.getUser();
   const viewer = userData.user;
 
-  let { data: listing, error: queryErr } = await supabase
-    .from("listings")
-    .select(
-      `
+  const fullCols = `
       id, anonymised_id, slug, kind, side, title, description, postcode, state,
-      created_at, expires_at, user_id, status,
+      created_at, expires_at, user_id, status, category_id,
       contact_email, contact_phone, contact_best_time,
       category:categories(slug, label),
       sale_details(price_cents, price_type, quantity, unit, condition, delivery, sold_at, sub_category, harvest_season, proof_badges)
-    `
-    )
+    `;
+
+  let { data: listing, error: queryErr } = await supabase
+    .from("listings")
+    .select(fullCols)
     .eq("slug", slug)
     .eq("kind", "for_sale")
     .maybeSingle();
@@ -92,7 +110,7 @@ export default async function SaleDetailPage({
       .select(
         `
         id, anonymised_id, slug, kind, side, title, description, postcode, state,
-        created_at, expires_at, user_id, status,
+        created_at, expires_at, user_id, status, category_id,
         contact_email, contact_phone, contact_best_time,
         category:categories(slug, label),
         sale_details(price_cents, price_type, quantity, unit, condition, delivery, sold_at)
@@ -104,16 +122,39 @@ export default async function SaleDetailPage({
     listing = fb.data as typeof listing;
   }
 
+  if (!listing) {
+    const admin = createAdminClient();
+    if (admin) {
+      const fb = await admin
+        .from("listings")
+        .select(fullCols)
+        .eq("slug", slug)
+        .eq("kind", "for_sale")
+        .in("status", ["active", "expired", "closed"])
+        .maybeSingle();
+      listing = fb.data as typeof listing;
+    }
+  }
+
   if (!listing) notFound();
 
   const isOwner = viewer?.id === listing.user_id;
-  if (!isOwner && (listing.status !== "active" || new Date(listing.expires_at) <= new Date())) {
-    notFound();
-  }
-
   const d = (Array.isArray(listing.sale_details)
     ? listing.sale_details[0]
     : listing.sale_details) as SaleDetail | null;
+  const isExpiredOrFilled =
+    listing.status === "expired" ||
+    listing.status === "closed" ||
+    Boolean(d?.sold_at) ||
+    (listing.status === "active" && new Date(listing.expires_at) <= new Date());
+  const isPubliclyVisible =
+    (listing.status === "active" && new Date(listing.expires_at) > new Date()) ||
+    isExpiredOrFilled;
+
+  if (!isOwner && !isPubliclyVisible) {
+    notFound();
+  }
+
   const cat = Array.isArray(listing.category) ? listing.category[0] : listing.category;
   const pageUrl = `${BASE_URL}/sale/${listing.slug}`;
   const breadcrumb = breadcrumbJsonLd([
@@ -128,9 +169,9 @@ export default async function SaleDetailPage({
     entityId: listing.id,
     vertical: "sale",
     userId: viewer?.id ?? null,
-    properties: { slug: listing.slug, sub_category: d?.sub_category ?? null },
+    properties: { slug: listing.slug, sub_category: d?.sub_category ?? null, expired: isExpiredOrFilled },
   });
-  if (viewer && (listing.contact_email || listing.contact_phone)) {
+  if (viewer && !isExpiredOrFilled && (listing.contact_email || listing.contact_phone)) {
     await logEvent({ eventType: "contact_reveal", entityType: "listing", entityId: listing.id, vertical: "sale", userId: viewer.id });
   }
 
@@ -154,7 +195,7 @@ export default async function SaleDetailPage({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumb) }} />
+      <JsonLd data={breadcrumb} />
       <p className="text-sm">
         <Link href="/sale" className="text-neutral-600 underline">
           ← All livestock, harvest &amp; gear
@@ -162,6 +203,11 @@ export default async function SaleDetailPage({
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
+        {isExpiredOrFilled && (
+          <span className="rounded-full bg-amber-900 px-3 py-0.5 text-xs font-bold uppercase tracking-wide text-white">
+            Archived / Expired
+          </span>
+        )}
         <span
           className={`rounded-full px-3 py-0.5 text-xs font-semibold ${
             isWanted ? "bg-amber-100 text-amber-950" : "bg-green-100 text-green-900"
@@ -191,8 +237,23 @@ export default async function SaleDetailPage({
       <p className="mt-2 text-sm text-neutral-600">
         {commodityLabel(d?.sub_category) ?? cat?.label ?? "—"} ·{" "}
         {listing.state ? `${listing.postcode} ${listing.state}` : `Postcode ${listing.postcode}`} · Posted{" "}
-        {relativeTime(listing.created_at)} · Expires {new Date(listing.expires_at).toLocaleDateString("en-AU")}
+        {relativeTime(listing.created_at)} ·{" "}
+        {isExpiredOrFilled
+          ? `Expired ${new Date(listing.expires_at).toLocaleDateString("en-AU")}`
+          : `Expires ${new Date(listing.expires_at).toLocaleDateString("en-AU")}`}
       </p>
+
+      {isExpiredOrFilled && (
+        <ExpiredListingBanner
+          listingId={listing.id}
+          kind={listing.kind}
+          categoryId={listing.category_id}
+          categoryName={cat?.label ?? "Livestock, Harvest & Gear"}
+          postcode={listing.postcode}
+          state={listing.state}
+          browseHref="/sale"
+        />
+      )}
 
       {(lotSummary?.totalLotText || lotSummary?.truckEstimateText) && (
         <div className="mt-3 rounded-xl border border-green-200 bg-green-50/70 px-4 py-3 text-xs text-green-950 flex flex-wrap items-center justify-between gap-2">
@@ -217,24 +278,26 @@ export default async function SaleDetailPage({
         </div>
       )}
 
-      <ShareListingBar
-        title={listing.title}
-        url={pageUrl}
-        postcode={listing.postcode}
-        state={listing.state}
-        badgeText={isWanted ? "WANTED TO BUY" : "FOR SALE"}
-        summaryLine={
-          d
-            ? [
-                priceLine({ price_cents: d.price_cents, price_type: d.price_type, unit: d.unit }),
-                quantityLine({ quantity: d.quantity, unit: d.unit }),
-                lotSummary?.totalLotText,
-              ]
-                .filter(Boolean)
-                .join(" · ")
-            : null
-        }
-      />
+      {!isExpiredOrFilled && (
+        <ShareListingBar
+          title={listing.title}
+          url={pageUrl}
+          postcode={listing.postcode}
+          state={listing.state}
+          badgeText={isWanted ? "WANTED TO BUY" : "FOR SALE"}
+          summaryLine={
+            d
+              ? [
+                  priceLine({ price_cents: d.price_cents, price_type: d.price_type, unit: d.unit }),
+                  quantityLine({ quantity: d.quantity, unit: d.unit }),
+                  lotSummary?.totalLotText,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : null
+          }
+        />
+      )}
 
       {d?.sold_at && (
         <p className="mt-3 inline-block rounded-lg bg-neutral-100 px-3 py-1 text-sm font-medium text-neutral-700">Sold</p>
@@ -291,46 +354,60 @@ export default async function SaleDetailPage({
         </div>
       </div>
 
-      <section className="mt-8">
-        <ContactBlock
-          signedIn={!!viewer}
-          contactEmail={listing.contact_email ?? null}
-          contactPhone={listing.contact_phone ?? null}
-          contactBestTime={listing.contact_best_time ?? null}
-          signInRedirect={`/sale/${listing.slug}`}
-        />
-        <p className="mt-3 text-xs text-neutral-500">
-          Private sale between you and the seller. Outback Connections doesn&apos;t handle payment,
-          inspect goods, or take a commission. Inspect before you pay.
-        </p>
-      </section>
+      {!isExpiredOrFilled ? (
+        <>
+          <section className="mt-8">
+            <ContactBlock
+              signedIn={!!viewer}
+              contactEmail={listing.contact_email ?? null}
+              contactPhone={listing.contact_phone ?? null}
+              contactBestTime={listing.contact_best_time ?? null}
+              signInRedirect={`/sale/${listing.slug}`}
+            />
+            <p className="mt-3 text-xs text-neutral-500">
+              Private sale between you and the seller. Outback Connections doesn&apos;t handle payment,
+              inspect goods, or take a commission. Inspect before you pay.
+            </p>
+          </section>
 
-      {!isOwner && !d?.sold_at && (
-        <section className="mt-6">
-          <EnquiryForm
-            listingId={listing.id}
-            businessName={listing.title}
-            claimed={true}
-            returnTo={`/sale/${listing.slug}`}
-            notice={enquiryNotice}
-            heading={
-              isWanted
-                ? `Got what this buyer is chasing? Message them`
-                : `Enquire or make an offer on ${listing.title}`
-            }
-            ctaLabel={isWanted ? "Message buyer" : "Message seller"}
-            promptLabel={
-              isWanted
-                ? "What stock, hay, grain or gear do you have available?"
-                : "Quantity, inspection time, or offer details"
-            }
-            postcodeLabel="Your postcode"
-            placeholder={
-              isWanted
-                ? "e.g. Have 2 decks of shedded 2026 lucerne hay near Molong, can load B-double this week."
-                : "e.g. Interested in 40 bales / 1 deck, can inspect Thursday morning and arrange our own flat top."
-            }
-          />
+          {!isOwner && !d?.sold_at && (
+            <section className="mt-6">
+              <EnquiryForm
+                listingId={listing.id}
+                businessName={listing.title}
+                claimed={true}
+                returnTo={`/sale/${listing.slug}`}
+                notice={enquiryNotice}
+                heading={
+                  isWanted
+                    ? `Got what this buyer is chasing? Message them`
+                    : `Enquire or make an offer on ${listing.title}`
+                }
+                ctaLabel={isWanted ? "Message buyer" : "Message seller"}
+                promptLabel={
+                  isWanted
+                    ? "What stock, hay, grain or gear do you have available?"
+                    : "Quantity, inspection time, or offer details"
+                }
+                postcodeLabel="Your postcode"
+                placeholder={
+                  isWanted
+                    ? "e.g. Have 2 decks of shedded 2026 lucerne hay near Molong, can load B-double this week."
+                    : "e.g. Interested in 40 bales / 1 deck, can inspect Thursday morning and arrange our own flat top."
+                }
+              />
+            </section>
+          )}
+        </>
+      ) : (
+        <section className="mt-6 rounded-xl border border-neutral-200 bg-neutral-100 p-4">
+          <button
+            type="button"
+            disabled
+            className="w-full cursor-not-allowed rounded-xl bg-neutral-300 px-4 py-2.5 text-sm font-semibold text-neutral-600"
+          >
+            Contact Disabled — Listing Expired or Sold
+          </button>
         </section>
       )}
 

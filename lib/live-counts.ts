@@ -3,6 +3,7 @@
 // decisions in generateMetadata. Returns null on any error so a database
 // blip never noindexes a real page (see browseRobots in lib/seo.ts).
 import { createAnonClient } from "./supabase/anon";
+import { isRuralPostcode } from "./rural-postcodes";
 
 export async function liveListingCount(filter: {
   kinds: string[];
@@ -13,16 +14,15 @@ export async function liveListingCount(filter: {
   try {
     let query = createAnonClient()
       .from("listings")
-      .select("id", { count: "exact", head: true })
+      .select("id, postcode, state")
       .in("kind", filter.kinds)
       .eq("status", "active")
       .gt("expires_at", new Date().toISOString());
     if (filter.categoryId) query = query.eq("category_id", filter.categoryId);
     if (filter.postcodes) query = query.in("postcode", filter.postcodes);
-    const { count, error } = await query;
-    // A missing count (no Content-Range) is unknown, not zero.
-    if (error || typeof count !== "number") return null;
-    return count;
+    const { data, error } = await query;
+    if (error || !Array.isArray(data)) return null;
+    return data.filter((r) => isRuralPostcode(r.postcode, r.state)).length;
   } catch {
     return null;
   }

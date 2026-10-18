@@ -218,6 +218,22 @@ function unwrapPlaces(payload, raw) {
   return [];
 }
 
+// Reject metro NSW postcodes (Greater Sydney, Central Coast, Newcastle, Wollongong, Outer SW & Western Sydney).
+function isRuralPostcode(pc, state = "NSW") {
+  if (!/^\d{4}$/.test(String(pc || ""))) return false;
+  const n = Number(pc);
+  const st = String(state || "NSW").toUpperCase();
+  if (st === "NSW" || (n >= 1000 && n <= 2999)) {
+    if (n >= 1000 && n <= 1999) return false;
+    if (n >= 2000 && n <= 2263) return false;
+    if (n >= 2280 && n <= 2308) return false;
+    if (n >= 2500 && n <= 2530) return false;
+    if (n >= 2555 && n <= 2570) return false;
+    if (n >= 2745 && n <= 2770) return false;
+  }
+  return true;
+}
+
 // Map an Outscraper place + the query context into an ingest-ready record.
 function toRecord(place, q, town, vertical) {
   const placeId = place.place_id || place.google_id || place.cid;
@@ -229,7 +245,8 @@ function toRecord(place, q, town, vertical) {
   const addrMatch = String(place.full_address || place.address || "").match(/\b\d{4}\b/g);
   const addrPc = addrMatch ? addrMatch[addrMatch.length - 1] : null;
   const postcode = String(place.postal_code || place.postcode || addrPc || town.postcode || "").trim();
-  if (!/^\d{4}$/.test(postcode)) return null; // postcode is required + must be real
+  const state = String(place.state || place.us_state || town.state || "NSW").trim();
+  if (!isRuralPostcode(postcode, state)) return null; // postcode is required + must be rural (no metro spillover)
   const website = place.site || place.website || null;
   const sourceUrl =
     place.location_link || // Google Maps listing URL (best source attribution)

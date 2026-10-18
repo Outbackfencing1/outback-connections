@@ -34,9 +34,9 @@ export const SOURCE_PLATFORM_OPTIONS: SourcePlatformOption[] = [
   },
   {
     value: "yellow_pages",
-    label: "Yellow Pages",
+    label: "Public Directory",
     needsUrl: false,
-    hint: "Paste the listing URL if you have it. Otherwise we link to a Yellow Pages search.",
+    hint: "Paste the listing URL if you have it. Otherwise we link to a public directory search.",
   },
   {
     value: "truelocal",
@@ -68,7 +68,7 @@ export const SOURCE_PLATFORM_OPTIONS: SourcePlatformOption[] = [
 export const PLATFORM_LABELS: Record<string, string> = {
   google_maps: "Google Maps",
   facebook: "Facebook",
-  yellow_pages: "Yellow Pages",
+  yellow_pages: "a public directory",
   truelocal: "TrueLocal",
   official_website: "its official website",
   web: "the web",

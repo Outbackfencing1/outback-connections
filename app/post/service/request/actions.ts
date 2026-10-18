@@ -7,6 +7,7 @@ import {
   getLatestPolicyVersionId,
   honeypotTripped,
   insertListing,
+  PENDING_VERIFICATION_CONFIRMATION,
   serviceSchema,
   setFlash,
   valuesFrom,
@@ -17,7 +18,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyProvidersOfRequest } from "@/lib/request-notify";
 
 export async function postServiceRequest(formData: FormData): Promise<ActionResult> {
-  // A farmer describing a job is demand, not supply: no 24h wait.
   const guard = await checkPostingGuard({ skipAccountAge: true });
   if (!guard.ok) return { ok: false, errors: { _: guard.message } };
 
@@ -63,6 +63,9 @@ export async function postServiceRequest(formData: FormData): Promise<ActionResu
       policy_version_id: policyId,
       state: null,
       user_email: guard.email,
+      abn: data.abn || null,
+      email_verified: guard.emailVerified,
+      account_age_days: guard.accountAgeDays,
     },
     "service_details",
     {
@@ -77,30 +80,35 @@ export async function postServiceRequest(formData: FormData): Promise<ActionResu
     return { ok: false, errors: { _: result.message }, values: valuesFrom(formData) };
   }
 
-  // Tell claimed providers in the region. Best-effort; never blocks the post.
-  let notified = 0;
-  try {
-    const admin = createAdminClient();
-    const { data: cat } = admin
-      ? await admin.from("categories").select("label").eq("id", data.category_id).maybeSingle()
-      : { data: null };
-    const out = await notifyProvidersOfRequest({
-      categoryId: data.category_id,
-      categoryLabel: cat?.label ?? "Services",
-      postcode: data.postcode,
-      title: data.title,
-      slug: result.slug,
-      reference: `REQ-${result.slug.slice(-8).toUpperCase()}`,
-    });
-    notified = out.notified;
-  } catch (e) {
-    console.error("[request] provider notify failed:", e);
+  if (!result.pendingVerification) {
+    // Tell claimed providers in the region. Best-effort; never blocks the post.
+    let notified = 0;
+    try {
+      const admin = createAdminClient();
+      const { data: cat } = admin
+        ? await admin.from("categories").select("label").eq("id", data.category_id).maybeSingle()
+        : { data: null };
+      const out = await notifyProvidersOfRequest({
+        categoryId: data.category_id,
+        categoryLabel: cat?.label ?? "Services",
+        postcode: data.postcode,
+        title: data.title,
+        slug: result.slug,
+        reference: `REQ-${result.slug.slice(-8).toUpperCase()}`,
+      });
+      notified = out.notified;
+    } catch (e) {
+      console.error("[request] provider notify failed:", e);
+    }
+
+    await setFlash(
+      notified > 0
+        ? `Posted: ${data.title}. ${notified} listed business${notified === 1 ? "" : "es"} in your area ${notified === 1 ? "has" : "have"} been told.`
+        : `Posted: ${data.title}`
+    );
+  } else {
+    await setFlash(PENDING_VERIFICATION_CONFIRMATION);
   }
 
-  await setFlash(
-    notified > 0
-      ? `Posted: ${data.title}. ${notified} listed business${notified === 1 ? "" : "es"} in your area ${notified === 1 ? "has" : "have"} been told.`
-      : `Posted: ${data.title}`
-  );
   redirect("/dashboard/listings");
 }

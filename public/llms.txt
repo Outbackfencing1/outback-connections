@@ -2,7 +2,7 @@
 
 > A free rural directory for Australia, starting with fencing contractors across New South Wales. Operated by Outback Fencing & Steel Supplies Pty Ltd (ABN 76 674 671 820), 76 Astill Drive, Orange NSW 2800.
 
-Farmers find a contractor by postcode or region and ask for a quote through the listing, with no account needed. Most entries were found on public sources (Facebook, Yellow Pages, TrueLocal, Google Maps, business websites); they are marked "Unclaimed", say where they were found, and were not posted by the business. A business can claim its entry for free or ask for it to be fixed or removed. Jobs, freight and for-sale sections open as people post in them.
+Farmers find a contractor by postcode or region and ask for a quote through the listing, with no account needed. Most entries were found on public sources (Facebook, TrueLocal, Google Maps, business websites); they are marked "Unclaimed", say where they were found, and were not posted by the business. A business can claim its entry for free or ask for it to be fixed or removed. Jobs, freight and for-sale sections open as people post in them.
 
 ## Key sections
 - [Fencing contractors](https://www.outbackconnections.com.au/services/fencing-contractor): by postcode or region, with a quote form on every entry.

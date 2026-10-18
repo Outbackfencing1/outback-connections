@@ -1,4 +1,6 @@
 import Link from "next/link";
+import JsonLd from "@/components/seo/JsonLd";
+import { faqPageJsonLd } from "@/lib/seo";
 
 export const metadata = {
   alternates: { canonical: "/about" },
@@ -7,9 +9,28 @@ export const metadata = {
     "Who runs Outback Connections, what it is, what it isn't, and how it's funded. Plain English, no spin.",
 };
 
+const ABOUT_FAQS = [
+  {
+    question: "Where do the listings on Outback Connections come from?",
+    answer:
+      "Most entries were found online on Facebook, TrueLocal, Google Maps or the business's own website and carry an Unclaimed badge until the owner claims them for free. Other listings are posted directly by their owners.",
+  },
+  {
+    question: "Who runs Outback Connections?",
+    answer:
+      "Outback Fencing & Steel Supplies Pty Ltd (ABN 76 674 671 820), based in Orange, NSW.",
+  },
+  {
+    question: "Why is Outback Connections free?",
+    answer:
+      "Outback Connections is funded by Outback Fencing so rural contractors, farmers, and workers can connect with zero lead fees, zero commission, and no paid tiers.",
+  },
+];
+
 export default function AboutPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
+      <JsonLd data={faqPageJsonLd(ABOUT_FAQS)} />
       <h1 className="text-3xl font-bold tracking-tight">About</h1>
 
       <p className="mt-4 text-neutral-800">
@@ -23,10 +44,10 @@ export default function AboutPage() {
       <section className="mt-10 space-y-3">
         <h2 className="text-xl font-bold">Where the listings come from</h2>
         <p className="text-neutral-800">
-          Most entries were found online: on Facebook, Yellow Pages,
-          TrueLocal, Google Maps or the business&apos;s own website. Each
-          one says where we found it and carries an Unclaimed badge,
-          because the business didn&apos;t post it. The owner can claim it
+          Most entries were found online: on Facebook, TrueLocal, Google Maps
+          or the business&apos;s own website, and were not posted by the
+          business. Each one says where we found it and carries an Unclaimed
+          badge, because the business didn&apos;t post it. The owner can claim it
           for free, or email{" "}
           <a
             href="mailto:help@outbackconnections.com.au?subject=Fix%20or%20remove%20my%20business%20listing"

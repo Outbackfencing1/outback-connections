@@ -181,6 +181,6 @@ export default async function ClaimBusinessPage({
 
 function prettySource(value: string | null): string {
   if (value === "google_maps") return "Google Maps";
-  if (!value) return "a public directory";
+  if (value === "yellow_pages" || value === "web" || !value) return "public business records";
   return value.replace(/_/g, " ");
 }

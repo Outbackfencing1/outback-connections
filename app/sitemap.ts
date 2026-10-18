@@ -6,6 +6,7 @@
 import type { MetadataRoute } from "next";
 import { createAnonClient } from "@/lib/supabase/anon";
 import { regionsForPostcodes, regionSlug } from "@/lib/regions";
+import { isRuralPostcode } from "@/lib/rural-postcodes";
 
 export const revalidate = 3600; // regenerate hourly
 
@@ -46,13 +47,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const sb = createAnonClient();
     const nowIso = now.toISOString();
 
-    // Active listings, split by kind into their route prefixes.
-    const { data: listings } = await sb
+    // Active rural listings, split by kind into their route prefixes.
+    const { data: rawListings } = await sb
       .from("listings")
-      .select("slug, kind, created_at")
+      .select("slug, kind, postcode, state, created_at")
       .eq("status", "active")
       .gt("expires_at", nowIso)
       .limit(10000);
+
+    const listings = (rawListings ?? []).filter((l) => isRuralPostcode(l.postcode, l.state));
 
     const prefixFor = (kind: string): string | null => {
       if (kind === "job") return "/jobs";
@@ -63,17 +66,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     };
 
     // Don't advertise an empty vertical's browse page to crawlers.
-    const hasJobs = (listings ?? []).some((l) => l.kind === "job");
-    const hasFreight = (listings ?? []).some((l) => l.kind === "freight");
-    const hasSale = (listings ?? []).some((l) => l.kind === "for_sale");
+    const hasServices = listings.some(
+      (l) => l.kind === "service_offering" || l.kind === "service_request"
+    );
+    const hasJobs = listings.some((l) => l.kind === "job");
+    const hasFreight = listings.some((l) => l.kind === "freight");
+    const hasSale = listings.some((l) => l.kind === "for_sale");
     const visibleStatic = staticEntries.filter(
       (e) =>
+        (hasServices || !e.url.endsWith("/services")) &&
         (hasJobs || !e.url.endsWith("/jobs")) &&
         (hasFreight || !e.url.endsWith("/freight")) &&
         (hasSale || !e.url.endsWith("/sale"))
     );
 
-    const listingEntries: Row[] = (listings ?? [])
+    const listingEntries: Row[] = listings
       .map((l): Row | null => {
         const prefix = prefixFor(l.kind);
         if (!prefix || !l.slug) return null;
@@ -95,30 +102,35 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .eq("active", true)
       .limit(1000);
 
-    // Regional landing pages: one per (services category, region) with live rows.
-    const { data: svc, error: svcError } = await sb
+    // Regional landing pages: one per (services category, region) with >= 1 live rural row.
+    const { data: svc } = await sb
       .from("listings")
-      .select("postcode, category:categories!inner(slug, pillar)")
+      .select("postcode, state, category:categories!inner(slug, pillar)")
       .eq("status", "active")
       .gt("expires_at", nowIso)
       .in("kind", ["service_offering", "service_request"])
       .limit(5000);
-    const svcRows = (svc ?? []) as unknown as { postcode: string; category: { slug: string; pillar: string } | null }[];
+    const svcRows = ((svc ?? []) as unknown as {
+      postcode: string;
+      state?: string | null;
+      category: { slug: string; pillar: string } | { slug: string; pillar: string }[] | null;
+    }[]).filter((r) => isRuralPostcode(r.postcode, r.state));
+
     const regionMap = await regionsForPostcodes(svcRows.map((r) => r.postcode));
     const regionPages = new Set<string>();
+    const liveCategorySlugs = new Set<string>();
     for (const r of svcRows) {
+      const cat = Array.isArray(r.category) ? r.category[0] : r.category;
+      if (!cat?.slug || cat.pillar !== "services") continue;
+      liveCategorySlugs.add(cat.slug);
       const reg = regionMap.get(r.postcode);
-      if (!reg || !r.category?.slug || r.category.pillar !== "services") continue;
-      regionPages.add(`${r.category.slug}/${regionSlug(reg.region_name, reg.state)}`);
+      if (!reg) continue;
+      regionPages.add(`${cat.slug}/${regionSlug(reg.region_name, reg.state)}`);
     }
-    // Only categories with live rows: an empty category page is noindexed
-    // (browseRobots), so listing it here would contradict that. If the count
-    // query failed, fall back to every active category.
-    const liveCategorySlugs = svcError
-      ? null
-      : new Set(svcRows.map((r) => r.category?.slug).filter((s): s is string => !!s));
+
+    // Strictly exclude any category with 0 active rural listings.
     const categoryEntries: Row[] = (cats ?? [])
-      .filter((c) => c.slug && (!liveCategorySlugs || liveCategorySlugs.has(c.slug)))
+      .filter((c) => c.slug && liveCategorySlugs.has(c.slug))
       .map((c) => ({
         url: `${BASE}/services/${c.slug}`,
         lastModified: now,

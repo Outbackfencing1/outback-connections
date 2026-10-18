@@ -111,7 +111,9 @@ export default function ScrapedNotice({
       )}
 
       <div className="rounded-xl border border-amber-300 bg-amber-50 p-5">
-        <p className="font-semibold text-amber-900">Unclaimed listing</p>
+        <span className="inline-block rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-900">
+          Unclaimed Profile — Is this your business? Claim for free
+        </span>
         <p className="mt-2 text-sm text-amber-900">
           This wasn&apos;t posted by the business. We found <strong>{title}</strong>
           {platform ? <> listed on {platform}</> : null} and added it to the

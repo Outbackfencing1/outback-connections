@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import ListingCard from "@/components/browse/ListingCard";
 import VendorTrustSection from "@/components/detail/VendorTrustSection";
 import ShareListingBar from "@/components/detail/ShareListingBar";
+import JsonLd from "@/components/seo/JsonLd";
+import { breadcrumbJsonLd, localBusinessJsonLd } from "@/lib/seo";
 import type { VendorTrustSummary } from "@/lib/trust";
 
 export const dynamic = "force-dynamic";
@@ -131,8 +133,30 @@ export default async function PublicVendorProfilePage({
     listings[0]?.title ||
     "Outback Connections Member";
 
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BASE_URL || "https://www.outbackconnections.com.au";
+  const profilePostcode = bizRow?.postcode ?? listings[0]?.postcode ?? "2800";
+  const profileState = bizRow?.state_code ?? listings[0]?.state ?? "NSW";
+  const profilePhone = bizRow?.contact_phone ?? listings[0]?.contact_phone ?? null;
+  const profileCategory = listings[0]?.category?.label ?? "Rural Contractor";
+  const profileJsonLd = localBusinessJsonLd({
+    name: fallbackTitle,
+    postcode: profilePostcode,
+    suburb: bizRow?.suburb ?? null,
+    state: profileState,
+    telephone: profilePhone,
+    category: profileCategory,
+    url: `${baseUrl}/profile/${id}`,
+  });
+  const profileBreadcrumbs = breadcrumbJsonLd([
+    { name: "Home", url: `${baseUrl}/` },
+    { name: "Trusted Profiles", url: `${baseUrl}/profiles` },
+    { name: fallbackTitle, url: `${baseUrl}/profile/${id}` },
+  ]);
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
+      <JsonLd data={[profileJsonLd, profileBreadcrumbs]} />
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <Link href="/profiles" className="font-medium text-neutral-600 underline hover:text-green-800">
           ← All trusted profiles &amp; contractors

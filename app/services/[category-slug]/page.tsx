@@ -4,11 +4,20 @@ import { createClient } from "@/lib/supabase/server";
 import ListingCard from "@/components/browse/ListingCard";
 import Pagination from "@/components/browse/Pagination";
 import FilterBar from "@/components/browse/FilterBar";
+import JsonLd from "@/components/seo/JsonLd";
 import { logSearch } from "@/lib/analytics";
-import { breadcrumbJsonLd, browseRobots, hasFilterParams, humanCategory, jsonLdScript, socialMeta } from "@/lib/seo";
+import {
+  breadcrumbJsonLd,
+  browseRobots,
+  hasFilterParams,
+  humanCategory,
+  itemListJsonLd,
+  socialMeta,
+} from "@/lib/seo";
 import { regionCounts, regionsForPostcodes, regionSlug } from "@/lib/regions";
 import { liveListingCount } from "@/lib/live-counts";
 import { checkPostcodeInput, postcodeFilterValue } from "@/lib/postcode-input";
+import { filterRuralRecords } from "@/lib/rural-postcodes";
 
 export const dynamic = "force-dynamic";
 
@@ -98,35 +107,36 @@ export default async function ServiceCategoryPage({
       category:categories(slug, label),
       business:businesses(claim_status, contact_phone, contact_email, website_url, suburb, outback_verified),
       service_details!inner(direction, rate_type, rate_amount, travel_willingness)
-    `,
-      { count: "exact" }
+    `
     )
     .in("kind", ["service_offering", "service_request"])
     .eq("category_id", cat.id)
     .eq("status", "active")
     .gt("expires_at", new Date().toISOString())
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(1000);
 
   if (postcode) query = query.like("postcode", `${postcode}%`);
   if (direction) query = query.eq("service_details.direction", direction);
 
-  const from = (page - 1) * PAGE_SIZE;
-  const to = from + PAGE_SIZE - 1;
-  query = query.range(from, to);
-
-  const [{ data: listings, count }, { data: allPostcodes }] = await Promise.all([
+  const [{ data: rawListings }, { data: allPostcodes }] = await Promise.all([
     query,
     supabase
       .from("listings")
-      .select("postcode")
+      .select("postcode, state")
       .in("kind", ["service_offering", "service_request"])
       .eq("category_id", cat.id)
       .eq("status", "active")
       .gt("expires_at", new Date().toISOString())
       .limit(2000),
   ]);
-  const total = count ?? 0;
-  const regions = await regionCounts((allPostcodes ?? []).map((r) => r.postcode));
+
+  const ruralListings = filterRuralRecords(rawListings ?? []);
+  const total = ruralListings.length;
+  const from = (page - 1) * PAGE_SIZE;
+  const listings = ruralListings.slice(from, from + PAGE_SIZE);
+  const ruralPostcodes = filterRuralRecords(allPostcodes ?? []);
+  const regions = await regionCounts(ruralPostcodes.map((r) => r.postcode));
 
   // A full postcode also gets "N around <region>", since exact-prefix search
   // misses neighbouring postcodes in the same area.
@@ -154,18 +164,28 @@ export default async function ServiceCategoryPage({
     Object.fromEntries(Object.entries({ postcode, direction }).filter(([, v]) => v))
   ).toString();
 
+  const pageUrl = `${BASE_URL}/services/${cat.slug}`;
   const breadcrumb = breadcrumbJsonLd([
     { name: "Home", url: BASE_URL },
     { name: "Services", url: `${BASE_URL}/services` },
-    { name: cat.label, url: `${BASE_URL}/services/${cat.slug}` },
+    { name: cat.label, url: pageUrl },
   ]);
+  const itemList =
+    listings.length > 0
+      ? itemListJsonLd({
+          name: `${humanCategory(cat.label)} — Outback Connections`,
+          url: pageUrl,
+          items: listings.map((l, idx) => ({
+            position: from + idx + 1,
+            name: l.title,
+            url: `${BASE_URL}/services/listing/${l.slug}`,
+          })),
+        })
+      : null;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumb) }}
-      />
+      <JsonLd data={[breadcrumb, itemList]} />
       <p className="text-sm">
         <Link href="/services" className="text-neutral-600 underline">
           ← All services

@@ -28,7 +28,7 @@ describe("buildTitle", () => {
 });
 
 describe("buildDirectoryDescription", () => {
-  it("says what and where, and that the row is unclaimed", () => {
+  it("says what and where, without boilerplate unclaimed disclaimers", () => {
     expect(
       buildDirectoryDescription({
         categoryLabel: "Fencing contractor (construction)",
@@ -37,7 +37,7 @@ describe("buildDirectoryDescription", () => {
         postcode: "2830",
         unclaimed: true,
       })
-    ).toBe("Fencing contractor in Dubbo, NSW. Unclaimed directory entry on Outback Connections: ask for a quote and we pass it on.");
+    ).toBe("Fencing contractor in Dubbo, NSW. Direct regional contact and quote requests on Outback Connections.");
   });
 
   it("drops the unclaimed line for claimed rows and copes without a region", () => {

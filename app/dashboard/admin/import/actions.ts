@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isRuralPostcode } from "@/lib/rural-postcodes";
 
 // ------------------------------------------------------------
 // Admin Import Preview / Commit server actions.
@@ -120,13 +121,14 @@ export async function commitImport(jsonText: string): Promise<CommitResult> {
   for (const r of parsed.records) {
     const vertical = r.vertical as string | undefined;
     const postcode = (r.postcode as string | undefined) ?? "";
+    const state = (r.state as string | undefined) ?? "NSW";
     if (
       (vertical !== "job" && vertical !== "freight" && vertical !== "service") ||
       !r.source_external_id ||
       !r.source_url ||
       !r.source_platform ||
       !r.name ||
-      !/^\d{4}$/.test(postcode)
+      !isRuralPostcode(postcode, state)
     ) {
       skipped++;
       continue;

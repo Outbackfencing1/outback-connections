@@ -3,6 +3,7 @@
 // farmers and customers can reach vendors & contractors in 0 extra clicks.
 import Link from "next/link";
 import { kindLabel, listingHref, relativeTime, teaser } from "@/lib/format";
+import { formatListingDescription } from "@/lib/seo";
 import { formatPhoneHref, isAustralianMobile } from "@/lib/trust";
 import { formatJobRate, jobDirectionBadge, ticketLabel, travelRadiusLabel } from "@/lib/work-board";
 
@@ -81,6 +82,15 @@ export default function ListingCard({ listing }: { listing: Listing }) {
   const radiusText = jobMeta ? travelRadiusLabel(jobMeta.travel_willingness) : null;
   const tickets = Array.isArray(jobMeta?.tickets) ? jobMeta.tickets : [];
   const href = listingHref(listing.kind, listing.slug);
+  const displayDescription = formatListingDescription({
+    description: listing.description,
+    businessName: listing.title,
+    categoryName: listing.category?.label,
+    suburb,
+    postcode: listing.postcode,
+    state: listing.state,
+    unclaimed: isScraped,
+  });
 
   return (
     <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm transition hover:border-green-700 hover:shadow-md">
@@ -109,8 +119,8 @@ export default function ListingCard({ listing }: { listing: Listing }) {
               </span>
             )}
             {isScraped && (
-              <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-amber-800">
-                Unclaimed
+              <span className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+                Unclaimed Profile — Is this your business? Claim for free
               </span>
             )}
             {trustBadge && (
@@ -166,7 +176,7 @@ export default function ListingCard({ listing }: { listing: Listing }) {
         )}
 
         <p className="mt-3 text-sm text-neutral-700">
-          {teaser(listing.description, 160)}
+          {teaser(displayDescription, 190)}
         </p>
       </Link>
 

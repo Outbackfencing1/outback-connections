@@ -8,6 +8,7 @@ import {
   getLatestPolicyVersionId,
   honeypotTripped,
   insertListing,
+  PENDING_VERIFICATION_CONFIRMATION,
   saleSchema,
   setFlash,
   valuesFrom,
@@ -57,6 +58,9 @@ export async function postForSale(formData: FormData): Promise<ActionResult> {
       policy_version_id: policyId,
       state: null,
       user_email: guard.email,
+      abn: data.abn || null,
+      email_verified: guard.emailVerified,
+      account_age_days: guard.accountAgeDays,
     },
     "sale_details",
     {
@@ -77,9 +81,11 @@ export async function postForSale(formData: FormData): Promise<ActionResult> {
   }
 
   await setFlash(
-    data.side === "demand"
-      ? `Posted wanted to buy: ${data.title}`
-      : `Posted for sale: ${data.title}`
+    result.pendingVerification
+      ? PENDING_VERIFICATION_CONFIRMATION
+      : data.side === "demand"
+        ? `Posted wanted to buy: ${data.title}`
+        : `Posted for sale: ${data.title}`
   );
   redirect("/dashboard/listings");
 }

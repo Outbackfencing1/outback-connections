@@ -8,6 +8,7 @@ import {
   getLatestPolicyVersionId,
   honeypotTripped,
   insertListing,
+  PENDING_VERIFICATION_CONFIRMATION,
   setFlash,
   valuesFrom,
   zodErrorsToMap,
@@ -60,6 +61,9 @@ export async function postFreight(formData: FormData): Promise<ActionResult> {
       policy_version_id: policyId,
       state: null,
       user_email: guard.email,
+      abn: data.abn || null,
+      email_verified: guard.emailVerified,
+      account_age_days: guard.accountAgeDays,
     },
     "freight_details",
     {
@@ -79,6 +83,10 @@ export async function postFreight(formData: FormData): Promise<ActionResult> {
     return { ok: false, errors: { _: result.message }, values: valuesFrom(formData) };
   }
 
-  await setFlash(`Posted: ${data.title}`);
+  await setFlash(
+    result.pendingVerification
+      ? PENDING_VERIFICATION_CONFIRMATION
+      : `Posted: ${data.title}`
+  );
   redirect("/dashboard/listings");
 }

@@ -150,6 +150,25 @@ export default function BaseFields({
             className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
           />
         </Field>
+
+        <Field
+          id="abn"
+          label="Australian Business Number (ABN) — optional"
+          error={errors.abn}
+          compact
+          hint="11 digits. Providing an active ABN fast-tracks trust verification so new accounts publish immediately."
+        >
+          <input
+            id="abn"
+            name="abn"
+            type="text"
+            inputMode="numeric"
+            maxLength={20}
+            defaultValue={v("abn")}
+            placeholder="e.g. 51 824 753 556"
+            className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 sm:w-64"
+          />
+        </Field>
       </fieldset>
     </>
   );

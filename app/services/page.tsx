@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCategoryCounts } from "@/lib/category-counts";
 import ListingCard from "@/components/browse/ListingCard";
 import { socialMeta } from "@/lib/seo";
+import { filterRuralRecords } from "@/lib/rural-postcodes";
 
 const SERVICES_TITLE = "Rural services — Outback Connections";
 const SERVICES_DESCRIPTION =
@@ -38,8 +39,8 @@ export default async function ServicesLandingPage() {
       return a.label.localeCompare(b.label, "en-AU");
     });
 
-  // 5 most recent service listings (offerings + requests pooled)
-  const { data: recent } = await supabase
+  // 5 most recent rural service listings (offerings + requests pooled)
+  const { data: rawRecent } = await supabase
     .from("listings")
     .select(
       `
@@ -53,7 +54,8 @@ export default async function ServicesLandingPage() {
     .eq("status", "active")
     .gt("expires_at", new Date().toISOString())
     .order("created_at", { ascending: false })
-    .limit(5);
+    .limit(20);
+  const recent = filterRuralRecords(rawRecent ?? []).slice(0, 5);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">

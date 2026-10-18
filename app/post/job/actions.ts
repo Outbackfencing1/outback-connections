@@ -9,6 +9,7 @@ import {
   honeypotTripped,
   insertListing,
   jobSchema,
+  PENDING_VERIFICATION_CONFIRMATION,
   setFlash,
   valuesFrom,
   zodErrorsToMap,
@@ -68,6 +69,9 @@ export async function postJob(formData: FormData): Promise<ActionResult> {
       policy_version_id: policyId,
       state: null,
       user_email: guard.email,
+      abn: data.abn || null,
+      email_verified: guard.emailVerified,
+      account_age_days: guard.accountAgeDays,
     },
     "job_details",
     {
@@ -93,9 +97,11 @@ export async function postJob(formData: FormData): Promise<ActionResult> {
   }
 
   await setFlash(
-    data.direction === "available_for_work"
-      ? `Skills profile posted: ${data.title}`
-      : `Job posted: ${data.title}`
+    result.pendingVerification
+      ? PENDING_VERIFICATION_CONFIRMATION
+      : data.direction === "available_for_work"
+        ? `Skills profile posted: ${data.title}`
+        : `Job posted: ${data.title}`
   );
   redirect("/dashboard/listings");
 }
