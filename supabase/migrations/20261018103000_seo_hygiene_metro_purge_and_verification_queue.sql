@@ -171,7 +171,8 @@ declare
 begin
   -- 3. Archive existing unclaimed or seed metro listings & businesses (with 4-digit postcode guard)
   update public.listings l
-     set status = 'deleted_by_admin'
+     set status = 'deleted_by_admin',
+         closed_at = null
     from public.businesses b
    where l.business_id = b.id
      and b.claim_status = 'unclaimed'
@@ -182,7 +183,8 @@ begin
   v_archived_listings := v_archived_listings + v_rows;
 
   update public.listings l
-     set status = 'deleted_by_admin'
+     set status = 'deleted_by_admin',
+         closed_at = null
    where l.status in ('active', 'expired', 'closed')
      and l.postcode ~ '^[0-9]{4}$'
      and not public.is_rural_postcode(l.postcode, l.state);

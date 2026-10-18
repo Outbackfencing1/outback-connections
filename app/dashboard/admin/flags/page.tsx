@@ -29,14 +29,14 @@ export default async function AdminFlagQueuePage() {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) redirect("/signin?next=/dashboard/admin/flags");
 
-  // is_admin gate
+  // is_admin or is_staff gate
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("is_admin")
+    .select("is_admin, is_staff")
     .eq("user_id", userData.user.id)
     .maybeSingle();
 
-  if (!profile?.is_admin) {
+  if (!(profile?.is_admin || profile?.is_staff)) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-10">
         <h1 className="text-2xl font-bold tracking-tight">Flag queue</h1>

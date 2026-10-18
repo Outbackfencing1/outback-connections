@@ -200,10 +200,22 @@ export default async function ContractorOutreachPage({
   return (
     <PageShell>
       <p className="mt-2 max-w-3xl text-sm text-neutral-700">
-        Work through Australian fencing contractors, record each contact, and
-        schedule the next step. Invitation buttons only copy text or open your
-        phone/email app — this page never sends a bulk message.
+        Work through regional Australian contractors, carriers, and rural suppliers across every category, record each contact, and schedule follow-ups. Invitation buttons copy text or open your phone/email/SMS app — this page never sends bulk messages.
       </p>
+      <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold">
+        <Link href="/dashboard/admin/flags" className="text-green-800 underline hover:text-green-950">
+          Verification &amp; flag queue →
+        </Link>
+        <Link href="/dashboard/directory/add" className="text-green-800 underline hover:text-green-950">
+          + Add directory contractor →
+        </Link>
+        <Link href="/dashboard/admin/enquiries" className="text-green-800 underline hover:text-green-950">
+          Customer enquiries →
+        </Link>
+        <Link href="/dashboard/admin/demand" className="text-green-800 underline hover:text-green-950">
+          Regional demand &amp; forecasting →
+        </Link>
+      </div>
 
       {countResult.error && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">

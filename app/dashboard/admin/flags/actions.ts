@@ -24,11 +24,29 @@ async function requireAdmin() {
   return supabase;
 }
 
+async function requireStaffOrAdmin() {
+  const supabase = createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) redirect("/signin");
+
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("is_admin, is_staff")
+    .eq("user_id", userData.user.id)
+    .maybeSingle();
+
+  if (!(profile?.is_admin || profile?.is_staff)) {
+    await setFlash("Not authorised.");
+    redirect("/dashboard");
+  }
+  return supabase;
+}
+
 export async function approvePendingListing(formData: FormData): Promise<void> {
   const id = formData.get("listing_id");
   if (typeof id !== "string" || !id) redirect("/dashboard/admin/flags");
 
-  await requireAdmin();
+  await requireStaffOrAdmin();
   const admin = createAdminClient();
   if (!admin) {
     await setFlash("Admin database client unavailable.");

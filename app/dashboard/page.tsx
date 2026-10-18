@@ -193,32 +193,32 @@ export default async function DashboardPage() {
           </Link>
         )}
 
-        {isStaff && !isAdmin && (
+        {isStaff && (
           <Link
             href="/dashboard/admin/contractor-outreach"
             className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm transition hover:border-amber-400 hover:shadow-md sm:col-span-2"
           >
             <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
-              Staff
+              Staff &amp; Outreach
             </p>
-            <h2 className="mt-1 text-lg font-bold text-neutral-900">Outreach and enquiries</h2>
+            <h2 className="mt-1 text-lg font-bold text-neutral-900">Contractor outreach &amp; enquiries</h2>
             <p className="mt-2 text-sm text-neutral-700">
-              Contractor outreach queue, quote requests to forward, bulk import, and the reports.
+              Contractor outreach queue across all rural categories, 1-click claim invitations, quote requests, and bulk import.
             </p>
           </Link>
         )}
 
-        {isAdmin && (
+        {isStaff && (
           <Link
             href="/dashboard/admin/flags"
             className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm transition hover:border-amber-400 hover:shadow-md sm:col-span-2"
           >
             <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
-              Admin
+              {isAdmin ? "Admin & Verification" : "Staff Verification Queue"}
             </p>
-            <h2 className="mt-1 text-lg font-bold text-neutral-900">Admin tools</h2>
+            <h2 className="mt-1 text-lg font-bold text-neutral-900">Verification &amp; flag queue</h2>
             <p className="mt-2 text-sm text-neutral-700">
-              Flags, moderation, claims, import, analytics, lockdown, duplicate accounts.
+              Approve new user listings in the Pending Verification Queue, review flags, claims, and analytics.
             </p>
           </Link>
         )}

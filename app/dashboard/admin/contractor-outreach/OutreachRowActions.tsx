@@ -56,7 +56,7 @@ export default function OutreachRowActions({
     [businessName, invitationUrl, hasClaimableListing]
   );
   const emailHref = email
-    ? `mailto:${email}?subject=${encodeURIComponent("Free fencing contractor profile on Outback Connections")}&body=${encodeURIComponent(invitationText)}`
+    ? `mailto:${email}?subject=${encodeURIComponent(`Free rural profile for ${businessName} on Outback Connections`)}&body=${encodeURIComponent(invitationText)}`
     : null;
   const smsHref = phone
     ? `sms:${phone.replace(/[^\d+]/g, "")}?body=${encodeURIComponent(invitationText)}`
@@ -469,17 +469,17 @@ function buildInvitationText(
   hasClaimableListing: boolean
 ): string {
   const action = hasClaimableListing
-    ? `We’ve added a free, unclaimed profile for ${businessName}. You can review the details and claim it here:\n${invitationUrl}`
-    : `You’re invited to create a free contractor profile here:\n${invitationUrl}`;
-  return `Hi ${businessName},
+    ? `We’ve set up a free regional profile for ${businessName} so local property owners can call or message you directly. You can review your details, add job photos, and claim it here:\n${invitationUrl}`
+    : `You’re invited to claim your free regional contractor profile here:\n${invitationUrl}`;
+  return `G'day ${businessName},
 
-I’m Ali from Outback Connections. We’re building a free rural directory to help property owners and farmers find fencing contractors.
+I’m Ali from Outback Connections. We’re an Australian rural directory helping landholders and farmers connect directly with verified regional contractors, carriers, and rural suppliers.
 
 ${action}
 
-It’s free to join, there are no lead fees, and you can update your details. If the listing isn’t right for you, just let me know.
+It’s 100% free, there are zero lead fees or commissions, and you can update your contact details or availability anytime. If anything needs adjusting, just let me know.
 
-Thanks,
+Cheers,
 Ali
 Outback Connections`;
 }
