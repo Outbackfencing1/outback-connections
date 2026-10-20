@@ -193,23 +193,28 @@ Summarise my week's Outback Connections hub growth log into a concise 5-bullet F
 
 ---
 
-## 8. Honest Weekly Scorecard, 30/60/90-Day Plan & Long-Term Roadmap
+## 8. 5-Year Hyper-Growth Velocity Targets, 6 National Conquest Waves & Live Automated Coaching
 
-### Trial Targets (Adjust After Measuring Real Time & Quality in Weeks 1–2)
-- **SLA:** `100%` of genuine farmer enquiries forwarded within 24 hours (`0` waiting `>48h`).
-- **Verification & Hygiene:** `30–40` existing/staged rows verified or cleaned per week.
-- **New Non-Fencing Services & Freight:** `15–20` verified rural listings added per week via `/dashboard/directory/add`.
-- **Rural Jobs Board:** `5–10` genuine rural job opportunities verified/posted per week.
-- **Claim Invitations:** `15–25` personalised 1-to-1 `Free Hub Profile Claim Invites` sent per week.
+### Aggressive Daily & Weekly Hyper-Growth Velocity Targets
+Your performance is continuously monitored on `/dashboard` and `/dashboard/admin/hub-queue` via the **Live Velocity Score (`/100`) & Automated Daily Coach**:
+- **SLA First:** `100%` of genuine farmer enquiries forwarded within 24 hours (`<4h` target; `0` waiting `>48h`).
+- **New Verified Rural Listings (`15/day` · `75+/week`):** Add `15+` verified rural listings per day via `/dashboard/directory/add` with **`>=70%` in non-fencing services and freight** (`>=52/week`) until every category has real depth.
+- **1-to-1 Claim & Availability Outreach (`20/day` · `100+/week`):** Log `20+` personalised 1-to-1 `Free Hub Profile Claim Invites` or availability check-ins per day in `/dashboard/admin/contractor-outreach`.
+- **Active Rural Jobs Board (`15+` live at all times):** Add `3–5` genuine rural job opportunities per day (`10–15/week`) from direct station/employer career pages or direct employer permission.
 - **Daryl Product Handoffs:** Tracked honestly as a supporting metric (`handed_to_daryl → quoted_by_sales → paid`), never forced onto cold contacts.
 
-### 30 / 60 / 90-Day Plan
-- **Days 1–30 (Central West NSW Benchmark):** Clean the 32 review rows in `rural_fencers_review.csv`; replace synthetic `google.com/search` URLs on priority NSW listings; reach `>=3` verified options per spotlight town in Central West NSW across top 10 service/freight categories; maintain `15–20` active rural jobs; achieve first `5+` owner-claimed profiles and `5+` confirmed helpful farmer enquiries.
-- **Days 31–60 (Regional NSW Corridor Expansion — Riverina, New England, Central West Slopes):** Replicate the town × category depth model into Wagga Wagga, Tamworth, Armidale, Moree, Goulburn, and Young; establish fortnightly availability check-ins with claimed contractors; run approved regional community packs.
-- **Days 61–90 (Multi-State Rural Corridors & Repeat Habit):** Expand verified non-fencing, freight, and job coverage into regional VIC, QLD, SA, and WA agricultural hubs; upload monthly postcode sales aggregates (`/dashboard/admin/sales-upload`) so `/dashboard/admin/demand` compares farmer search demand against Outback Fencing regional supply.
+### The 6 National Regional Conquest Waves (Auto-Refilling 5-Year Pipeline)
+Whenever a town × category cell reaches `>=3` verified options in Wave 1, immediately advance to the next gap in the wave, and then to the next Conquest Wave:
+1. **`WAVE-1` (Months 1–2 — ACTIVE NOW): Central West, Orana & Tablelands NSW** (`Orange 2800`, `Bathurst 2795`, `Dubbo 2830`, `Parkes 2870`, `Forbes 2871`, `Cowra 2794`, `Mudgee 2850`, `Molong 2866`, `Wellington 2820`, `Nyngan 2825`, `Coonamble 2829`, `condobolin 2877`).Target: `350+` verified listings, `75+` claimed profiles, `25+` active jobs.
+2. **`WAVE-2` (Months 3–4): Riverina, South West Slopes & Southern Tablelands NSW** (`Wagga Wagga 2650`, `Goulburn 2580`, `Young 2594`, `Cootamundra 2590`, `Griffith 2680`, `Leeton 2705`, `Albury 2640`, `Deniliquin 2710`, `Hay 2711`, `Yass 2582`). Target: `450+` verified listings, `100+` claimed profiles, `30+` active jobs.
+3. **`WAVE-3` (Months 5–6): New England, North West Slopes & Hunter Valley NSW** (`Tamworth 2340`, `Armidale 2350`, `Moree 2400`, `Narrabri 2390`, `Gunnedah 2380`, `Inverell 2360`, `Glen Innes 2370`, `Scone 2337`, `Singleton 2330`, `Taree 2430`). Target: `450+` verified listings, `100+` claimed profiles, `30+` active jobs.
+4. **`WAVE-4` (Months 7–12): Regional Victoria (Goulburn Valley, Western District, Mallee & Gippsland)** (`Bendigo 3550`, `Shepparton 3630`, `Ballarat 3350`, `Warrnambool 3280`, `Hamilton 3300`, `Horsham 3400`, `Mildura 3500`, `Wangaratta 3677`, `Sale 3850`, `Bairnsdale 3875`). Target: `1,200+` verified listings, `300+` claimed profiles, `60+` active jobs.
+5. **`WAVE-5` (Year 2): Regional Queensland (Darling Downs, Maranoa, Central & North QLD)** (`Toowoomba 4350`, `Dalby 4405`, `Roma 4455`, `Goondiwindi 4390`, `Warwick 4370`, `Emerald 4720`, `Rockhampton 4700`, `Longreach 4730`, `Charleville 4470`, `Townsville Rural 4814`). Target: `2,000+` verified listings, `500+` claimed profiles, `100+` active jobs.
+6. **`WAVE-6` (Years 3–5): National Expansion — Regional SA, WA Wheatbelt, Tasmania & NT** (`Mt Gambier 5290`, `Naracoorte 5271`, `Port Augusta 5700`, `Northam 6401`, `Narrogin 6312`, `Albany 6330`, `Geraldton 6530`, `Kalgoorlie 6430`, `Launceston Rural 7250`, `Katherine 0850`, `Alice Springs 0870`). Target: `3,500+` verified listings, `1,000+` claimed profiles, `150+` active jobs.
 
-### 1 / 3 / 5 / 10-Year Strategic Direction
-- **1 Year:** Trusted Central West & NSW rural work, services, and freight hub with hundreds of owner-confirmed profiles, live availability badges, active station/farm job board, and steady warm trade referrals to Outback Fencing & Steel Supplies.
-- **3 Years:** Australia's go-to regional contracting, freight backload, and ag-work directory across all states, where every listing has verified provenance, expiry/freshness discipline, and real farmer response tracking.
-- **5 Years:** Integrated rural project & seasonal workforce coordination across Australian farming districts, pairing property maintenance calendars with verified contractors, carriers, and material supply.
-- **10 Years:** Essential national rural infrastructure utility — the default trusted place where Australian landholders, contractors, carriers, and rural workers connect without middleman commissions.
+### 5-Year Tech-Scale Roadmap (Year 1 → Year 5)
+- **Year 1 (`NSW & VIC Regional Dominance`):** `3,500+` verified rural listings · `600+` owner-claimed profiles (`Taking bookings` live badges) · `100+` active rural jobs · `250+` warm fencing/steel quote handoffs to Daryl.
+- **Year 2 (`East Coast Standard — NSW, VIC & QLD`):** `12,000+` verified listings · `2,500+` claimed profiles · `350+` active rural jobs · Automated 30-day availability check-in loop across all claimed contractors.
+- **Year 3 (`National Rural Operating Network — All 6 States + NT`):** `25,000+` verified listings · `7,500+` claimed profiles · `1,000+` active rural jobs · Live regional freight backload board (`Loadshift` alternative for local carriers).
+- **Year 4 (`Repeat Property Maintenance & Seasonal Crew Engine`):** `45,000+` verified listings · `15,000+` claimed profiles · `2,500+` seasonal & permanent rural jobs · Automated seasonal fencing/water/harvest readiness reminders.
+- **Year 5 (`Australia's #1 Rural Infrastructure Utility`):** `75,000+` verified listings · `25,000+` claimed profiles · `10,000+` daily active farmers, contractors, carriers, and workers connecting commission-free, with Outback Fencing & Steel Supplies as the trusted national trade supplier.

@@ -1,8 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requestTimestamp } from "@/lib/request-time";
-import { ALI_DAILY_SCHEDULE, ALI_STARTER_QUEUE } from "@/lib/hub-growth-queue";
+import {
+  ALI_DAILY_SCHEDULE,
+  ALI_HYPERGROWTH_KPI_TARGETS,
+  ALI_STARTER_QUEUE,
+  NATIONAL_CONQUEST_WAVES,
+  evaluateAliPerformanceAndFeedback,
+} from "@/lib/hub-growth-queue";
 import { signOut } from "./actions";
 
 export const metadata = {
@@ -39,6 +46,78 @@ export default async function DashboardPage() {
   const isStaff = isAdmin || !!profile?.is_staff;
   const canAddDirectory = isStaff || !!profile?.directory_contributor;
 
+  // Live telemetry for Ali & Josh right inside /dashboard
+  let liveCoach: ReturnType<typeof evaluateAliPerformanceAndFeedback> | null = null;
+  let listingsAdded24h = 0;
+  let listingsAdded7d = 0;
+  let outreach24h = 0;
+  let outreach7d = 0;
+  let activeJobsCount = 0;
+
+  if (isStaff || canAddDirectory) {
+    const svc = createAdminClient() ?? supabase;
+    const nowDate = new Date(now);
+    const nowIso = nowDate.toISOString();
+    const iso24hAgo = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+    const iso7dAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [listingsRes, outreachRes, enquiriesRes] = await Promise.all([
+      svc
+        .from("listings")
+        .select("id, kind, created_at, category:categories(slug)")
+        .eq("status", "active")
+        .gt("expires_at", nowIso),
+      svc
+        .from("business_outreach_events")
+        .select("id, created_at")
+        .gte("created_at", iso7dAgo),
+      svc
+        .from("listing_enquiries")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "new")
+        .lte("created_at", iso24hAgo),
+    ]);
+
+    const rows = (listingsRes.data ?? []) as unknown as {
+      id: string;
+      kind: string;
+      created_at: string | null;
+      category: { slug: string } | { slug: string }[] | null;
+    }[];
+    const getCatSlug = (r: (typeof rows)[number]) => {
+      if (!r.category) return null;
+      return Array.isArray(r.category) ? r.category[0]?.slug ?? null : r.category.slug;
+    };
+
+    listingsAdded24h = rows.filter((r) => r.created_at && r.created_at >= iso24hAgo).length;
+    const rows7d = rows.filter((r) => r.created_at && r.created_at >= iso7dAgo);
+    listingsAdded7d = rows7d.length;
+    const nonFencing7d = rows7d.filter((r) => getCatSlug(r) !== "fencing-contractor").length;
+    const totalNonFencing = rows.filter(
+      (r) => r.kind === "service_offering" && getCatSlug(r) !== "fencing-contractor"
+    ).length;
+    const totalFreight = rows.filter((r) => r.kind === "freight_offering").length;
+    activeJobsCount = rows.filter((r) => r.kind === "job").length;
+
+    const outreachRows = (outreachRes.data ?? []) as { id: string; created_at: string }[];
+    outreach7d = outreachRows.length;
+    outreach24h = outreachRows.filter((e) => e.created_at && e.created_at >= iso24hAgo).length;
+
+    liveCoach = evaluateAliPerformanceAndFeedback({
+      listingsAddedLast24h: listingsAdded24h,
+      listingsAddedLast7d: listingsAdded7d,
+      nonFencingAddedLast7d: nonFencing7d,
+      outreachEventsLast24h: outreach24h,
+      outreachEventsLast7d: outreach7d,
+      activeJobsCount,
+      unansweredEnquiriesOver24h: enquiriesRes.count ?? 0,
+      pendingClaimsCount: 0,
+      centralWestFencingCount: 0,
+      totalNonFencingServiceCount: totalNonFencing,
+      totalFreightCount: totalFreight,
+    });
+  }
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
       <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
@@ -59,20 +138,33 @@ export default async function DashboardPage() {
         ) : null}
       </p>
 
-      {/* Ali's Embedded Daily Checklist & 5-Day Starter To-Do List right inside his Profile Dashboard */}
+      {/* Ali's Embedded Live Velocity Score, Coaching Feedback & 5-Year Hyper-Growth Engine */}
       {(isStaff || canAddDirectory) && (
         <section className="mt-8 rounded-2xl border-2 border-green-700 bg-green-50/70 p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-green-900">
-                Rural Hub Growth Coordinator (Ali) · Daily To-Do List &amp; 5-Day Starter Plan
+                Rural Hub Growth Coordinator (Ali) · 5-Year Hyper-Growth Operating Console
               </p>
               <h2 className="mt-1 text-xl font-bold text-neutral-900">
-                Your daily checklist &amp; current work queue (`A01`–`A06`)
+                Live velocity scoreboard, daily coach &amp; work queue
               </h2>
               <p className="mt-1 text-sm text-neutral-700">
-                Outback Connections is a <strong>free hub for rural work, jobs, freight, and services</strong>.
-                Follow these 5 daily blocks and work through tasks `A01`–`A06` in order.
+                Daily Hyper-Growth Targets:{" "}
+                <strong>
+                  {ALI_HYPERGROWTH_KPI_TARGETS.dailyNewVerifiedListingsTarget}+ verified rural
+                  listings added/day
+                </strong>{" "}
+                ·{" "}
+                <strong>
+                  {ALI_HYPERGROWTH_KPI_TARGETS.dailyOutreachActionsTarget}+ 1-to-1 claim invites
+                  logged/day
+                </strong>{" "}
+                ·{" "}
+                <strong>
+                  {ALI_HYPERGROWTH_KPI_TARGETS.weeklyNewJobsTarget}+ active rural jobs live
+                </strong>
+                .
               </p>
             </div>
             <div className="flex flex-wrap gap-2 text-xs font-semibold">
@@ -80,7 +172,7 @@ export default async function DashboardPage() {
                 href="/dashboard/admin/hub-queue"
                 className="rounded-lg bg-green-800 px-3.5 py-2 text-white hover:bg-green-900"
               >
-                Open Full Hub Queue &amp; Matrix →
+                Open Full 5-Year Hub Queue &amp; Matrix →
               </Link>
               <Link
                 href="/dashboard/admin/daily-report"
@@ -97,10 +189,52 @@ export default async function DashboardPage() {
             </div>
           </div>
 
+          {/* Live Automated Scoreboard & Coach */}
+          {liveCoach && (
+            <div className="mt-4 rounded-xl border border-green-300 bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span className="rounded bg-green-100 px-2 py-0.5 text-[11px] font-bold uppercase text-green-900">
+                    Live Velocity Score: {liveCoach.velocityScoreOutOf100}/100
+                  </span>
+                  <p className="mt-1 text-sm font-bold text-neutral-900">
+                    {liveCoach.headlineVerdict}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-3 text-xs">
+                  <span className="rounded bg-neutral-100 px-2.5 py-1 font-semibold">
+                    Added (24h/7d): {listingsAdded24h} / {listingsAdded7d} (target{" "}
+                    {ALI_HYPERGROWTH_KPI_TARGETS.dailyNewVerifiedListingsTarget}/d ·{" "}
+                    {ALI_HYPERGROWTH_KPI_TARGETS.weeklyNewVerifiedListingsTarget}/wk)
+                  </span>
+                  <span className="rounded bg-neutral-100 px-2.5 py-1 font-semibold">
+                    Outreach (24h/7d): {outreach24h} / {outreach7d} (target{" "}
+                    {ALI_HYPERGROWTH_KPI_TARGETS.dailyOutreachActionsTarget}/d ·{" "}
+                    {ALI_HYPERGROWTH_KPI_TARGETS.weeklyOutreachActionsTarget}/wk)
+                  </span>
+                  <span className="rounded bg-neutral-100 px-2.5 py-1 font-semibold">
+                    Live Jobs: {activeJobsCount} / {ALI_HYPERGROWTH_KPI_TARGETS.weeklyNewJobsTarget}+
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-3 border-t border-neutral-100 pt-3 text-xs">
+                <p className="font-bold text-green-900">
+                  Automated Daily Coaching Directives (What to execute right now):
+                </p>
+                <ul className="mt-1.5 space-y-1 text-neutral-800">
+                  {liveCoach.nextThreeDirectivesForAli.map((d) => (
+                    <li key={d}>• {d}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
           {/* Daily 5-Block Checklist */}
           <div className="mt-5">
             <h3 className="text-xs font-bold uppercase tracking-wide text-neutral-700">
-              Every Shift: 5-Step Daily Checklist (6-Hour Rhythm)
+              Every Shift: 5-Step Daily Hyper-Growth Rhythm
             </h3>
             <div className="mt-2 grid gap-2.5 sm:grid-cols-5">
               {ALI_DAILY_SCHEDULE.map((block) => (
@@ -122,7 +256,7 @@ export default async function DashboardPage() {
           {/* 5-Day Starter Tasks A01 - A06 */}
           <div className="mt-5">
             <h3 className="text-xs font-bold uppercase tracking-wide text-neutral-700">
-              This Week&apos;s 5-Day Starter Tasks (`A01`–`A06`)
+              Current Sprint Tasks (`A01`–`A06`) + Auto-Refilling Regional Waves (`Wave 1` → `Wave 6`)
             </h3>
             <div className="mt-2 space-y-2.5">
               {ALI_STARTER_QUEUE.map((task) => (
@@ -158,6 +292,13 @@ export default async function DashboardPage() {
                   </Link>
                 </div>
               ))}
+            </div>
+
+            <div className="mt-3 rounded-xl border border-green-200 bg-white p-3 text-xs text-neutral-700">
+              <strong>Continuous 5-Year Pipeline:</strong> As soon as Wave 1 (Central West NSW) hits
+              target density, your queue automatically advances through{" "}
+              {NATIONAL_CONQUEST_WAVES.map((w) => w.waveId).join(" → ")} across NSW, VIC, QLD, SA, WA,
+              TAS &amp; NT toward our Year 5 target of <strong>10,000+ daily active users</strong>.
             </div>
           </div>
         </section>

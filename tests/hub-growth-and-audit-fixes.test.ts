@@ -21,9 +21,13 @@ import {
 import {
   ALI_DAILY_SCHEDULE,
   ALI_FALLBACK_LADDER,
+  ALI_HYPERGROWTH_KPI_TARGETS,
   ALI_STARTER_QUEUE,
   CENTRAL_WEST_TOWNS,
+  FIVE_YEAR_HYPERGROWTH_ROADMAP,
   HUB_SOURCE_REGISTER,
+  NATIONAL_CONQUEST_WAVES,
+  evaluateAliPerformanceAndFeedback,
   evaluateCategoryTownReadiness,
 } from "@/lib/hub-growth-queue";
 import {
@@ -410,5 +414,48 @@ describe("Audit Fixes & Rural Hub Growth Coordinator Operating System", () => {
     expect("email" in importRecords[0]).toBe(false);
     expect(importRecords[0].raw_payload.phone).toBeDefined();
     expect(importRecords[0].raw_payload.email).toBe("dave@dsmorgan.com.au");
+  });
+
+  it("12. powers the 5-Year Hyper-Growth Engine (6 National Conquest Waves + Live Velocity Monitor & Automated Coaching Feedback)", () => {
+    expect(NATIONAL_CONQUEST_WAVES).toHaveLength(6);
+    expect(NATIONAL_CONQUEST_WAVES[0].waveId).toBe("WAVE-1");
+    expect(FIVE_YEAR_HYPERGROWTH_ROADMAP).toHaveLength(5);
+    expect(ALI_HYPERGROWTH_KPI_TARGETS.dailyNewVerifiedListingsTarget).toBe(15);
+    expect(ALI_HYPERGROWTH_KPI_TARGETS.dailyOutreachActionsTarget).toBe(20);
+
+    const lowVelocity = evaluateAliPerformanceAndFeedback({
+      listingsAddedLast24h: 0,
+      listingsAddedLast7d: 2,
+      nonFencingAddedLast7d: 1,
+      outreachEventsLast24h: 0,
+      outreachEventsLast7d: 1,
+      activeJobsCount: 4,
+      unansweredEnquiriesOver24h: 0,
+      pendingClaimsCount: 1,
+      centralWestFencingCount: 45,
+      totalNonFencingServiceCount: 80,
+      totalFreightCount: 13,
+    });
+    expect(lowVelocity.overallPaceStatus).toBe("NEEDS_DAILY_ACCELERATION");
+    expect(lowVelocity.velocityScoreOutOf100).toBeLessThan(35);
+    expect(lowVelocity.nextThreeDirectivesForAli).toHaveLength(3);
+    expect(lowVelocity.copyPasteFeedbackForJoshToSendAli).toContain("G'day Ali");
+    expect(lowVelocity.copyPasteFeedbackForJoshToSendAli).toContain("/dashboard/directory/add");
+
+    const highVelocity = evaluateAliPerformanceAndFeedback({
+      listingsAddedLast24h: 16,
+      listingsAddedLast7d: 80,
+      nonFencingAddedLast7d: 60,
+      outreachEventsLast24h: 22,
+      outreachEventsLast7d: 110,
+      activeJobsCount: 18,
+      unansweredEnquiriesOver24h: 0,
+      pendingClaimsCount: 0,
+      centralWestFencingCount: 65,
+      totalNonFencingServiceCount: 140,
+      totalFreightCount: 25,
+    });
+    expect(highVelocity.overallPaceStatus).toBe("HYPERGROWTH_ON_TRACK");
+    expect(highVelocity.velocityScoreOutOf100).toBeGreaterThanOrEqual(80);
   });
 });

@@ -1,8 +1,10 @@
 // app/dashboard/admin/hub-queue/page.tsx
-// Ali's primary starting screen: Rural Hub Growth Coordinator Operating Queue.
-// Combines the 5-day starter backlog (A01–A06), 6-hour daily operating rhythm,
-// live Central West & category coverage counts, approved source register,
-// promotion readiness pack, and centralised Outback Fencing product + Daryl handoff reference.
+// Ali's primary starting screen & Josh's Live Monitoring / Coaching Console:
+// - Real-time 24h & 7d velocity telemetry (listings added, outreach logged, jobs live, SLA)
+// - Automated Daily Coach & Copy-Paste Feedback Generator for Josh
+// - 5-Day Starter Backlog (A01–A06) + Auto-Refilling National Conquest Waves (Waves 1–6)
+// - 5-Year Hyper-Growth Master Plan (Years 1–5)
+// - Central West Coverage Matrix, Approved Source Register, Promotion Pack & Daryl Handoff Reference
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -11,11 +13,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   ALI_DAILY_SCHEDULE,
   ALI_FALLBACK_LADDER,
+  ALI_HYPERGROWTH_KPI_TARGETS,
   ALI_STARTER_QUEUE,
   CENTRAL_WEST_PROMOTION_PACK,
   CENTRAL_WEST_TOWNS,
+  FIVE_YEAR_HYPERGROWTH_ROADMAP,
   HUB_SOURCE_REGISTER,
+  NATIONAL_CONQUEST_WAVES,
   PRIORITY_HUB_CATEGORIES,
+  evaluateAliPerformanceAndFeedback,
   evaluateCategoryTownReadiness,
 } from "@/lib/hub-growth-queue";
 import {
@@ -27,7 +33,7 @@ import {
 } from "@/lib/outback-products";
 
 export const metadata = {
-  title: "Hub growth queue (Ali) — Admin — Outback Connections",
+  title: "Hub growth queue & 5-year hyper-growth engine (Ali) — Admin — Outback Connections",
   robots: { index: false, follow: false },
 };
 
@@ -47,27 +53,46 @@ export default async function HubGrowthQueuePage() {
   if (!profile?.is_admin && !profile?.is_staff) redirect("/dashboard");
   const isAdmin = !!profile?.is_admin;
 
-  // Fetch live hub snapshot counts with explicit error capture (never hide query failures as 0)
+  // Fetch live hub snapshot + 24h/7d velocity telemetry with explicit error capture
   const svc = createAdminClient() ?? supabase;
-  const nowIso = new Date().toISOString();
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const iso24hAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const iso7dAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const queryErrors: string[] = [];
 
-  const { data: activeListings, error: listingsErr } = await svc
-    .from("listings")
-    .select("id, kind, postcode, state, source_url, category:categories(slug, label)")
-    .eq("status", "active")
-    .gt("expires_at", nowIso);
+  const [listingsRes, outreach7dRes, enquiriesRes, claimsRes] = await Promise.all([
+    svc
+      .from("listings")
+      .select("id, kind, postcode, state, source_url, created_at, category:categories(slug, label)")
+      .eq("status", "active")
+      .gt("expires_at", nowIso),
+    svc
+      .from("business_outreach_events")
+      .select("id, action, created_at")
+      .gte("created_at", iso7dAgo),
+    svc
+      .from("listing_enquiries")
+      .select("id, status, created_at")
+      .eq("status", "new")
+      .lte("created_at", iso24hAgo),
+    svc
+      .from("business_claims")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
+  ]);
 
-  if (listingsErr) {
-    queryErrors.push(`active_listings: ${listingsErr.message}`);
-  }
+  if (listingsRes.error) queryErrors.push(`active_listings: ${listingsRes.error.message}`);
+  if (outreach7dRes.error) queryErrors.push(`outreach_events: ${outreach7dRes.error.message}`);
+  if (enquiriesRes.error) queryErrors.push(`listing_enquiries: ${enquiriesRes.error.message}`);
 
-  const rows = (activeListings ?? []) as unknown as {
+  const rows = (listingsRes.data ?? []) as unknown as {
     id: string;
     kind: string;
     postcode: string | null;
     state: string | null;
     source_url: string | null;
+    created_at: string | null;
     category: { slug: string; label: string } | { slug: string; label: string }[] | null;
   }[];
 
@@ -83,6 +108,24 @@ export default async function HubGrowthQueuePage() {
   const freightCount = rows.filter((r) => r.kind === "freight_offering").length;
   const jobCount = rows.filter((r) => r.kind === "job").length;
 
+  const listingsAddedLast24h = rows.filter(
+    (r) => r.created_at && r.created_at >= iso24hAgo
+  ).length;
+  const listingsAdded7dRows = rows.filter((r) => r.created_at && r.created_at >= iso7dAgo);
+  const listingsAddedLast7d = listingsAdded7dRows.length;
+  const nonFencingAddedLast7d = listingsAdded7dRows.filter(
+    (r) => getCatSlug(r) !== "fencing-contractor"
+  ).length;
+
+  const outreachEvents7d = (outreach7dRes.data ?? []) as { id: string; created_at: string }[];
+  const outreachEventsLast7d = outreachEvents7d.length;
+  const outreachEventsLast24h = outreachEvents7d.filter(
+    (e) => e.created_at && e.created_at >= iso24hAgo
+  ).length;
+
+  const unansweredEnquiriesOver24h = (enquiriesRes.data ?? []).length;
+  const pendingClaimsCount = claimsRes.count ?? 0;
+
   const centralWestPostcodes = new Set(CENTRAL_WEST_TOWNS.map((t) => t.postcode));
   const centralWestFencingRows = rows.filter(
     (r) =>
@@ -90,6 +133,20 @@ export default async function HubGrowthQueuePage() {
       r.postcode &&
       centralWestPostcodes.has(r.postcode.trim())
   );
+
+  const coachingReport = evaluateAliPerformanceAndFeedback({
+    listingsAddedLast24h,
+    listingsAddedLast7d,
+    nonFencingAddedLast7d,
+    outreachEventsLast24h,
+    outreachEventsLast7d,
+    activeJobsCount: jobCount,
+    unansweredEnquiriesOver24h,
+    pendingClaimsCount,
+    centralWestFencingCount: centralWestFencingRows.length,
+    totalNonFencingServiceCount: nonFencingServiceCount,
+    totalFreightCount: freightCount,
+  });
 
   const centralWestReadiness = evaluateCategoryTownReadiness({
     categorySlug: "fencing-contractor",
@@ -107,17 +164,17 @@ export default async function HubGrowthQueuePage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-green-800">
-            Rural Hub Growth Coordinator · Daily Operating System
+            Rural Hub Growth Coordinator · 5-Year Hyper-Growth Operating Engine
           </p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-neutral-900">
-            Hub growth queue &amp; 5-day starter plan
+            Hub growth queue, live velocity monitor &amp; 5-year roadmap
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-neutral-700">
-            Outback Connections is a <strong>free hub for rural work, jobs, freight, and services</strong>.
-            Your primary mission is to keep enquiries moving, build genuine local coverage across all 24
-            service categories, 8 freight categories, and rural employment, and help businesses claim their
-            free profiles. Outback Fencing &amp; Steel Supplies products sit in a clear, disclosed supporting
-            role alongside the hub.
+            Outback Connections is being built like a high-velocity rural marketplace utility: conquer
+            Australia corridor by corridor across all <strong>24 service categories</strong>,{" "}
+            <strong>8 freight categories</strong>, and the <strong>Work &amp; Skills Board</strong>,
+            convert unclaimed listings into owner-confirmed profiles with live availability, and route
+            warm fencing material enquiries straight to Daryl.
           </p>
         </div>
 
@@ -157,97 +214,152 @@ export default async function HubGrowthQueuePage() {
         </div>
       )}
 
-      {/* Live Hub Coverage Snapshot */}
-      <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <div className="rounded-xl border border-neutral-200 bg-white p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-            Total Active Hub Listings
-          </p>
-          <p className="mt-1 text-2xl font-bold text-neutral-900">{rows.length}</p>
-          <p className="mt-1 text-xs text-neutral-600">Across all rural pillars</p>
+      {/* LIVE AUTOMATED VELOCITY MONITOR & DAILY COACH FOR ALI + JOSH */}
+      <section className="mt-8 rounded-2xl border-2 border-green-800 bg-gradient-to-br from-green-50 via-white to-amber-50/40 p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <span
+              className={`inline-block rounded-full px-3 py-1 text-xs font-bold uppercase ${
+                coachingReport.overallPaceStatus === "HYPERGROWTH_ON_TRACK"
+                  ? "bg-green-800 text-white"
+                  : coachingReport.overallPaceStatus === "SLA_URGENT_FIRST"
+                    ? "bg-red-700 text-white"
+                    : "bg-amber-500 text-neutral-950"
+              }`}
+            >
+              Live Automated Monitor · {coachingReport.overallPaceStatus.replace(/_/g, " ")}
+            </span>
+            <h2 className="mt-2 text-xl font-bold text-neutral-900">
+              {coachingReport.headlineVerdict}
+            </h2>
+          </div>
+          <div className="rounded-xl border border-green-300 bg-white px-4 py-3 text-center">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-neutral-500">
+              Weekly Velocity Score
+            </p>
+            <p className="text-3xl font-extrabold text-green-800">
+              {coachingReport.velocityScoreOutOf100}
+              <span className="text-base font-normal text-neutral-500"> / 100</span>
+            </p>
+          </div>
         </div>
-        <div className="rounded-xl border border-neutral-200 bg-white p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-            Fencing Contractors
-          </p>
-          <p className="mt-1 text-2xl font-bold text-green-800">{fencingCount}</p>
-          <p className="mt-1 text-xs text-neutral-600">
-            {centralWestFencingRows.length} in Central West NSW spotlights
-          </p>
-        </div>
-        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-900">
-            Other Rural Services (23 cats)
-          </p>
-          <p className="mt-1 text-2xl font-bold text-amber-950">{nonFencingServiceCount}</p>
-          <p className="mt-1 text-xs text-amber-900">Priority growth focus (A03)</p>
-        </div>
-        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-900">
-            Rural Freight &amp; Carriers
-          </p>
-          <p className="mt-1 text-2xl font-bold text-amber-950">{freightCount}</p>
-          <p className="mt-1 text-xs text-amber-900">Target: 25+ verified carriers</p>
-        </div>
-        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-900">
-            Work &amp; Skills Jobs
-          </p>
-          <p className="mt-1 text-2xl font-bold text-amber-950">{jobCount}</p>
-          <p className="mt-1 text-xs text-amber-900">Target: 15–20 live roles (A04)</p>
-        </div>
-      </section>
 
-      {/* Role & Permissions Notice */}
-      <section className="mt-6 rounded-xl border border-green-200 bg-green-50/70 p-4 text-xs text-neutral-800">
-        <p className="font-semibold text-green-950">
-          Three Independent Decisions for Every Candidate Business:
-        </p>
-        <div className="mt-2 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-lg bg-white p-3 border border-green-200">
-            <strong className="text-neutral-900">1. Does it belong in the free hub?</strong>
-            <p className="mt-1 text-neutral-700">
-              Genuine rural service, carrier, employer, or worker serving regional postcodes. A bore driller,
-              mobile diesel mechanic, shearer, or rural plumber is a <strong>high-priority YES</strong> even
-              though they never buy fencing gear.
+        {/* Live 24h & 7d KPI Counters */}
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-neutral-200 bg-white p-3.5">
+            <p className="text-xs font-semibold text-neutral-500">New Listings Added (24h / 7d)</p>
+            <p className="mt-1 text-xl font-bold text-neutral-900">
+              {listingsAddedLast24h} today{" "}
+              <span className="text-xs font-normal text-neutral-500">
+                (target {ALI_HYPERGROWTH_KPI_TARGETS.dailyNewVerifiedListingsTarget}/day)
+              </span>
+            </p>
+            <p className="mt-0.5 text-xs text-neutral-600">
+              7-day total: <strong>{listingsAddedLast7d}</strong> /{" "}
+              {ALI_HYPERGROWTH_KPI_TARGETS.weeklyNewVerifiedListingsTarget} target
             </p>
           </div>
-          <div className="rounded-lg bg-white p-3 border border-green-200">
-            <strong className="text-neutral-900">2. Is evidence sufficient to publish?</strong>
-            <p className="mt-1 text-neutral-700">
-              Requires a verified official website or approved directory source, rural base or verified rural
-              service area, and private contact stored in internal fields only (never leaked on unclaimed pages).
+
+          <div className="rounded-xl border border-neutral-200 bg-white p-3.5">
+            <p className="text-xs font-semibold text-neutral-500">
+              1-to-1 Outreach Logged (24h / 7d)
+            </p>
+            <p className="mt-1 text-xl font-bold text-neutral-900">
+              {outreachEventsLast24h} today{" "}
+              <span className="text-xs font-normal text-neutral-500">
+                (target {ALI_HYPERGROWTH_KPI_TARGETS.dailyOutreachActionsTarget}/day)
+              </span>
+            </p>
+            <p className="mt-0.5 text-xs text-neutral-600">
+              7-day total: <strong>{outreachEventsLast7d}</strong> /{" "}
+              {ALI_HYPERGROWTH_KPI_TARGETS.weeklyOutreachActionsTarget} target
             </p>
           </div>
-          <div className="rounded-lg bg-white p-3 border border-green-200">
-            <strong className="text-neutral-900">3. Is there a supporting product opportunity?</strong>
-            <p className="mt-1 text-neutral-700">
-              Keep first-touch claim invites 100% focused on the free hub profile. Only share Outback Fencing
-              links or click <strong>Hand Product Enquiry to Daryl</strong> when a fencing business or farmer
-              asks for materials or quotes.
+
+          <div className="rounded-xl border border-neutral-200 bg-white p-3.5">
+            <p className="text-xs font-semibold text-neutral-500">
+              Non-Fencing Services &amp; Freight
+            </p>
+            <p className="mt-1 text-xl font-bold text-green-800">
+              {nonFencingServiceCount} services · {freightCount} freight
+            </p>
+            <p className="mt-0.5 text-xs text-neutral-600">
+              New non-fencing (7d): <strong>{nonFencingAddedLast7d}</strong> (target &ge;70% share)
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-neutral-200 bg-white p-3.5">
+            <p className="text-xs font-semibold text-neutral-500">
+              Active Jobs &amp; Inbox SLA (&gt;24h)
+            </p>
+            <p className="mt-1 text-xl font-bold text-neutral-900">
+              {jobCount} live jobs{" "}
+              <span className="text-xs font-normal text-neutral-500">
+                (target {ALI_HYPERGROWTH_KPI_TARGETS.weeklyNewJobsTarget}+)
+              </span>
+            </p>
+            <p className="mt-0.5 text-xs text-neutral-600">
+              Overdue enquiries (&gt;24h):{" "}
+              <strong
+                className={
+                  unansweredEnquiriesOver24h > 0 ? "text-red-700" : "text-green-800"
+                }
+              >
+                {unansweredEnquiriesOver24h}
+              </strong>
             </p>
           </div>
         </div>
-        <p className="mt-2 text-neutral-600">
-          <strong>Access boundary:</strong> Staff accounts ({isAdmin ? "you are signed in as Admin" : "Staff mode"}) can
-          access Hub Queue, Daily Report, Contractor Outreach, Enquiries, Add Directory Entry, Import, Analytics,
-          and Demand. <strong>Claims approval (`/dashboard/admin/claims`), Flags, and Moderation require Josh (Admin).</strong>
-        </p>
+
+        {/* Automated Coaching Directives + Copy-Paste Feedback for Josh */}
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div className="rounded-xl border border-green-200 bg-white p-4 text-xs">
+            <p className="font-bold uppercase tracking-wide text-green-900">
+              Automated Coach: Today&apos;s Top 3 Directives for Ali
+            </p>
+            <ul className="mt-2 space-y-2 text-neutral-800">
+              {coachingReport.nextThreeDirectivesForAli.map((d) => (
+                <li key={d} className="rounded-lg bg-green-50/70 p-2.5 font-medium">
+                  {d}
+                </li>
+              ))}
+            </ul>
+            {coachingReport.gapsToFixToday.length > 0 && (
+              <div className="mt-3 border-t border-neutral-200 pt-2 text-amber-950">
+                <strong>Gaps detected by live DB check:</strong>
+                <ul className="mt-1 list-disc pl-5">
+                  {coachingReport.gapsToFixToday.map((g) => (
+                    <li key={g}>{g}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-neutral-200 bg-white p-4 text-xs">
+            <p className="font-bold uppercase tracking-wide text-neutral-700">
+              Josh&apos;s 5-Second Copy-Paste Feedback Message to Ali (Auto-Generated from Live DB)
+            </p>
+            <pre className="mt-2 whitespace-pre-wrap rounded-lg border border-neutral-200 bg-neutral-50 p-3 font-sans text-xs text-neutral-800">
+              {coachingReport.copyPasteFeedbackForJoshToSendAli}
+            </pre>
+          </div>
+        </div>
       </section>
 
       {/* Section 1: 5-Day Starter Queue (A01 - A06) */}
       <section className="mt-10">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-xl font-bold text-neutral-900">
-            1. Five-day starter work queue (`A01`–`A06`)
+            1. Immediate five-day sprint queue (`A01`–`A06`)
           </h2>
           <span className="text-xs text-neutral-500">
             Task states: Ready · In progress · Needs review · Blocked · Completed
           </span>
         </div>
         <p className="mt-1 text-sm text-neutral-600">
-          Work these six structured tasks in order across Days 1–5. If any task is waiting on a reply or
-          admin review, use its fallback rule immediately so your shift never stalls.
+          Work these six structured tasks in order across Days 1–5. As soon as Wave 1 (Central West)
+          reaches 3+ verified options per cell, immediately roll into Wave 2 (Riverina) below.
         </p>
 
         <div className="mt-4 space-y-4">
@@ -304,14 +416,90 @@ export default async function HubGrowthQueuePage() {
         </div>
       </section>
 
-      {/* Section 2: 6-Hour Productive Day Rhythm & Fallback Ladder */}
+      {/* Section 2: Auto-Refilling National Conquest Waves (Waves 1-6) & 5-Year Hyper-Growth Plan */}
+      <section className="mt-10">
+        <h2 className="text-xl font-bold text-neutral-900">
+          2. Auto-refilling national regional conquest waves (`Wave 1` → `Wave 6`)
+        </h2>
+        <p className="mt-1 text-sm text-neutral-600">
+          You never run out of work. The moment a spotlight town hits &ge;3 verified options across core
+          categories, advance immediately to the next town and the next Regional Conquest Wave.
+        </p>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {NATIONAL_CONQUEST_WAVES.map((w, idx) => (
+            <div
+              key={w.waveId}
+              className={`rounded-xl border p-4 text-xs ${
+                idx === 0
+                  ? "border-2 border-green-700 bg-green-50/50"
+                  : "border-neutral-200 bg-white"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="rounded bg-green-800 px-2 py-0.5 font-bold text-white">
+                  {w.waveId} · {w.stateScope}
+                </span>
+                <span className="font-semibold text-neutral-600">{w.timeframe}</span>
+              </div>
+              <h3 className="mt-2 text-sm font-bold text-neutral-900">{w.waveTitle}</h3>
+              <p className="mt-1 text-neutral-700">
+                <strong>Towns:</strong> {w.targetTowns.join(", ")}
+              </p>
+              <p className="mt-2 font-semibold text-green-900">
+                Targets: +{w.targetNewVerifiedListings} verified listings · {w.targetClaimedProfiles}+
+                claimed · {w.targetActiveJobs}+ jobs
+              </p>
+              <p className="mt-1 text-[11px] text-neutral-500">{w.unlockCriteria}</p>
+            </div>
+          ))}
+        </div>
+
+        <h3 className="mt-8 text-lg font-bold text-neutral-900">
+          5-Year Hyper-Growth Master Plan (`Year 1` → `Year 5`: 10,000+ Daily Users)
+        </h3>
+        <div className="mt-3 overflow-x-auto rounded-xl border border-neutral-200 bg-white">
+          <table className="w-full text-left text-xs">
+            <thead className="border-b border-neutral-200 bg-neutral-50 text-neutral-600">
+              <tr>
+                <th className="px-3 py-2.5">Horizon</th>
+                <th className="px-3 py-2.5">North Star Target</th>
+                <th className="px-3 py-2.5">Verified Listings</th>
+                <th className="px-3 py-2.5">Claimed Profiles</th>
+                <th className="px-3 py-2.5">Jobs &amp; Workers</th>
+                <th className="px-3 py-2.5">Ali&apos;s Core Mission</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-200">
+              {FIVE_YEAR_HYPERGROWTH_ROADMAP.map((stage) => (
+                <tr key={stage.year}>
+                  <td className="px-3 py-2.5 font-bold text-green-900">
+                    {stage.year}
+                    <div className="font-normal text-neutral-600">{stage.headline}</div>
+                  </td>
+                  <td className="px-3 py-2.5 font-semibold text-neutral-900">
+                    {stage.northStarMetric}
+                  </td>
+                  <td className="px-3 py-2.5">{stage.verifiedActiveListingsTarget}</td>
+                  <td className="px-3 py-2.5">{stage.claimedProfilesTarget}</td>
+                  <td className="px-3 py-2.5">{stage.activeJobsAndWorkersTarget}</td>
+                  <td className="px-3 py-2.5 text-neutral-700">{stage.aliOperatingFocus}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Section 3: 6-Hour Productive Day Rhythm & Fallback Ladder */}
       <section className="mt-10 grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <h2 className="text-xl font-bold text-neutral-900">
-            2. Daily 6-hour operating rhythm
+            3. Daily 6-hour hyper-growth rhythm
           </h2>
           <p className="mt-1 text-sm text-neutral-600">
-            Follow these 5 time-boxed blocks every shift. Never spend all day on cold outreach alone.
+            Follow these 5 time-boxed blocks every shift to hit 15–25 verified additions and 20–30
+            outreach actions per day.
           </p>
           <div className="mt-4 space-y-3">
             {ALI_DAILY_SCHEDULE.map((b) => (
@@ -363,17 +551,11 @@ export default async function HubGrowthQueuePage() {
         </div>
       </section>
 
-      {/* Section 3: Central West Town Coverage & Priority Categories */}
+      {/* Section 4: Central West Town Coverage & Priority Categories */}
       <section className="mt-10">
         <h2 className="text-xl font-bold text-neutral-900">
-          3. Central West NSW town targets &amp; category growth matrix
+          4. Wave 1 Central West NSW town targets &amp; category growth matrix
         </h2>
-        <p className="mt-1 text-sm text-neutral-600">
-          Build deep, trustworthy local utility in our home region first before expanding outward.
-          A category + town page is ready to promote externally once it has at least{" "}
-          <strong>3 verified current options</strong>.
-        </p>
-
         <div className="mt-4 overflow-x-auto rounded-xl border border-neutral-200 bg-white">
           <table className="w-full text-left text-xs">
             <thead className="border-b border-neutral-200 bg-neutral-50 text-neutral-600">
@@ -418,6 +600,7 @@ export default async function HubGrowthQueuePage() {
                 <th className="px-3 py-2.5">Category / Pillar</th>
                 <th className="px-3 py-2.5">20 Oct Baseline</th>
                 <th className="px-3 py-2.5">30-Day Target</th>
+                <th className="px-3 py-2.5">Year 1 Target</th>
                 <th className="px-3 py-2.5">Rural Utility</th>
                 <th className="px-3 py-2.5">Outback Product Relationship</th>
               </tr>
@@ -435,6 +618,9 @@ export default async function HubGrowthQueuePage() {
                   <td className="px-3 py-2 font-mono font-bold text-green-800">
                     {c.thirtyDayTargetCount}
                   </td>
+                  <td className="px-3 py-2 font-mono font-bold text-green-950">
+                    {c.yearOneTargetCount}
+                  </td>
                   <td className="px-3 py-2 text-neutral-700">{c.whyFarmersAndWorkersNeedIt}</td>
                   <td className="px-3 py-2 text-neutral-600">{c.productRelationshipNote}</td>
                 </tr>
@@ -444,16 +630,11 @@ export default async function HubGrowthQueuePage() {
         </div>
       </section>
 
-      {/* Section 4: Approved Source Register */}
+      {/* Section 5: Approved Source Register */}
       <section className="mt-10">
         <h2 className="text-xl font-bold text-neutral-900">
-          4. Approved source register &amp; scraping guardrails
+          5. Approved source register &amp; scraping guardrails
         </h2>
-        <p className="mt-1 text-sm text-neutral-600">
-          Only use approved sources and methods. Never scrape Google Maps, Seek/Indeed/Jora, or bulk
-          Yellow Pages listings, and never invent synthetic Google Search URLs.
-        </p>
-
         <div className="mt-4 overflow-x-auto rounded-xl border border-neutral-200 bg-white">
           <table className="w-full text-left text-xs">
             <thead className="border-b border-neutral-200 bg-neutral-50 text-neutral-600">
@@ -497,11 +678,11 @@ export default async function HubGrowthQueuePage() {
         </div>
       </section>
 
-      {/* Section 5: Central West Promotion Pack */}
+      {/* Section 6: Central West Promotion Pack */}
       <section className="mt-10 rounded-xl border border-neutral-200 bg-white p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-xl font-bold text-neutral-900">
-            5. Regional promotion pack: {CENTRAL_WEST_PROMOTION_PACK.title}
+            6. Regional promotion pack: {CENTRAL_WEST_PROMOTION_PACK.title}
           </h2>
           <span
             className={`rounded-full px-3 py-1 text-xs font-bold ${
@@ -518,17 +699,6 @@ export default async function HubGrowthQueuePage() {
         <p className="mt-1 text-xs text-neutral-600">
           Target towns: {CENTRAL_WEST_PROMOTION_PACK.targetRegion}
         </p>
-
-        {centralWestReadiness.blockingGaps.length > 0 && (
-          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
-            <strong>Complete before external group posting:</strong>
-            <ul className="mt-1 list-disc pl-5">
-              {centralWestReadiness.blockingGaps.map((g) => (
-                <li key={g}>{g}</li>
-              ))}
-            </ul>
-          </div>
-        )}
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <div>
@@ -550,11 +720,11 @@ export default async function HubGrowthQueuePage() {
         </div>
       </section>
 
-      {/* Section 6: Centralised Outback Fencing Product Reference & Daryl Handoff */}
+      {/* Section 7: Centralised Outback Fencing Product Reference & Daryl Handoff */}
       <section className="mt-10 rounded-xl border border-green-200 bg-green-50/40 p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-xl font-bold text-neutral-900">
-            6. Outback Fencing &amp; Steel Supplies reference &amp; Daryl handoff rules
+            7. Outback Fencing &amp; Steel Supplies reference &amp; Daryl handoff rules
           </h2>
           <span className="text-xs text-neutral-500">
             Centralised in <code>lib/outback-products.ts</code> · Last checked:{" "}
