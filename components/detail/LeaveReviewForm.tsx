@@ -18,6 +18,7 @@ type Props = {
 };
 
 const initial: ReviewActionState = {};
+const COMPLETED_DEAL_TYPES = DEAL_TYPES.filter((d) => d.slug !== "general");
 
 export default function LeaveReviewForm({
   signedIn,
@@ -26,7 +27,7 @@ export default function LeaveReviewForm({
   targetUserId,
   targetBusinessId,
   vendorLabel,
-  defaultDealType = "general",
+  defaultDealType = "fencing_service",
   defaultReviewerName,
   defaultReviewerPostcode,
 }: Props) {
@@ -35,12 +36,19 @@ export default function LeaveReviewForm({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
 
+  const initialDealType =
+    defaultDealType && defaultDealType !== "general"
+      ? defaultDealType
+      : "fencing_service";
+
   if (state.ok) {
     return (
       <div className="mt-4 rounded-xl border border-green-300 bg-green-50 p-4 text-sm text-green-950">
-        <p className="font-semibold">Thanks — your feedback &amp; vouch has been published.</p>
+        <p className="font-semibold">
+          Thanks — your completed-work review has been published.
+        </p>
         <p className="mt-1 text-xs text-green-900">
-          Real feedback from farmers, contractors, and operators helps the whole rural community know who turns up and does the right thing.
+          Specific feedback from real dealings helps farmers, contractors, and workers across the bush know who turns up and does the job properly.
         </p>
       </div>
     );
@@ -52,17 +60,17 @@ export default function LeaveReviewForm({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="font-semibold text-neutral-900">
-              Dealt with {vendorLabel}? Leave feedback or vouch for them
+              Had work completed or dealt with {vendorLabel}? Write a review
             </p>
             <p className="mt-0.5 text-xs text-neutral-600">
-              Sign in so every review comes from a verified account.
+              Sign in so every review comes from a traceable account after a real dealing.
             </p>
           </div>
           <Link
             href={`/signin?next=${encodeURIComponent(signInRedirect)}`}
             className="rounded-lg bg-green-700 px-3.5 py-2 text-xs font-semibold text-white hover:bg-green-800"
           >
-            Sign in to leave a review
+            Sign in to write a review
           </Link>
         </div>
       </div>
@@ -80,10 +88,10 @@ export default function LeaveReviewForm({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold text-neutral-900">
-            Leave feedback or vouch for {vendorLabel}
+            Write a completed-work review for {vendorLabel}
           </h3>
           <p className="text-xs text-neutral-600">
-            Bought stock/hay, hired them, worked for them, or used their gear? Share how it went.
+            For real dealings where fencing, contracting, farm work, freight, or stock/hay sales were completed. (For a neighbour recommendation without a full review, use the quick vouch buttons above.)
           </p>
         </div>
         {!open && (
@@ -92,7 +100,7 @@ export default function LeaveReviewForm({
             onClick={() => setOpen(true)}
             className="rounded-lg bg-green-700 px-3.5 py-2 text-xs font-semibold text-white hover:bg-green-800"
           >
-            + Write a review / vouch
+            + Write completed-work review
           </button>
         )}
       </div>
@@ -114,7 +122,7 @@ export default function LeaveReviewForm({
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wide text-neutral-700">
-                Overall rating
+                Overall rating (completed work)
               </label>
               <div className="mt-1.5 flex items-center gap-1.5">
                 {[1, 2, 3, 4, 5].map((star) => (
@@ -140,7 +148,7 @@ export default function LeaveReviewForm({
                 htmlFor="would_recommend"
                 className="block text-xs font-semibold uppercase tracking-wide text-neutral-700"
               >
-                Would you deal with them again?
+                Would you hire / deal with them again?
               </label>
               <select
                 id="would_recommend"
@@ -159,25 +167,28 @@ export default function LeaveReviewForm({
               htmlFor="deal_type"
               className="block text-xs font-semibold uppercase tracking-wide text-neutral-700"
             >
-              How did you deal with them?
+              What work or dealing was completed?
             </label>
             <select
               id="deal_type"
               name="deal_type"
-              defaultValue={defaultDealType}
+              defaultValue={initialDealType}
               className="mt-1.5 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900"
             >
-              {DEAL_TYPES.map((d) => (
+              {COMPLETED_DEAL_TYPES.map((d) => (
                 <option key={d.slug} value={d.slug}>
                   {d.label}
                 </option>
               ))}
             </select>
+            {state.fieldErrors?.deal_type && (
+              <p className="mt-1 text-xs text-red-700">{state.fieldErrors.deal_type}</p>
+            )}
           </div>
 
           <div>
             <span className="block text-xs font-semibold uppercase tracking-wide text-neutral-700">
-              Quick trust tags (click any that apply)
+              Specific qualities observed (optional tags)
             </span>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {TRUST_TAGS.map((t) => {
@@ -209,14 +220,16 @@ export default function LeaveReviewForm({
               htmlFor="review-comment"
               className="block text-xs font-semibold uppercase tracking-wide text-neutral-700"
             >
-              Written feedback (optional if tags selected, max 800 chars)
+              What work was done &amp; how did it go? (Required, 15–800 chars)
             </label>
             <textarea
               id="review-comment"
               name="comment"
               rows={3}
+              required
+              minLength={15}
               maxLength={800}
-              placeholder="e.g. Bought 2 decks of lucerne hay off Dave — accurate weights, dry shedded bales, helped load the B-double on time."
+              placeholder="e.g. Put up 2.4km of 8/90/30 hinge joint and strainer assemblies near Molong. Turned up when he said he would and left gates swinging properly."
               className="mt-1.5 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900"
             />
             {state.fieldErrors?.comment && (
@@ -274,6 +287,38 @@ export default function LeaveReviewForm({
             </div>
           </div>
 
+          <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-700 space-y-2">
+            <label className="flex items-start gap-2 font-medium text-neutral-900 cursor-pointer">
+              <input
+                type="checkbox"
+                name="confirmed_genuine_dealing"
+                value="yes"
+                required
+                className="mt-0.5 rounded border-neutral-300 text-green-700 focus:ring-green-600"
+              />
+              <span>
+                I confirm this review is based on a genuine dealing with {vendorLabel} and I have no undisclosed commercial or family conflict.
+              </span>
+            </label>
+            {state.fieldErrors?.confirmed_genuine_dealing && (
+              <p className="text-xs text-red-700">
+                {state.fieldErrors.confirmed_genuine_dealing}
+              </p>
+            )}
+            <p className="text-[11px] text-neutral-600">
+              <strong>Review &amp; reply policy:</strong> We publish both positive and critical reviews from real dealings in line with{" "}
+              <a
+                href="https://www.accc.gov.au/consumers/advertising-and-promotions/online-reviews-for-product-and-services"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-green-800"
+              >
+                ACCC online review guidance
+              </a>
+              . The business owner can post a public reply. Fake, incentivised, or defamatory reviews are removed.
+            </p>
+          </div>
+
           <div className="flex items-center justify-end gap-2 pt-1">
             <button
               type="button"
@@ -287,7 +332,7 @@ export default function LeaveReviewForm({
               disabled={pending}
               className="rounded-lg bg-green-700 px-4 py-2 text-xs font-semibold text-white hover:bg-green-800 disabled:opacity-50"
             >
-              {pending ? "Publishing..." : "Publish review"}
+              {pending ? "Publishing..." : "Publish completed-work review"}
             </button>
           </div>
         </form>
@@ -295,3 +340,4 @@ export default function LeaveReviewForm({
     </div>
   );
 }
+

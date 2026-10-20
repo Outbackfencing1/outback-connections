@@ -1,7 +1,8 @@
 // components/detail/VendorTrustSection.tsx — Server component that renders the
 // Professional Vendor / Contractor / Customer Trust Profile, 1-click direct
-// contact bar, verification badges, two-sided vouches (Vendor & Customer/Employer),
-// and organic referral share links on any listing detail page or profile page.
+// contact bar, 4-tier specific verification checks (Scamwatch aligned),
+// believable availability with freshness dates, practical contractor gear/travel
+// details, and separated Completed-Work Reviews vs Neighbour Vouches.
 
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
@@ -10,18 +11,26 @@ import { responseLine } from "@/lib/enquiry-outcome";
 import {
   CUSTOMER_QUICK_VOUCH_TAGS,
   VENDOR_QUICK_VOUCH_TAGS,
-  availabilityStatusInfo,
+  buildSpecificTrustChecks,
+  contractorEquipmentLabel,
   dealTypeLabel,
   formatAbn,
+  formatBelievableAvailability,
   formatPhoneHref,
   insuranceBadgeLabel,
   isAustralianMobile,
   isCustomerTrustTag,
+  partitionReviewsAndVouches,
+  preferredJobSizeLabel,
   roleTagLabel,
   trustTagLabel,
   type VendorTrustSummary,
 } from "@/lib/trust";
-import { submitQuickVouch, toggleOutbackVerified } from "@/app/reviews/actions";
+import {
+  confirmOwnerAvailabilityNow,
+  submitQuickVouch,
+  toggleOutbackVerified,
+} from "@/app/reviews/actions";
 import LeaveReviewForm from "./LeaveReviewForm";
 import VendorReplyForm from "./VendorReplyForm";
 
@@ -56,7 +65,7 @@ export default async function VendorTrustSection({
   listingId,
   fallbackTitle,
   returnPath,
-  defaultDealType = "general",
+  defaultDealType = "fencing_service",
   viewerId,
   showProfileLink = true,
 }: Props) {
@@ -121,6 +130,9 @@ export default async function VendorTrustSection({
   const services = Array.isArray(summary.services_offered)
     ? summary.services_offered
     : [];
+  const equipment = Array.isArray(summary.equipment_summary)
+    ? summary.equipment_summary
+    : [];
   const photos = Array.isArray(summary.photo_urls)
     ? summary.photo_urls
     : [];
@@ -128,7 +140,46 @@ export default async function VendorTrustSection({
   const reviews = Array.isArray(summary.recent_reviews)
     ? summary.recent_reviews
     : [];
-  const availInfo = availabilityStatusInfo(summary.availability_status);
+
+  // Separate Completed-Work Reviews from 1-click Neighbour Vouches so quick vouches never inflate star ratings
+  const partitioned = partitionReviewsAndVouches(reviews);
+  const completedReviews = partitioned.completedReviews;
+  const quickVouches = partitioned.quickVouches;
+  const completedReviewCount = partitioned.completedReviewCount;
+  const vouchCount = summary.vouch_count ?? partitioned.vouchCount;
+  const trueAvgRating = partitioned.avgRating;
+  const trueRecommendPct = partitioned.recommendPct;
+
+  const isOwnerConfirmed = resolvedBusinessId
+    ? summary.claim_status === "claimed"
+    : Boolean(
+        summary.claim_status === "claimed" ||
+          summary.email_verified ||
+          summary.phone_verified
+      );
+
+  const believableAvail = formatBelievableAvailability({
+    availabilityStatus: summary.availability_status,
+    availabilityNote: summary.availability_note,
+    availabilityUpdatedAt:
+      summary.availability_updated_at ?? summary.claimed_at ?? null,
+    ownerConfirmed: isOwnerConfirmed,
+  });
+
+  const trustChecks = buildSpecificTrustChecks({
+    hasBusinessRecord: Boolean(resolvedBusinessId),
+    claimStatus: summary.claim_status,
+    claimedAt: summary.claimed_at,
+    emailVerified: summary.email_verified,
+    phoneVerified: summary.phone_verified,
+    abn: summary.abn,
+    abnVerified: summary.abn_verified,
+    abnEntityName: summary.abn_entity_name,
+    abnVerifiedAt: summary.abn_verified_at,
+    insurancesHeld: insurances,
+    insuranceVerifiedAt: summary.insurance_verified_at,
+    insuranceExpiryDate: summary.insurance_expiry_date,
+  });
 
   const phone = summary.contact_phone || null;
   const phoneHref = formatPhoneHref(phone);
@@ -149,7 +200,9 @@ export default async function VendorTrustSection({
   const profileShareUrl = profileId
     ? `${BASE_URL}/profile/${profileId}`
     : `${BASE_URL}${returnPath}`;
-  const vouchSmsBody = `G'day, we've got our profile up on Outback Connections (${vendorName}). If you've got 20 seconds, could you tap a quick vouch or review for us here? ${profileShareUrl}`;
+  const vouchSmsBody = `G'day, we've got our profile up on Outback Connections (${vendorName}). If we've done fencing, freight or rural work together, could you leave an honest review or vouch here? ${profileShareUrl}`;
+
+  const jobSizeText = preferredJobSizeLabel(summary.preferred_job_size);
 
   return (
     <section
@@ -160,7 +213,7 @@ export default async function VendorTrustSection({
       <div className="bg-gradient-to-r from-green-900 via-green-800 to-emerald-800 px-5 py-3 text-white sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <span className="font-bold uppercase tracking-wider text-emerald-100">
-            Verified Rural Profile · Two-Sided Reputation &amp; Direct Contact
+            Rural Contractor &amp; Operator Profile · Direct Contact &amp; Specific Checks
           </span>
           <div className="flex flex-wrap items-center gap-2">
             {summary.outback_verified && (
@@ -168,9 +221,12 @@ export default async function VendorTrustSection({
                 ★ Outback Verified
               </span>
             )}
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-semibold text-white">
-              <span className={`h-2 w-2 rounded-full ${availInfo.dotClass}`} />
-              {availInfo.shortLabel}
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-semibold text-white"
+              title={believableAvail.updatedText}
+            >
+              <span className={`h-2 w-2 rounded-full ${believableAvail.dotClass}`} />
+              {believableAvail.headline}
             </span>
           </div>
         </div>
@@ -197,9 +253,18 @@ export default async function VendorTrustSection({
                     vendorName
                   )}
                 </h2>
-                {summary.abn_verified && (
-                  <span className="rounded-full border border-green-300 bg-green-50 px-2.5 py-0.5 text-xs font-bold text-green-900">
-                    ✓ ABN Verified
+                {isOwnerConfirmed ? (
+                  <span className="rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-950">
+                    ✓ Owner Confirmed
+                  </span>
+                ) : (
+                  <span className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
+                    Unclaimed Directory Listing
+                  </span>
+                )}
+                {summary.abn_verified && formattedAbn && (
+                  <span className="rounded-full border border-neutral-300 bg-neutral-50 px-2.5 py-0.5 text-xs font-semibold text-neutral-800">
+                    ABN Checked
                   </span>
                 )}
               </div>
@@ -217,6 +282,40 @@ export default async function VendorTrustSection({
                 {memberSinceText ? ` · Listed ${memberSinceText}` : ""}
               </p>
 
+              {/* Believable Availability Strip with Last Updated Date */}
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold ${believableAvail.badgeClass}`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${believableAvail.dotClass}`} />
+                  {believableAvail.headline}
+                </span>
+                <span className="text-xs text-neutral-500">
+                  {believableAvail.updatedText}
+                </span>
+                {isOwner && (
+                  <form action={confirmOwnerAvailabilityNow} className="inline">
+                    <input type="hidden" name="return_path" value={returnPath} />
+                    <input
+                      type="hidden"
+                      name="availability_status"
+                      value={summary.availability_status ?? "available"}
+                    />
+                    <input
+                      type="hidden"
+                      name="availability_note"
+                      value={summary.availability_note ?? ""}
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-lg border border-green-700 bg-white px-2.5 py-0.5 text-[11px] font-bold text-green-900 hover:bg-green-50"
+                    >
+                      ✓ Confirm availability today
+                    </button>
+                  </form>
+                )}
+              </div>
+
               {/* Role Chips */}
               {roles.length > 0 && (
                 <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -233,25 +332,38 @@ export default async function VendorTrustSection({
             </div>
           </div>
 
-          {/* Right Scorecard */}
+          {/* Right Scorecard: Completed-Work Reviews strictly separated from Quick Vouches */}
           <div className="flex flex-wrap items-center gap-3 sm:flex-col sm:items-end">
-            {summary.review_count > 0 && summary.avg_rating !== null ? (
+            {completedReviewCount > 0 && trueAvgRating !== null ? (
               <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-right shadow-sm">
                 <div className="flex items-center gap-1.5 text-lg font-extrabold text-amber-950">
-                  <span>★ {Number(summary.avg_rating).toFixed(1)}</span>
+                  <span>★ {Number(trueAvgRating).toFixed(1)}</span>
                   <span className="text-xs font-semibold text-amber-800">
-                    ({summary.review_count} review{summary.review_count === 1 ? "" : "s"})
+                    ({completedReviewCount} completed-work review
+                    {completedReviewCount === 1 ? "" : "s"})
                   </span>
                 </div>
-                {summary.recommend_pct !== null && (
+                {trueRecommendPct !== null && (
                   <p className="text-[11px] font-semibold text-amber-900">
-                    ✓ {summary.recommend_pct}% would deal with again
+                    ✓ {trueRecommendPct}% would hire / deal with again
+                  </p>
+                )}
+                {vouchCount > 0 && (
+                  <p className="mt-0.5 text-[11px] text-amber-800">
+                    + {vouchCount} neighbour vouch{vouchCount === 1 ? "" : "es"}
                   </p>
                 )}
               </div>
             ) : (
-              <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2 text-xs font-medium text-neutral-600">
-                No reviews yet — be the first to vouch below
+              <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2 text-right text-xs font-medium text-neutral-600">
+                <p className="font-semibold text-neutral-800">
+                  No completed-work reviews yet
+                </p>
+                <p className="mt-0.5 text-[11px] text-neutral-500">
+                  {vouchCount > 0
+                    ? `${vouchCount} neighbour vouch${vouchCount === 1 ? "" : "es"} recorded (shown separately below)`
+                    : "Worked with them? Share a review after a real dealing"}
+                </p>
               </div>
             )}
 
@@ -332,13 +444,72 @@ export default async function VendorTrustSection({
           </div>
         )}
 
+        {/* Specific 4-Tier Verification Breakdown (Scamwatch Aligned) */}
+        <div className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-neutral-800">
+              🛡 Specific Trust &amp; Verification Checks
+            </h3>
+            <a
+              href="https://www.scamwatch.gov.au/about-us/news-and-alerts/farm-businesses-warned-as-scams-targeting-agricultural-sector-grow"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] font-medium text-neutral-600 underline hover:text-green-800"
+            >
+              Why we separate ABN lookup from business ownership (Scamwatch) →
+            </a>
+          </div>
+          <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+            {trustChecks.map((check) => {
+              const badgeStyles =
+                check.status === "verified"
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-950"
+                  : check.status === "self_declared"
+                    ? "border-sky-300 bg-sky-50 text-sky-950"
+                    : check.status === "expired"
+                      ? "border-red-300 bg-red-50 text-red-950"
+                      : "border-neutral-200 bg-white text-neutral-600";
+              const statusPill =
+                check.status === "verified"
+                  ? "✓ Checked"
+                  : check.status === "self_declared"
+                    ? "Self-declared"
+                    : check.status === "expired"
+                      ? "⚠ Expired"
+                      : "Not yet checked";
+
+              return (
+                <div
+                  key={check.key}
+                  className={`rounded-xl border p-3 text-xs ${badgeStyles}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold">{check.label}</span>
+                    <span className="rounded-full border border-current/20 bg-white/80 px-2 py-0.5 text-[11px] font-semibold">
+                      {statusPill}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] leading-relaxed opacity-90">
+                    {check.detail}
+                  </p>
+                  {check.dateText && (
+                    <p className="mt-1 text-[10px] font-semibold opacity-75">
+                      {check.dateText}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Owner Claim Callout for Unclaimed Profiles */}
         {summary.claim_status === "unclaimed" && resolvedBusinessId && (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-xs text-amber-950">
             <div>
               <p className="font-bold">Is {vendorName} your business?</p>
               <p className="mt-0.5 text-amber-900">
-                Claim your free profile to update your details, set live availability, upload photos of your work/rigs, and reply to reviews.
+                Claim your free profile to confirm ownership, set your live booking availability, list your fencing gear &amp; travel radius, upload work photos, or remove your listing.
               </p>
             </div>
             <Link
@@ -381,11 +552,53 @@ export default async function VendorTrustSection({
           </form>
         )}
 
-        {/* Bio & Services / Specialties */}
+        {/* Practical Contractor Profile: Bio, Travel Area, Equipment & Preferred Job Size */}
         {summary.bio && (
           <p className="mt-4 text-sm leading-relaxed text-neutral-800 whitespace-pre-line">
             {summary.bio}
           </p>
+        )}
+
+        {(summary.travel_area || jobSizeText || equipment.length > 0) && (
+          <div className="mt-4 grid gap-2.5 rounded-xl border border-neutral-200 bg-white p-3.5 text-xs sm:grid-cols-3">
+            {summary.travel_area && (
+              <div>
+                <p className="font-bold uppercase tracking-wide text-neutral-500">
+                  🛻 Travel &amp; Service Area
+                </p>
+                <p className="mt-0.5 font-semibold text-neutral-900">
+                  {summary.travel_area}
+                </p>
+              </div>
+            )}
+            {jobSizeText && (
+              <div>
+                <p className="font-bold uppercase tracking-wide text-neutral-500">
+                  📏 Preferred Job Size
+                </p>
+                <p className="mt-0.5 font-semibold text-neutral-900">
+                  {jobSizeText}
+                </p>
+              </div>
+            )}
+            {equipment.length > 0 && (
+              <div>
+                <p className="font-bold uppercase tracking-wide text-neutral-500">
+                  🚜 Gear &amp; Rig on Board
+                </p>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {equipment.map((eq) => (
+                    <span
+                      key={eq}
+                      className="rounded-md border border-neutral-200 bg-neutral-50 px-2 py-0.5 text-[11px] font-medium text-neutral-800"
+                    >
+                      {contractorEquipmentLabel(eq)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {(services.length > 0 || insurances.length > 0) && (
@@ -403,7 +616,7 @@ export default async function VendorTrustSection({
                 key={ins}
                 className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-900"
               >
-                🛡 {insuranceBadgeLabel(ins)}
+                🛡 {insuranceBadgeLabel(ins)} (Self-declared)
               </span>
             ))}
           </div>
@@ -414,14 +627,14 @@ export default async function VendorTrustSection({
           <div className="mt-5">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-bold uppercase tracking-wide text-neutral-700">
-                📷 Work, Fleet &amp; Property Photos ({photos.length})
+                📷 Actual Work, Rig &amp; Property Photos ({photos.length})
               </p>
               {isOwner && (
                 <Link
                   href="/dashboard/settings"
                   className="text-xs font-semibold text-green-800 underline"
                 >
-                  Manage photos →
+                  Update photos from phone →
                 </Link>
               )}
             </div>
@@ -447,7 +660,7 @@ export default async function VendorTrustSection({
         ) : isOwner ? (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-green-300 bg-green-50/40 px-4 py-3 text-xs text-green-950">
             <span>
-              <strong>📷 Show your gear &amp; workmanship:</strong> Add photos of your fencing jobs, trucks, machinery, or stock so customers can see your work.
+              <strong>📷 Show your gear &amp; workmanship:</strong> Upload photos of your strainer assemblies, post driver, trucks, or completed fence lines straight from your phone.
             </span>
             <Link
               href="/dashboard/settings"
@@ -462,15 +675,23 @@ export default async function VendorTrustSection({
         <div className="mt-5 grid grid-cols-2 gap-3 rounded-2xl border border-neutral-100 bg-neutral-50 p-3.5 sm:grid-cols-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-              Active listings
+              Completed-work reviews
             </p>
             <p className="mt-0.5 text-lg font-extrabold text-neutral-900">
-              {summary.active_listings_count}
+              {completedReviewCount}
             </p>
           </div>
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-              Completed deals / jobs
+              Neighbour vouches
+            </p>
+            <p className="mt-0.5 text-lg font-extrabold text-neutral-900">
+              {vouchCount}
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+              Completed jobs / deals
             </p>
             <p className="mt-0.5 text-lg font-extrabold text-neutral-900">
               {summary.completed_deals_count}
@@ -478,15 +699,7 @@ export default async function VendorTrustSection({
           </div>
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-              Community vouches
-            </p>
-            <p className="mt-0.5 text-lg font-extrabold text-neutral-900">
-              {summary.review_count}
-            </p>
-          </div>
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-              Contact status
+              Contact &amp; response
             </p>
             <p className="mt-0.5 text-xs font-bold text-green-900">
               {phoneHref
@@ -498,13 +711,16 @@ export default async function VendorTrustSection({
           </div>
         </div>
 
-        {/* Two-Sided Vouched Qualities: Vendor/Contractor & Customer/Employer */}
+        {/* Neighbour Recommendations / Vouched Qualities (kept separate from 5-star reviews) */}
         {(vendorVouchTags.length > 0 || customerVouchTags.length > 0) && (
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {vendorVouchTags.length > 0 && (
               <div className="rounded-xl border border-green-200 bg-green-50/40 p-3.5">
                 <p className="text-xs font-bold uppercase tracking-wide text-green-900">
-                  Contractor / Vendor Vouches
+                  Neighbour &amp; Customer Tag Endorsements
+                </p>
+                <p className="mt-0.5 text-[11px] text-neutral-600">
+                  Quick community endorsements (counted separately from star ratings):
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {vendorVouchTags.map((t) => (
@@ -521,7 +737,10 @@ export default async function VendorTrustSection({
             {customerVouchTags.length > 0 && (
               <div className="rounded-xl border border-sky-200 bg-sky-50/40 p-3.5">
                 <p className="text-xs font-bold uppercase tracking-wide text-sky-900">
-                  Customer / Property / Employer Rating
+                  As a Customer / Property / Employer
+                </p>
+                <p className="mt-0.5 text-[11px] text-neutral-600">
+                  Endorsements from contractors, carriers &amp; workers:
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {customerVouchTags.map((t) => (
@@ -542,25 +761,28 @@ export default async function VendorTrustSection({
         {isOwner && (
           <div className="mt-4 rounded-xl border border-green-200 bg-green-50/60 p-3.5 text-xs text-green-950 flex flex-wrap items-center justify-between gap-2">
             <span>
-              <strong>This is your trust profile.</strong> Add your ABN, trading name, insurance badges, and availability in Settings so farmers, contractors, and workers know who they&apos;re dealing with.
+              <strong>This is your contractor profile.</strong> Update your availability, fencing specialties, travel radius, equipment, and work photos from your phone in Settings.
             </span>
             <Link
               href="/dashboard/settings"
               className="rounded-lg bg-green-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-800"
             >
-              Edit trust profile
+              Update profile &amp; availability
             </Link>
           </div>
         )}
 
-        {/* Two-Sided 1-Click Quick Vouches (Contractor/Vendor + Customer/Property/Employer) */}
+        {/* Two-Sided 1-Click Quick Vouches (Explicitly labelled as Neighbour Endorsements, not Star Reviews) */}
         {!isOwner && (
           <>
             {viewerId ? (
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border border-green-200 bg-green-50/40 p-3.5">
                   <p className="text-xs font-bold text-green-950">
-                    Used {vendorName} for work, freight or stock? 1-click vouch:
+                    Know {vendorName}&apos;s work? Add a neighbour vouch:
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-neutral-600">
+                    Recorded as a tag endorsement — does not alter star ratings.
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {VENDOR_QUICK_VOUCH_TAGS.map((qt) => (
@@ -583,7 +805,10 @@ export default async function VendorTrustSection({
 
                 <div className="rounded-xl border border-sky-200 bg-sky-50/40 p-3.5">
                   <p className="text-xs font-bold text-sky-950">
-                    Worked for or delivered to {vendorName}? Rate them as a customer / property:
+                    Worked for or delivered to {vendorName}? Vouch for the property:
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-neutral-600">
+                    Helps contractors &amp; drivers know good properties to work for.
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {CUSTOMER_QUICK_VOUCH_TAGS.map((qt) => (
@@ -620,14 +845,14 @@ export default async function VendorTrustSection({
           </>
         )}
 
-        {/* Organic Growth Bar: Request a Vouch via SMS / WhatsApp / Facebook */}
+        {/* Organic Growth Bar: Invite Customers After Real Dealings */}
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs">
           <div>
             <p className="font-bold text-neutral-900">
-              🌱 Build rural word-of-mouth — ask a customer, boss or neighbour for a quick vouch
+              🌱 Invite a customer or property owner to review completed work
             </p>
             <p className="text-neutral-600">
-              Send this profile link by SMS or WhatsApp so locals you&apos;ve worked with can back your name.
+              Send this link after finishing a job so clients can write an honest review in their own words.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -635,7 +860,7 @@ export default async function VendorTrustSection({
               href={`sms:?body=${encodeURIComponent(vouchSmsBody)}`}
               className="rounded-lg border border-green-700 bg-white px-3 py-1.5 font-bold text-green-900 hover:bg-green-50"
             >
-              💬 Text for a Vouch (SMS)
+              💬 Text Review Link (SMS)
             </a>
             <a
               href={`https://wa.me/?text=${encodeURIComponent(vouchSmsBody)}`}
@@ -656,13 +881,18 @@ export default async function VendorTrustSection({
           </div>
         </div>
 
-        {/* Published Reviews List */}
-        {reviews.length > 0 && (
+        {/* Completed-Work Reviews List (Strictly Separated from Quick Vouches) */}
+        {completedReviews.length > 0 && (
           <div className="mt-6 space-y-3 border-t border-neutral-100 pt-5">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-neutral-700">
-              Verified community reviews &amp; vouches ({summary.review_count})
-            </h3>
-            {reviews.map((rev) => (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-xs font-bold uppercase tracking-wide text-neutral-700">
+                Completed-Work Reviews ({completedReviews.length})
+              </h3>
+              <span className="text-[11px] text-neutral-500">
+                Written by signed-in members after a specific dealing · Business replies enabled
+              </span>
+            </div>
+            {completedReviews.map((rev) => (
               <div
                 key={rev.id}
                 className="rounded-xl border border-neutral-200 bg-neutral-50/60 p-4 text-sm"
@@ -686,7 +916,7 @@ export default async function VendorTrustSection({
                     </span>
                     {rev.would_recommend && (
                       <span className="rounded bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-900">
-                        ✓ Recommends
+                        ✓ Would deal with again
                       </span>
                     )}
                   </div>
@@ -741,8 +971,48 @@ export default async function VendorTrustSection({
             ))}
           </div>
         )}
+
+        {/* Neighbour Recommendations / Quick Vouches List (Shown Separately Without Fake 5-Star Ratings) */}
+        {quickVouches.length > 0 && (
+          <div className="mt-5 border-t border-neutral-100 pt-4">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-neutral-600">
+              Neighbour Recommendations &amp; Quick Vouches ({quickVouches.length})
+            </h3>
+            <p className="mt-0.5 text-[11px] text-neutral-500">
+              Community tag endorsements from locals (shown separately so they do not inflate completed-work star ratings):
+            </p>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              {quickVouches.map((v) => (
+                <div
+                  key={v.id}
+                  className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs text-neutral-800"
+                >
+                  <span className="font-semibold text-neutral-900">
+                    {v.reviewer_display_name}
+                  </span>
+                  {v.reviewer_postcode && (
+                    <span className="text-neutral-500">({v.reviewer_postcode})</span>
+                  )}
+                  {Array.isArray(v.tags) &&
+                    v.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-full border border-green-200 bg-white px-2 py-0.5 text-[11px] font-medium text-green-900"
+                      >
+                        ✓ {trustTagLabel(tag)}
+                      </span>
+                    ))}
+                  {v.comment && (
+                    <span className="text-neutral-600">“{v.comment}”</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
 }
+
 

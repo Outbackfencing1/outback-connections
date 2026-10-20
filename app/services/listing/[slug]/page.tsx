@@ -202,8 +202,21 @@ export default async function ServiceDetailPage({
         : null;
   const responded = responseLine(responseStats as { answered?: number; responded?: number } | null);
 
-  const resolvedPhone = listing.contact_phone || business?.contact_phone || null;
-  const resolvedEmail = listing.contact_email || business?.contact_email || null;
+  // AGENTS.md rule #2 & #3: Unclaimed scraped rows never expose phone/email in
+  // public HTML or JSON-LD; only owner-claimed businesses or signed-in viewers
+  // on member-posted listings see direct phone/email.
+  const publicBusinessPhone = !isUnclaimedScraped ? (business?.contact_phone ?? null) : null;
+  const publicBusinessEmail = !isUnclaimedScraped ? (business?.contact_email ?? null) : null;
+  const resolvedPhone = isUnclaimedScraped
+    ? null
+    : viewer
+      ? listing.contact_phone || publicBusinessPhone
+      : publicBusinessPhone;
+  const resolvedEmail = isUnclaimedScraped
+    ? null
+    : viewer
+      ? listing.contact_email || publicBusinessEmail
+      : publicBusinessEmail;
   const resolvedWebsite = business?.website_url || null;
   const resolvedSuburb = business?.suburb || null;
   const phoneDigits = resolvedPhone ? resolvedPhone.replace(/[^\d+]/g, "") : null;
@@ -258,7 +271,7 @@ export default async function ServiceDetailPage({
         postcode: listing.postcode,
         suburb: resolvedSuburb,
         state: listing.state,
-        telephone: !isExpiredOrFilled ? resolvedPhone : null,
+        telephone: !isExpiredOrFilled && !isUnclaimedScraped ? publicBusinessPhone : null,
         geoLat: business?.geo_lat ?? null,
         geoLng: business?.geo_lng ?? null,
         category: cat?.label ?? null,
@@ -339,7 +352,7 @@ export default async function ServiceDetailPage({
           browseHref={cat ? `/services/${cat.slug}` : "/services"}
         />
       ) : (
-        /* Top 1-Click Direct Contact Bar — no scrolling needed */
+        /* Top 1-Click Direct Contact Bar — only for claimed/member-confirmed contacts */
         (phoneDigits || resolvedEmail || resolvedWebsite) && (
           <div className="mt-4 flex flex-wrap items-center gap-2.5 rounded-2xl border border-green-300 bg-green-50/70 p-3.5 shadow-sm">
             {phoneDigits && (
@@ -426,8 +439,8 @@ export default async function ServiceDetailPage({
                 signInRedirect={`/services/listing/${listing.slug}`}
                 listingId={listing.id}
                 sourceUrlKind={sourceUrlKind}
-                contactPhone={resolvedPhone}
-                contactEmail={resolvedEmail}
+                contactPhone={null}
+                contactEmail={null}
                 websiteUrl={resolvedWebsite}
               />
             ) : (

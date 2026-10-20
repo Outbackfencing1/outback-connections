@@ -56,3 +56,9 @@ next-env.d.ts
 # playwright
 /test-results/
 /playwright-report/
+
+# rural fencer scraper cache and staged output (business data — never commit)
+/scraper/cache/
+/scraper/out/
+/rural_fencers_*
+

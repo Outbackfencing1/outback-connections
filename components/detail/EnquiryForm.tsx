@@ -122,7 +122,7 @@ export default function EnquiryForm({
               {errors.name && <span className="mt-1 block text-xs text-red-700">{errors.name}</span>}
             </label>
             <label className="block text-sm">
-              <span className="font-medium text-neutral-800">{postcodeLabel}</span>
+              <span className="font-medium text-neutral-800">{postcodeLabel} (nearest town/postcode only)</span>
               <input name="postcode" type="text" inputMode="numeric" maxLength={4} className={input} placeholder="2800" />
               {errors.postcode && <span className="mt-1 block text-xs text-red-700">{errors.postcode}</span>}
             </label>
@@ -137,7 +137,76 @@ export default function EnquiryForm({
               {errors.email && <span className="mt-1 block text-xs text-red-700">{errors.email}</span>}
             </label>
           </div>
-          <p className="mt-1 text-xs text-neutral-500">Phone or email, whichever you answer.</p>
+          <p className="mt-1 text-xs text-neutral-500">
+            🔒 <strong>Exact farm addresses stay private:</strong> Only enter your nearest postcode above. Share your road or property gate address once {businessName} replies.
+          </p>
+
+          {/* Structured Fencing / Contracting Job Details (Optional quick selectors) */}
+          <div className="mt-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-700">
+              Job quick-brief (optional — helps contractors quote faster)
+            </p>
+            <div className="mt-2 grid gap-2.5 sm:grid-cols-2">
+              <label className="block text-xs">
+                <span className="font-medium text-neutral-700">Fence / work type</span>
+                <select name="fence_type" defaultValue="" className={input}>
+                  <option value="">Select type (optional)</option>
+                  <option value="hinge_joint">Hinge Joint (e.g. 7/90/30, 8/90/30, 8/115/15)</option>
+                  <option value="fixed_knot_exclusion">Fixed Knot / Exclusion (e.g. 16/180/15)</option>
+                  <option value="plain_barbed_wire">Plain &amp; Barbed Wire</option>
+                  <option value="electric_subdivision">Electric / Paddock Subdivision</option>
+                  <option value="cattle_sheep_yards">Cattle / Sheep Yards &amp; Gateways</option>
+                  <option value="boundary_repairs">Boundary Repairs, Floodgates &amp; Clearing</option>
+                </select>
+              </label>
+
+              <label className="block text-xs">
+                <span className="font-medium text-neutral-700">Approximate length</span>
+                <select name="approx_length" defaultValue="" className={input}>
+                  <option value="">Select length (optional)</option>
+                  <option value="under_500m">Under 500m (Yards, gateways or short repairs)</option>
+                  <option value="500m_to_2km">500m – 2 km</option>
+                  <option value="2km_to_5km">2 km – 5 km</option>
+                  <option value="5km_to_10km">5 km – 10 km</option>
+                  <option value="over_10km">10 km+ (Large boundary or exclusion run)</option>
+                </select>
+              </label>
+
+              <label className="block text-xs">
+                <span className="font-medium text-neutral-700">Preferred timing</span>
+                <select name="timing" defaultValue="" className={input}>
+                  <option value="">Select timing (optional)</option>
+                  <option value="urgent_2_weeks">Urgent / Within 2 weeks</option>
+                  <option value="within_1_month">Within the next month</option>
+                  <option value="within_3_months">Within 1–3 months</option>
+                  <option value="flexible_planning">Flexible / Planning ahead for quotes</option>
+                </select>
+              </label>
+
+              <label className="block text-xs">
+                <span className="font-medium text-neutral-700">Materials status</span>
+                <select name="materials_status" defaultValue="" className={input}>
+                  <option value="">Select materials (optional)</option>
+                  <option value="materials_on_farm">Materials on farm (labour &amp; rig only)</option>
+                  <option value="contractor_to_supply">Contractor to supply materials &amp; labour</option>
+                  <option value="need_materials_quote">Need both contractor &amp; materials quote</option>
+                </select>
+              </label>
+            </div>
+
+            <label className="mt-2.5 block text-xs">
+              <span className="font-medium text-neutral-700">
+                Link to a photo of the fence line, country or gateway (optional)
+              </span>
+              <input
+                name="photo_url"
+                type="url"
+                maxLength={300}
+                placeholder="https://... (optional photo link)"
+                className={input}
+              />
+            </label>
+          </div>
 
           <label className="mt-3 block text-sm">
             <span className="font-medium text-neutral-800">{promptLabel}</span>
@@ -155,9 +224,9 @@ export default function EnquiryForm({
           <label className="mt-3 flex items-start gap-2 text-xs text-neutral-700">
             <input type="checkbox" name="consent" className="mt-0.5" />
             <span>
-              I&apos;m happy for Outback Connections to pass these details to {businessName} so they can
-              reply. We don&apos;t share them with anyone else, we may email you once about a week later
-              to ask whether they got back to you, and we delete them after 12 months.
+              I&apos;m happy for Outback Connections to pass these details ONLY to {businessName} so they can
+              reply. We don&apos;t broadcast your enquiry to other contractors, we may check in once about a week later
+              to ask whether they got back to you, and we delete enquiry records after 12 months.
             </span>
           </label>
           {errors.consent && <p className="mt-1 text-xs text-red-700">{errors.consent}</p>}
@@ -179,3 +248,4 @@ export default function EnquiryForm({
     </div>
   );
 }
+

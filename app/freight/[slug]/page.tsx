@@ -144,8 +144,14 @@ export default async function FreightDetailPage({
   const biz = Array.isArray(listing.business) ? listing.business[0] : listing.business;
   const isUnclaimedScraped =
     isScraped && (!biz || biz.claim_status === "unclaimed");
-  const resolvedPhone = listing.contact_phone || biz?.contact_phone || null;
-  const resolvedEmail = listing.contact_email || biz?.contact_email || null;
+  const publicBusinessPhone = biz?.contact_phone ?? null;
+  const publicBusinessEmail = biz?.contact_email ?? null;
+  const resolvedPhone = viewer
+    ? listing.contact_phone || publicBusinessPhone
+    : publicBusinessPhone;
+  const resolvedEmail = viewer
+    ? listing.contact_email || publicBusinessEmail
+    : publicBusinessEmail;
   const resolvedWebsite = biz?.website_url || null;
   const resolvedSuburb = biz?.suburb || null;
   const phoneDigits = resolvedPhone ? resolvedPhone.replace(/[^\d+]/g, "") : null;
@@ -169,7 +175,7 @@ export default async function FreightDetailPage({
         postcode: listing.postcode,
         suburb: resolvedSuburb,
         state: listing.state,
-        telephone: !isExpiredOrFilled ? resolvedPhone : null,
+        telephone: !isExpiredOrFilled ? publicBusinessPhone : null,
         geoLat: biz?.geo_lat ?? null,
         geoLng: biz?.geo_lng ?? null,
         category: cat?.label ?? null,

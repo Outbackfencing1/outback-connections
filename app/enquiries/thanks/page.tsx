@@ -16,6 +16,11 @@ export default async function EnquiryThanksPage({
 }) {
   const sp = await searchParams;
   const o = typeof sp.o === "string" ? sp.o : "";
+  const rawListing = typeof sp.listing === "string" ? sp.listing : "";
+  const safeListingPath =
+    rawListing.startsWith("/") && !rawListing.startsWith("//")
+      ? rawListing
+      : null;
   const outcome = isEnquiryOutcome(o) ? o : null;
 
   return (
@@ -24,9 +29,18 @@ export default async function EnquiryThanksPage({
         <>
           <h1 className="text-2xl font-bold tracking-tight">Good to hear. Thanks.</h1>
           <p className="mt-3 text-neutral-700">
-            That helps the next farmer pick someone who answers. If the job went well and you want
-            to say so, a word on their listing page helps too.
+            That helps the next farmer pick someone who answers. Once the work is arranged or completed, writing a short review in your own words on their profile is the best way to back genuine local operators.
           </p>
+          {safeListingPath && (
+            <div className="mt-5 flex flex-wrap gap-3 text-sm">
+              <Link
+                href={safeListingPath}
+                className="rounded-lg bg-green-700 px-4 py-2 font-semibold text-white hover:bg-green-800"
+              >
+                ★ Write a completed-work review →
+              </Link>
+            </div>
+          )}
         </>
       )}
       {outcome === "no_response" && (

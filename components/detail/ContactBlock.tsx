@@ -14,10 +14,12 @@ type Props = {
 };
 
 export default function ContactBlock({
+  signedIn = false,
   contactEmail,
   contactPhone,
   contactBestTime,
   websiteUrl = null,
+  signInRedirect = "/signin",
 }: Props) {
   const phoneHref = formatPhoneHref(contactPhone);
   const canSms = isAustralianMobile(contactPhone);
@@ -27,7 +29,19 @@ export default function ContactBlock({
       <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-5">
         <p className="font-semibold text-neutral-900">Direct contact</p>
         <p className="mt-2 text-sm text-neutral-700">
-          Use the enquiry / quote form below to message this listing directly.
+          {!signedIn ? (
+            <>
+              <Link
+                href={`/signin?next=${encodeURIComponent(signInRedirect)}`}
+                className="font-semibold text-green-800 underline"
+              >
+                Sign in to see contact details
+              </Link>
+              , or use the enquiry / quote form below to message this listing directly.
+            </>
+          ) : (
+            "Use the enquiry / quote form below to message this listing directly."
+          )}
         </p>
       </div>
     );

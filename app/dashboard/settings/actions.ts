@@ -98,6 +98,15 @@ export async function updateTrustProfile(
   const availabilityStatus = isValidAvailabilityStatus(availRaw)
     ? availRaw
     : "available";
+  const availabilityNote = String(formData.get("availability_note") ?? "").trim();
+  const travelArea = String(formData.get("travel_area") ?? "").trim();
+  const preferredJobSize = String(formData.get("preferred_job_size") ?? "").trim();
+  const insuranceExpiryDate = String(formData.get("insurance_expiry_date") ?? "").trim();
+  const rawEquipment = formData
+    .getAll("equipment_summary")
+    .map((v) => String(v).trim())
+    .filter(Boolean);
+  const equipmentSummary = Array.from(new Set(rawEquipment)).slice(0, 12);
 
   let websiteUrl: string | null = null;
   if (websiteRaw) {
@@ -241,6 +250,8 @@ export async function updateTrustProfile(
     6
   );
 
+  const nowIso = new Date().toISOString();
+
   const { error: upsertErr } = await admin.from("user_profiles").upsert(
     {
       user_id: user.id,
@@ -270,13 +281,26 @@ export async function updateTrustProfile(
     return { error: "Could not save your trust profile. Please try again." };
   }
 
+  // Persist optional new contractor & availability freshness columns (graceful if migration pending)
+  await admin
+    .from("user_profiles")
+    .update({
+      availability_note: availabilityNote || null,
+      availability_updated_at: nowIso,
+      travel_area: travelArea || null,
+      equipment_summary: equipmentSummary,
+      preferred_job_size: preferredJobSize || null,
+      insurance_expiry_date: insuranceExpiryDate || null,
+    })
+    .eq("user_id", user.id);
+
   // Sync all owner-edited fields to any business claimed by this user
   const bizUpdate: Record<string, unknown> = {
     availability_status: availabilityStatus,
     insurances_held: insurancesHeld,
     role_tags: roleTags,
     photo_urls: finalPhotoUrls,
-    last_verified_at: new Date().toISOString(),
+    last_verified_at: nowIso,
   };
   if (tradingName) bizUpdate.trading_name = tradingName;
   if (suburb) bizUpdate.suburb = suburb;
@@ -289,7 +313,7 @@ export async function updateTrustProfile(
   if (yearsInDistrict !== null) bizUpdate.years_in_district = yearsInDistrict;
   if (cleanAbn) {
     bizUpdate.abn = cleanAbn;
-    bizUpdate.claim_status = "abn_verified";
+    // Keep claim_status = 'claimed' intact so owner confirmation is never overwritten
   }
 
   const { data: updatedBizRows } = await admin
@@ -298,6 +322,20 @@ export async function updateTrustProfile(
     .eq("claimed_by", user.id)
     .in("claim_status", ["claimed", "abn_verified", "trusted"])
     .select("id");
+
+  if (updatedBizRows && updatedBizRows.length > 0) {
+    await admin
+      .from("businesses")
+      .update({
+        availability_note: availabilityNote || null,
+        availability_updated_at: nowIso,
+        travel_area: travelArea || null,
+        equipment_summary: equipmentSummary,
+        preferred_job_size: preferredJobSize || null,
+        insurance_expiry_date: insuranceExpiryDate || null,
+      })
+      .eq("claimed_by", user.id);
+  }
 
   // Also sync direct phone & email onto the user's active listings so 0-click cards stay in sync
   if (contactPhone || contactEmail) {
@@ -321,4 +359,5 @@ export async function updateTrustProfile(
 
   return { ok: true };
 }
+
 

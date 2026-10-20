@@ -43,7 +43,18 @@ type Listing = {
     tickets?: string[] | null;
     travel_willingness?: string | null;
     experience_years?: number | null;
+    accommodation_provided?: boolean | null;
+    start_date?: string | null;
+    duration?: string | null;
   } | null;
+};
+
+const WORK_TYPE_LABELS: Record<string, string> = {
+  full_time: "Full-time",
+  part_time: "Part-time",
+  casual: "Casual",
+  contract: "Contract",
+  seasonal: "Seasonal",
 };
 
 export default function ListingCard({ listing }: { listing: Listing }) {
@@ -56,10 +67,10 @@ export default function ListingCard({ listing }: { listing: Listing }) {
     !isSyndicated &&
     (!claimStatus || claimStatus === "unclaimed");
   const trustBadge =
-    claimStatus === "abn_verified" || claimStatus === "trusted"
-      ? "ABN verified"
-      : claimStatus === "claimed"
-        ? "Claimed"
+    claimStatus === "claimed" || claimStatus === "trusted"
+      ? "✓ Owner confirmed"
+      : claimStatus === "abn_verified"
+        ? "ABN checked"
         : null;
   const isOutbackVerified = !!(
     listing.outback_verified ||
@@ -80,7 +91,20 @@ export default function ListingCard({ listing }: { listing: Listing }) {
     : null;
   const rateText = jobMeta ? formatJobRate(jobMeta) : null;
   const radiusText = jobMeta ? travelRadiusLabel(jobMeta.travel_willingness) : null;
+  const workTypeText = jobMeta?.work_type
+    ? WORK_TYPE_LABELS[jobMeta.work_type] ?? jobMeta.work_type
+    : null;
   const tickets = Array.isArray(jobMeta?.tickets) ? jobMeta.tickets : [];
+  const hasAccommFromDesc = /\baccommodation\s+(?:provided|included|available)|quarters\s+provided|cottage\s+provided\b/i.test(
+    listing.description
+  );
+  const accommodationLabel =
+    jobMeta?.accommodation_provided === true || hasAccommFromDesc
+      ? "🏡 Accommodation provided"
+      : tickets.includes("own_ute_swag")
+        ? "⛺ Self-contained (Ute / Swag)"
+        : null;
+
   const href = listingHref(listing.kind, listing.slug);
   const displayDescription = formatListingDescription({
     description: listing.description,
@@ -157,6 +181,42 @@ export default function ListingCard({ listing }: { listing: Listing }) {
           {relativeTime(listing.created_at)}
         </p>
 
+        {/* Easy-to-Compare Rural Job Comparison Strip (Pay, Duration/Type, Start, Accommodation, Travel) */}
+        {listing.kind === "job" &&
+          (rateText ||
+            workTypeText ||
+            jobMeta?.start_date ||
+            jobMeta?.duration ||
+            accommodationLabel ||
+            radiusText) && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-800">
+              <span className="font-semibold text-neutral-900">
+                💰 {rateText ?? "Pay: Negotiable"}
+              </span>
+              {workTypeText && (
+                <span className="rounded bg-white px-2 py-0.5 font-medium text-neutral-700 border border-neutral-200">
+                  ⏱ {workTypeText}
+                  {jobMeta?.duration ? ` · ${jobMeta.duration}` : ""}
+                </span>
+              )}
+              {jobMeta?.start_date && (
+                <span className="rounded bg-white px-2 py-0.5 font-medium text-neutral-700 border border-neutral-200">
+                  📅 Starts {jobMeta.start_date}
+                </span>
+              )}
+              {accommodationLabel && (
+                <span className="rounded bg-emerald-50 px-2 py-0.5 font-medium text-emerald-900 border border-emerald-200">
+                  {accommodationLabel}
+                </span>
+              )}
+              {radiusText && (
+                <span className="rounded bg-white px-2 py-0.5 font-medium text-neutral-700 border border-neutral-200">
+                  🛻 {radiusText}
+                </span>
+              )}
+            </div>
+          )}
+
         {tickets.length > 0 && (
           <div className="mt-2.5 flex flex-wrap gap-1.5">
             {tickets.slice(0, 6).map((t) => (
@@ -168,7 +228,7 @@ export default function ListingCard({ listing }: { listing: Listing }) {
               </span>
             ))}
             {tickets.length > 6 && (
-              <span className="rounded-full border border-neutral-200 bg-neutral-50 px-2 py-0.5 text-xs text-neutral-500">
+              <span className="rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-0.5 text-xs text-neutral-500">
                 +{tickets.length - 6} more
               </span>
             )}

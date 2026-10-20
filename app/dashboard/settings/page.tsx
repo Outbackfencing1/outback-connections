@@ -25,23 +25,19 @@ export default async function SettingsPage() {
     ? Math.floor((now - createdAt.getTime()) / (1000 * 60 * 60 * 24))
     : 0;
 
-  const [{ count: listingCount }, { data: profile }, { data: claimedBiz }] = await Promise.all([
+  const [{ count: listingCount }, { data: profileRow }, { data: claimedBizRow }] = await Promise.all([
     supabase
       .from("listings")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id),
     supabase
       .from("user_profiles")
-      .select(
-        "display_name, trading_name, suburb, postcode, bio, abn, abn_verified_at, contact_phone, contact_email, website_url, services_offered, photo_urls, insurances_held, role_tags, years_in_district, availability_status"
-      )
+      .select("*")
       .eq("user_id", user.id)
       .maybeSingle(),
     supabase
       .from("businesses")
-      .select(
-        "id, trading_name, legal_name, suburb, postcode, bio, abn, contact_phone, contact_email, website_url, services_offered, photo_urls, insurances_held, role_tags, years_in_district, availability_status, claim_status"
-      )
+      .select("*")
       .eq("claimed_by", user.id)
       .eq("status", "active")
       .order("claimed_at", { ascending: false })
@@ -49,21 +45,27 @@ export default async function SettingsPage() {
       .maybeSingle(),
   ]);
 
+  const profile = (profileRow ?? null) as Record<string, unknown> | null;
+  const claimedBiz = (claimedBizRow ?? null) as Record<string, unknown> | null;
+
   const initialTrustValues = {
-    display_name: profile?.display_name ?? null,
+    display_name: (profile?.display_name as string) ?? null,
     trading_name:
-      profile?.trading_name ??
-      claimedBiz?.trading_name ??
-      claimedBiz?.legal_name ??
+      (profile?.trading_name as string) ??
+      (claimedBiz?.trading_name as string) ??
+      (claimedBiz?.legal_name as string) ??
       null,
-    suburb: profile?.suburb ?? claimedBiz?.suburb ?? null,
-    postcode: profile?.postcode ?? claimedBiz?.postcode ?? null,
-    bio: profile?.bio ?? claimedBiz?.bio ?? null,
-    abn: profile?.abn ?? claimedBiz?.abn ?? null,
-    abn_verified_at: profile?.abn_verified_at ?? null,
-    contact_phone: profile?.contact_phone ?? claimedBiz?.contact_phone ?? null,
-    contact_email: profile?.contact_email ?? claimedBiz?.contact_email ?? null,
-    website_url: profile?.website_url ?? claimedBiz?.website_url ?? null,
+    suburb: (profile?.suburb as string) ?? (claimedBiz?.suburb as string) ?? null,
+    postcode: (profile?.postcode as string) ?? (claimedBiz?.postcode as string) ?? null,
+    bio: (profile?.bio as string) ?? (claimedBiz?.bio as string) ?? null,
+    abn: (profile?.abn as string) ?? (claimedBiz?.abn as string) ?? null,
+    abn_verified_at: (profile?.abn_verified_at as string) ?? null,
+    contact_phone:
+      (profile?.contact_phone as string) ?? (claimedBiz?.contact_phone as string) ?? null,
+    contact_email:
+      (profile?.contact_email as string) ?? (claimedBiz?.contact_email as string) ?? null,
+    website_url:
+      (profile?.website_url as string) ?? (claimedBiz?.website_url as string) ?? null,
     services_offered:
       Array.isArray(profile?.services_offered) && profile.services_offered.length > 0
         ? (profile.services_offered as string[])
@@ -82,6 +84,10 @@ export default async function SettingsPage() {
         : Array.isArray(claimedBiz?.insurances_held)
           ? (claimedBiz.insurances_held as string[])
           : [],
+    insurance_expiry_date:
+      (profile?.insurance_expiry_date as string) ??
+      (claimedBiz?.insurance_expiry_date as string) ??
+      null,
     role_tags:
       Array.isArray(profile?.role_tags) && profile.role_tags.length > 0
         ? (profile.role_tags as string[])
@@ -90,14 +96,37 @@ export default async function SettingsPage() {
           : [],
     years_in_district:
       typeof profile?.years_in_district === "number"
-        ? profile.years_in_district
+        ? (profile.years_in_district as number)
         : typeof claimedBiz?.years_in_district === "number"
-          ? claimedBiz.years_in_district
+          ? (claimedBiz.years_in_district as number)
           : null,
     availability_status:
-      profile?.availability_status ??
-      claimedBiz?.availability_status ??
+      (profile?.availability_status as string) ??
+      (claimedBiz?.availability_status as string) ??
       "available",
+    availability_note:
+      (profile?.availability_note as string) ??
+      (claimedBiz?.availability_note as string) ??
+      null,
+    availability_updated_at:
+      (profile?.availability_updated_at as string) ??
+      (claimedBiz?.availability_updated_at as string) ??
+      null,
+    travel_area:
+      (profile?.travel_area as string) ??
+      (claimedBiz?.travel_area as string) ??
+      (claimedBiz?.service_area_summary as string) ??
+      null,
+    equipment_summary:
+      Array.isArray(profile?.equipment_summary) && profile.equipment_summary.length > 0
+        ? (profile.equipment_summary as string[])
+        : Array.isArray(claimedBiz?.equipment_summary)
+          ? (claimedBiz.equipment_summary as string[])
+          : [],
+    preferred_job_size:
+      (profile?.preferred_job_size as string) ??
+      (claimedBiz?.preferred_job_size as string) ??
+      null,
   };
 
   return (
@@ -117,7 +146,7 @@ export default async function SettingsPage() {
       {claimedBiz ? (
         <div className="mt-5 rounded-xl border border-green-300 bg-green-50/80 p-4 text-xs text-green-950">
           <p className="font-bold">
-            ✓ Linked Business Profile: {claimedBiz.trading_name || claimedBiz.legal_name}
+            ✓ Linked Business Profile: {String(claimedBiz.trading_name || claimedBiz.legal_name || "")}
           </p>
           <p className="mt-1 text-green-900">
             Changes you save below automatically update your public contractor profile, 1-click contact buttons, specialty chips, and work photo gallery.

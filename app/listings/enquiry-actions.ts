@@ -17,6 +17,7 @@ import { listingHref } from "@/lib/format";
 import { logEvent } from "@/lib/analytics";
 import { regionsForPostcodes } from "@/lib/regions";
 import { validateEnquiry } from "@/lib/enquiries";
+import { formatFencingJobSpecSummary } from "@/lib/fencing-job";
 import type { EnquiryFailureCode } from "@/lib/enquiry-fallback";
 
 const BASE_URL =
@@ -48,12 +49,25 @@ export async function submitEnquiry(formData: FormData): Promise<EnquiryResult> 
   const listingId = str(formData, "listing_id");
   if (!/^[0-9a-f-]{36}$/i.test(listingId)) return { ok: false, errors: { _: "Bad request." }, code: "bad" };
 
+  const rawMessage = str(formData, "message").trim();
+  const fencingBrief = formatFencingJobSpecSummary({
+    fenceType: str(formData, "fence_type") || null,
+    approxLength: str(formData, "approx_length") || null,
+    timing: str(formData, "timing") || null,
+    materialsStatus: str(formData, "materials_status") || null,
+    photoUrls: str(formData, "photo_url") ? [str(formData, "photo_url").trim()] : [],
+  });
+  const combinedMessage =
+    fencingBrief && rawMessage
+      ? `${fencingBrief}\n\n${rawMessage}`
+      : rawMessage;
+
   const v = validateEnquiry({
     name: str(formData, "name"),
     email: str(formData, "email"),
     phone: str(formData, "phone"),
     postcode: str(formData, "postcode"),
-    message: str(formData, "message"),
+    message: combinedMessage,
     consent: str(formData, "consent") === "on" || str(formData, "consent") === "true",
     website: str(formData, "website"),
   });

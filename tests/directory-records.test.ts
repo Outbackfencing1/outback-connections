@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildDirectoryRecord, csvRowToInput, normalisePlatform } from "@/lib/directory-records";
+import {
+  buildDirectoryRecord,
+  csvRowToInput,
+  detectNonRuralFencingWarning,
+  normalisePlatform,
+} from "@/lib/directory-records";
+import { SOURCE_PLATFORM_OPTIONS } from "@/lib/source-platforms";
+import { formatSalesMetaNote, parseSalesMetaFromNote } from "@/lib/outreach-statuses";
 
 const meta = { enteredBy: "user-1", enteredVia: "test", enteredAt: "2026-09-06T00:00:00.000Z" };
 
@@ -123,5 +130,70 @@ describe("csvRowToInput", () => {
     expect(input.email).toBe("james@example.com");
     expect(input.source_url).toBe("https://www.facebook.com/fenceprorural");
     expect(input.vertical).toBe("service");
+  });
+});
+
+describe("metro-based rural service area override & non-rural fencing warning", () => {
+  it("allows a metro-office contractor when a genuine rural service_postcode is provided", () => {
+    const r = buildDirectoryRecord(
+      {
+        name: "Tablelands Acreage & Rural Fencing",
+        vertical: "service",
+        category_slug: "fencing-contractor",
+        postcode: "2570", // Camden (Outer SW Sydney metro range)
+        suburb: "Camden",
+        state: "NSW",
+        service_postcode: "2577", // Moss Vale / Southern Highlands (regional)
+        service_suburb: "Moss Vale / Southern Highlands",
+        platform: "Yellow Pages / Public Directory",
+      },
+      meta
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.record.postcode).toBe("2577");
+    expect(r.record.suburb).toBe("Moss Vale / Southern Highlands");
+    expect(r.record.raw_payload.office_postcode).toBe("2570");
+    expect(r.record.raw_payload.service_postcode).toBe("2577");
+    expect(String(r.record.raw_payload.notes)).toContain("Base office postcode: 2570");
+  });
+
+  it("keeps Yellow Pages visible in SOURCE_PLATFORM_OPTIONS", () => {
+    const yp = SOURCE_PLATFORM_OPTIONS.find((o) => o.value === "yellow_pages");
+    expect(yp?.label).toContain("Yellow Pages");
+  });
+
+  it("warns when adding pool fencing, handrails, or temporary barricades under fencing-contractor", () => {
+    expect(detectNonRuralFencingWarning("Coffs Coast Pool Fencing", "", "fencing-contractor")).toContain(
+      "pool fencing"
+    );
+    expect(detectNonRuralFencingWarning("Quality Handrails", "", "fencing-contractor")).toContain(
+      "handrails"
+    );
+    expect(
+      detectNonRuralFencingWarning("Rob Lee's Temporary Barricades For Hire", "", "fencing-contractor")
+    ).toContain("barricades");
+    expect(detectNonRuralFencingWarning("Central West Rural Fencing", "Hinge joint and exclusion", "fencing-contractor")).toBeNull();
+  });
+});
+
+describe("sales queue metadata helpers", () => {
+  it("round-trips stage, customer fit, relevant product, consent and next action in note", () => {
+    const formatted = formatSalesMetaNote({
+      stage: "Quote needed",
+      customerFit: "Buyer + Installer Partner (Fencing Contractor)",
+      relevantProduct: "Fixed Knot 16/180/15 Exclusion Mesh ($6/m)",
+      consent: "prospective_1to1",
+      nextAction: "Ask Daryl to quote 10 rolls to Dubbo",
+      note: "Spoke to owner, pricing 2.5km boundary job.",
+    });
+    const parsed = parseSalesMetaFromNote(formatted, "interested");
+    expect(parsed.stage).toBe("Quote needed");
+    expect(parsed.customerFit).toBe("Buyer + Installer Partner (Fencing Contractor)");
+    expect(parsed.relevantProduct).toBe("Fixed Knot 16/180/15 Exclusion Mesh ($6/m)");
+    expect(parsed.consent).toBe("prospective_1to1");
+    expect(parsed.nextAction).toBe("Ask Daryl to quote 10 rolls to Dubbo");
+    expect(parsed.cleanNote).toBe("Spoke to owner, pricing 2.5km boundary job.");
+    expect(parsed.needsJoshua).toBe(true);
   });
 });

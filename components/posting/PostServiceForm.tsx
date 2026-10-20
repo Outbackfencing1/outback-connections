@@ -3,6 +3,14 @@ import { useState, useTransition } from "react";
 import BaseFields, { Field } from "./BaseFields";
 import type { Category } from "./types";
 import type { ActionResult } from "@/lib/posting";
+import {
+  FENCE_LENGTH_OPTIONS,
+  FENCE_MATERIALS_OPTIONS,
+  FENCE_TIMING_OPTIONS,
+  FENCE_TYPE_OPTIONS,
+  formatFencingJobSpecSummary,
+  redactStreetAddressForPublicDisplay,
+} from "@/lib/fencing-job";
 
 type Props = {
   categories: Category[];
@@ -28,6 +36,23 @@ export default function PostServiceForm({
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
+
+    if (mode === "requesting") {
+      const brief = formatFencingJobSpecSummary({
+        fenceType: String(formData.get("fence_type") ?? "") || null,
+        approxLength: String(formData.get("approx_length") ?? "") || null,
+        timing: String(formData.get("timing") ?? "") || null,
+        materialsStatus: String(formData.get("materials_status") ?? "") || null,
+        photoUrls: formData.get("photo_url")
+          ? [String(formData.get("photo_url")).trim()]
+          : [],
+      });
+      const rawDesc = String(formData.get("description") ?? "").trim();
+      const safeDesc = redactStreetAddressForPublicDisplay(rawDesc);
+      const combined = brief ? `${brief}\n\n${safeDesc}` : safeDesc;
+      formData.set("description", combined.slice(0, 2000));
+    }
+
     setErrors({});
     start(async () => {
       const result = await action(formData);
@@ -54,7 +79,109 @@ export default function PostServiceForm({
 
       {listingId && <input type="hidden" name="listing_id" value={listingId} />}
 
+      {mode === "requesting" && (
+        <div className="rounded-xl border border-green-300 bg-green-50/70 p-4 text-xs text-green-950">
+          <p className="font-bold">
+            🔒 Exact farm addresses are kept private
+          </p>
+          <p className="mt-1 text-green-900">
+            Only your nearest town/postcode and job details appear publicly. Do not put your property road number or gate code in the public description — share exact directions privately once a contractor replies.
+          </p>
+        </div>
+      )}
+
       <BaseFields categories={categories} errors={errors} defaults={defaults ?? {}} />
+
+      {mode === "requesting" && (
+        <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 space-y-3">
+          <div>
+            <p className="text-sm font-semibold text-neutral-900">
+              Fencing &amp; Contracting Job Brief (Optional — helps contractors quote accurately)
+            </p>
+            <p className="mt-0.5 text-xs text-neutral-600">
+              If you&apos;re posting a fencing, yard, or rural contracting job, select the approximate length, fence type, timing, and materials status below.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field id="fence_type" label="Fence / work type" compact>
+              <select
+                id="fence_type"
+                name="fence_type"
+                defaultValue={v("fence_type")}
+                className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">Select type (optional)</option>
+                {FENCE_TYPE_OPTIONS.map((o) => (
+                  <option key={o.slug} value={o.slug}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field id="approx_length" label="Approximate length" compact>
+              <select
+                id="approx_length"
+                name="approx_length"
+                defaultValue={v("approx_length")}
+                className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">Select length (optional)</option>
+                {FENCE_LENGTH_OPTIONS.map((o) => (
+                  <option key={o.slug} value={o.slug}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field id="timing" label="Preferred timing" compact>
+              <select
+                id="timing"
+                name="timing"
+                defaultValue={v("timing")}
+                className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">Select timing (optional)</option>
+                {FENCE_TIMING_OPTIONS.map((o) => (
+                  <option key={o.slug} value={o.slug}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field id="materials_status" label="Materials status" compact>
+              <select
+                id="materials_status"
+                name="materials_status"
+                defaultValue={v("materials_status")}
+                className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">Select materials status (optional)</option>
+                {FENCE_MATERIALS_OPTIONS.map((o) => (
+                  <option key={o.slug} value={o.slug}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+
+          <Field id="photo_url" label="Link to a photo of the fence line, country or gateway (optional)" compact>
+            <input
+              id="photo_url"
+              name="photo_url"
+              type="url"
+              maxLength={300}
+              defaultValue={v("photo_url")}
+              placeholder="https://... (optional photo link)"
+              className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+            />
+          </Field>
+        </div>
+      )}
 
       <div className="rounded-xl border border-neutral-200 p-4">
         <p className="text-sm font-semibold text-neutral-800">
@@ -139,3 +266,4 @@ export default function PostServiceForm({
     </form>
   );
 }
+

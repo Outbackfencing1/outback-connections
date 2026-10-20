@@ -27,16 +27,22 @@ export type SourcePlatformOption = {
 
 export const SOURCE_PLATFORM_OPTIONS: SourcePlatformOption[] = [
   {
+    value: "official_website",
+    label: "The business's own website",
+    needsUrl: true,
+    hint: "Paste the contractor's official website address (best source for verified rural fencers).",
+  },
+  {
     value: "facebook",
     label: "Facebook",
     needsUrl: false,
-    hint: "Paste the page URL if you have it. Otherwise we link to a Facebook search for the name.",
+    hint: "Paste the Facebook business page URL if you have it. Otherwise we link to a Facebook search for the name.",
   },
   {
     value: "yellow_pages",
-    label: "Public Directory",
+    label: "Yellow Pages / Public Directory",
     needsUrl: false,
-    hint: "Paste the listing URL if you have it. Otherwise we link to a public directory search.",
+    hint: "Paste the Yellow Pages or public directory listing URL if you have it. Otherwise we link to a directory search.",
   },
   {
     value: "truelocal",
@@ -48,19 +54,13 @@ export const SOURCE_PLATFORM_OPTIONS: SourcePlatformOption[] = [
     value: "google_maps",
     label: "Google Maps",
     needsUrl: true,
-    hint: "Paste the Google Maps share link for the place.",
-  },
-  {
-    value: "official_website",
-    label: "The business's own website",
-    needsUrl: true,
-    hint: "Paste the website address.",
+    hint: "Paste the Google Maps share link for the place (manual quick-add only; never bulk-scrape Google Maps).",
   },
   {
     value: "web",
-    label: "Somewhere else online",
+    label: "Supplier / Installer Directory or Somewhere Else Online",
     needsUrl: false,
-    hint: "Paste the URL if you have it. Otherwise we link to a web search for the name.",
+    hint: "Use for Rotech Rural, Westonfence, local council/rural directories, or other web pages. Paste the URL if you have it.",
   },
 ];
 

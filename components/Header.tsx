@@ -54,6 +54,15 @@ export default async function Header() {
             >
               Post a listing
             </Link>
+            <a
+              href="/go/trade?to=store&from=header"
+              target="_blank"
+              rel="nofollow noopener noreferrer"
+              title="Operator store: Outback Fencing & Steel Supplies (Orange NSW)"
+              className="rounded px-2 py-1.5 text-xs font-medium text-neutral-600 hover:text-green-800"
+            >
+              Fencing supplies (Outback) ↗
+            </a>
             {signedIn ? (
               <>
                 <Link
@@ -105,6 +114,14 @@ export default async function Header() {
           >
             Post
           </Link>
+          <a
+            href="/go/trade?to=store&from=header"
+            target="_blank"
+            rel="nofollow noopener noreferrer"
+            className="rounded px-2 py-1.5 text-xs font-medium text-neutral-600"
+          >
+            Fencing supplies ↗
+          </a>
           {signedIn ? (
             <>
               <Link

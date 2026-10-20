@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   availabilityStatusInfo,
+  buildSpecificTrustChecks,
+  contractorEquipmentLabel,
   dealTypeLabel,
   evaluateClaimAutoVerification,
   extractBusinessDomain,
   formatAbn,
+  formatBelievableAvailability,
   formatPhoneHref,
   insuranceBadgeLabel,
   isAustralianMobile,
+  isCompletedWorkReview,
   isCustomerTrustTag,
   isValidAvailabilityStatus,
   isValidAustralianAbn,
@@ -17,6 +21,8 @@ import {
   isValidTrustTag,
   normaliseAbn,
   normalisePhoneDigits,
+  partitionReviewsAndVouches,
+  preferredJobSizeLabel,
   roleTagLabel,
   trustTagLabel,
 } from "@/lib/trust";
@@ -80,6 +86,8 @@ describe("lib/trust rural tags, availability, and badges", () => {
     expect(isValidRoleTag("earthmoving_dam_contractor")).toBe(true);
     expect(isValidRoleTag("bore_water_driller")).toBe(true);
     expect(roleTagLabel("fencing_contractor")).toBe("Fencing Contractor");
+    expect(contractorEquipmentLabel("post_driver_hydraulic")).toBe("Hydraulic Post Driver");
+    expect(preferredJobSizeLabel("medium_1km_to_5km")).toContain("1–5 km");
   });
 
   it("validates and returns availability status info", () => {
@@ -89,9 +97,55 @@ describe("lib/trust rural tags, availability, and badges", () => {
     expect(availabilityStatusInfo("booked_out").shortLabel).toBe("Booked out");
     expect(availabilityStatusInfo(null).shortLabel).toBe("Available now");
   });
+
+  it("formats believable availability with freshness dates and 45-day staleness guard", () => {
+    const now = new Date("2026-10-18T10:00:00Z");
+
+    const takingBookings = formatBelievableAvailability({
+      availabilityStatus: "available",
+      availabilityNote: null,
+      availabilityUpdatedAt: "2026-10-15T10:00:00Z",
+      ownerConfirmed: true,
+      now,
+    });
+    expect(takingBookings.headline).toBe("Taking bookings");
+    expect(takingBookings.isStale).toBe(false);
+    expect(takingBookings.updatedText).toContain("15 Oct 2026");
+
+    const bookedUntilNov = formatBelievableAvailability({
+      availabilityStatus: "booked_out",
+      availabilityNote: "November",
+      availabilityUpdatedAt: "2026-10-12T10:00:00Z",
+      ownerConfirmed: true,
+      now,
+    });
+    expect(bookedUntilNov.headline).toBe("Booked until November");
+    expect(bookedUntilNov.statusKind).toBe("booked_until");
+    expect(bookedUntilNov.isStale).toBe(false);
+
+    const stale = formatBelievableAvailability({
+      availabilityStatus: "available",
+      availabilityNote: null,
+      availabilityUpdatedAt: "2026-07-01T10:00:00Z",
+      ownerConfirmed: true,
+      now,
+    });
+    expect(stale.headline).toBe("Availability not recently confirmed");
+    expect(stale.isStale).toBe(true);
+    expect(stale.updatedText).toContain("Last updated");
+
+    const unclaimed = formatBelievableAvailability({
+      availabilityStatus: "available",
+      availabilityUpdatedAt: "2026-10-15T10:00:00Z",
+      ownerConfirmed: false,
+      now,
+    });
+    expect(unclaimed.headline).toBe("Availability not recently confirmed");
+    expect(unclaimed.isStale).toBe(true);
+  });
 });
 
-describe("lib/trust business claim ownership auto-verification", () => {
+describe("lib/trust business claim ownership auto-verification (Scamwatch aligned)", () => {
   it("normalises Australian phone numbers and extracts custom business domains", () => {
     expect(normalisePhoneDigits("+61 421 572 245")).toBe("0421572245");
     expect(normalisePhoneDigits("02 6362 9258")).toBe("0263629258");
@@ -132,8 +186,8 @@ describe("lib/trust business claim ownership auto-verification", () => {
     expect(domainMatch.domainMatchesFile).toBe(true);
   });
 
-  it("auto-approves when valid ABN matches ABR entity name or registered phone number", () => {
-    const abnEntityMatch = evaluateClaimAutoVerification({
+  it("does NOT auto-approve an ABN match alone without matching business phone or email/domain (Scamwatch guard)", () => {
+    const abnOnlyWithoutPhoneMatch = evaluateClaimAutoVerification({
       claimantEmail: "dave.lang@gmail.com",
       businessName: "Langs Rural Fencing Contractors",
       businessEmail: null,
@@ -145,10 +199,12 @@ describe("lib/trust business claim ownership auto-verification", () => {
       abrIsActive: true,
       abrEntityName: "LANGS RURAL FENCING CONTRACTORS PTY LTD",
     });
-    expect(abnEntityMatch.autoApprove).toBe(true);
-    expect(abnEntityMatch.method).toBe("abn_match");
+    expect(abnOnlyWithoutPhoneMatch.autoApprove).toBe(false);
+    expect(abnOnlyWithoutPhoneMatch.method).toBe("admin_approval");
+    expect(abnOnlyWithoutPhoneMatch.abnDetailsChecked).toBe(true);
+    expect(abnOnlyWithoutPhoneMatch.reason).toContain("Scamwatch");
 
-    const abnPhoneMatch = evaluateClaimAutoVerification({
+    const abnPlusPhoneMatch = evaluateClaimAutoVerification({
       claimantEmail: "owner@bigpond.com",
       businessName: "Dubbo Rural Contracting",
       businessEmail: null,
@@ -160,9 +216,10 @@ describe("lib/trust business claim ownership auto-verification", () => {
       abrIsActive: true,
       abrEntityName: null,
     });
-    expect(abnPhoneMatch.autoApprove).toBe(true);
-    expect(abnPhoneMatch.method).toBe("abn_match");
-    expect(abnPhoneMatch.phoneMatchesFile).toBe(true);
+    expect(abnPlusPhoneMatch.autoApprove).toBe(true);
+    expect(abnPlusPhoneMatch.method).toBe("abn_match");
+    expect(abnPlusPhoneMatch.phoneMatchesFile).toBe(true);
+    expect(abnPlusPhoneMatch.abnDetailsChecked).toBe(true);
   });
 
   it("routes unverified free-webmail claims without ABN match to manual admin review", () => {
@@ -177,6 +234,92 @@ describe("lib/trust business claim ownership auto-verification", () => {
     });
     expect(manualReview.autoApprove).toBe(false);
     expect(manualReview.method).toBe("admin_approval");
+    expect(manualReview.abnDetailsChecked).toBe(false);
+  });
+});
+
+describe("lib/trust 4-tier specific trust checks and review vs vouch separation", () => {
+  it("separates owner confirmed, ABN details checked, insurance self-declared, and insurance document checked", () => {
+    const now = new Date("2026-10-18T10:00:00Z");
+    const checks = buildSpecificTrustChecks({
+      hasBusinessRecord: true,
+      claimStatus: "claimed",
+      claimedAt: "2026-10-10T09:00:00Z",
+      abn: "51824753556",
+      abnVerified: true,
+      abnEntityName: "ORANGE FENCING PTY LTD",
+      abnVerifiedAt: "2026-10-10T09:00:00Z",
+      insurancesHeld: ["public_liability"],
+      insuranceVerifiedAt: "2026-10-11T09:00:00Z",
+      insuranceExpiryDate: "2027-06-30",
+      now,
+    });
+
+    expect(checks).toHaveLength(4);
+    expect(checks[0].key).toBe("owner_confirmed");
+    expect(checks[0].status).toBe("verified");
+    expect(checks[1].key).toBe("abn_details_checked");
+    expect(checks[1].status).toBe("verified");
+    expect(checks[1].detail).toContain("does not by itself prove business control");
+    expect(checks[2].key).toBe("insurance_self_declared");
+    expect(checks[2].status).toBe("self_declared");
+    expect(checks[3].key).toBe("insurance_document_checked");
+    expect(checks[3].status).toBe("verified");
+    expect(checks[3].detail).toContain("Expires");
+
+    const expiredChecks = buildSpecificTrustChecks({
+      hasBusinessRecord: true,
+      claimStatus: "unclaimed",
+      abn: "51824753556",
+      abnVerified: true,
+      insurancesHeld: ["public_liability"],
+      insuranceVerifiedAt: "2025-05-01T09:00:00Z",
+      insuranceExpiryDate: "2026-05-01",
+      now,
+    });
+    expect(expiredChecks[0].status).toBe("unverified");
+    expect(expiredChecks[3].status).toBe("expired");
+  });
+
+  it("prevents quick neighbour vouches from turning into 5-star completed-work reviews", () => {
+    const rows = [
+      {
+        id: "1",
+        created_at: "2026-10-15T00:00:00Z",
+        reviewer_display_name: "Tom B.",
+        reviewer_postcode: "2800",
+        rating: 5,
+        would_recommend: true,
+        deal_type: "general",
+        tags: ["turned_up_on_time"],
+        comment: null,
+        vendor_reply: null,
+        vendor_replied_at: null,
+      },
+      {
+        id: "2",
+        created_at: "2026-10-16T00:00:00Z",
+        reviewer_display_name: "Sarah M.",
+        reviewer_postcode: "2795",
+        rating: 4,
+        would_recommend: true,
+        deal_type: "fencing_service",
+        tags: ["quality_fencing", "turned_up_on_time"],
+        comment: "Put up 3.2km of hinge joint and strainer assemblies near Bathurst. Very tidy work.",
+        vendor_reply: "Thanks Sarah, appreciate the work.",
+        vendor_replied_at: "2026-10-17T00:00:00Z",
+      },
+    ];
+
+    expect(isCompletedWorkReview(rows[0])).toBe(false);
+    expect(isCompletedWorkReview(rows[1])).toBe(true);
+
+    const partitioned = partitionReviewsAndVouches(rows);
+    expect(partitioned.completedReviewCount).toBe(1);
+    expect(partitioned.vouchCount).toBe(1);
+    // Star rating must reflect ONLY the completed-work review (4.0), not the 5-star quick vouch!
+    expect(partitioned.avgRating).toBe(4);
+    expect(partitioned.recommendPct).toBe(100);
   });
 });
 

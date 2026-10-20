@@ -1,7 +1,7 @@
 // app/dashboard/admin/layout.tsx
 // Shared admin nav across every /dashboard/admin/* page. Server-side gated:
-// the nav only renders for is_admin users (each page still gates its own
-// content). Makes Import / Claims / Analytics reachable, not URL-only.
+// the nav only renders for is_admin / is_staff users (each page still gates its own
+// content). Makes Hub Queue / Import / Claims / Analytics reachable, not URL-only.
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 
@@ -9,6 +9,8 @@ export const dynamic = "force-dynamic";
 
 // staff: true = visible to staff as well as admins.
 const ADMIN_LINKS: { href: string; label: string; staff: boolean }[] = [
+  { href: "/dashboard/admin/hub-queue", label: "Hub queue (Ali)", staff: true },
+  { href: "/dashboard/admin/daily-report", label: "Daily report", staff: true },
   { href: "/dashboard/admin/contractor-outreach", label: "Contractor outreach", staff: true },
   { href: "/dashboard/admin/enquiries", label: "Enquiries", staff: true },
   { href: "/dashboard/directory/add", label: "Add directory entry", staff: true },

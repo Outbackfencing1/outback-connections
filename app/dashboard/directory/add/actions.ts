@@ -13,6 +13,7 @@ import { requireDirectoryContributor } from "@/lib/directory-access";
 import { listingHref } from "@/lib/format";
 import {
   buildDirectoryRecord,
+  detectNonRuralFencingWarning,
   type DirectoryEntryInput,
   type BuildResult,
 } from "@/lib/directory-records";
@@ -33,6 +34,8 @@ function formToInput(fd: FormData): DirectoryEntryInput {
     postcode: str(fd, "postcode"),
     suburb: str(fd, "suburb"),
     state: str(fd, "state"),
+    service_postcode: str(fd, "service_postcode"),
+    service_suburb: str(fd, "service_suburb"),
     platform: str(fd, "platform"),
     source_url: str(fd, "source_url"),
     website: str(fd, "website"),
@@ -91,6 +94,11 @@ export async function previewDirectoryEntry(formData: FormData): Promise<Directo
   const row = ((data?.rows ?? []) as PreviewRowShape[])[0];
   if (!row) return { ok: false, errors: { _: "Preview returned nothing." } };
 
+  const input = formToInput(formData);
+  const relevanceWarn = detectNonRuralFencingWarning(input.name, input.notes, input.category_slug);
+  const warnings = [...(row.warnings ?? [])];
+  if (relevanceWarn) warnings.unshift(relevanceWarn);
+
   return {
     ok: true,
     valid: !!row.valid,
@@ -102,7 +110,7 @@ export async function previewDirectoryEntry(formData: FormData): Promise<Directo
     sourceUrl: built.record.source_url,
     urlKind: built.urlKind,
     errors: row.errors ?? [],
-    warnings: row.warnings ?? [],
+    warnings,
   };
 }
 

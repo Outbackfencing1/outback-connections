@@ -5,6 +5,10 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { setFlash } from "@/lib/posting";
+import {
+  executePendingListingApproval,
+  isValidListingId,
+} from "@/lib/pending-approval";
 
 async function requireAdmin() {
   const supabase = createClient();
@@ -44,7 +48,10 @@ async function requireStaffOrAdmin() {
 
 export async function approvePendingListing(formData: FormData): Promise<void> {
   const id = formData.get("listing_id");
-  if (typeof id !== "string" || !id) redirect("/dashboard/admin/flags");
+  if (!isValidListingId(id)) {
+    await setFlash("Invalid listing ID.");
+    redirect("/dashboard/admin/flags");
+  }
 
   await requireStaffOrAdmin();
   const admin = createAdminClient();
@@ -53,16 +60,15 @@ export async function approvePendingListing(formData: FormData): Promise<void> {
     redirect("/dashboard/admin/flags");
   }
 
-  const { error } = await admin
-    .from("listings")
-    .update({ status: "active" })
-    .eq("id", id);
+  const outcome = await executePendingListingApproval(admin, id);
 
-  if (error) {
-    console.error("[admin] approve pending listing failed:", error.message);
-    await setFlash("Couldn't approve listing.");
+  if (!outcome.ok) {
+    if (outcome.reason === "db_error" && outcome.errorMessage) {
+      console.error("[admin] approve pending listing failed:", outcome.errorMessage);
+    }
+    await setFlash(outcome.flash);
   } else {
-    await setFlash("Listing approved and published live.");
+    await setFlash(outcome.flash);
     revalidatePath("/dashboard/admin/flags");
     revalidatePath("/jobs");
     revalidatePath("/freight");

@@ -3,10 +3,16 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listingHref } from "@/lib/format";
 import OutreachRowActions from "./OutreachRowActions";
-import { OUTREACH_STATUSES, type OutreachStatus } from "@/lib/outreach-statuses";
+import {
+  DARYL_HANDOFF_STATES,
+  MARKETING_CONSENT_OPTIONS,
+  OUTREACH_STATUSES,
+  parseSalesMetaFromNote,
+  type OutreachStatus,
+} from "@/lib/outreach-statuses";
 
 export const metadata = {
-  title: "Contractor outreach — Outback Connections",
+  title: "Rural hub directory & relationship queue — Outback Connections",
   robots: { index: false, follow: false },
 };
 
@@ -70,6 +76,15 @@ type Counts = {
   follow_ups_due: number | null;
 };
 
+type OpenEnquirySummary = {
+  id: string;
+  name: string;
+  status: string;
+  postcode: string | null;
+  message: string;
+  created_at: string;
+};
+
 export default async function ContractorOutreachPage({
   searchParams,
 }: {
@@ -108,7 +123,7 @@ export default async function ContractorOutreachPage({
   const searchPattern = safeLikePattern(filters.q);
   if (searchPattern) {
     query = query.or(
-      `business_name.ilike.%${searchPattern}%,suburb.ilike.%${searchPattern}%,contact_email.ilike.%${searchPattern}%,contact_phone.ilike.%${searchPattern}%`
+      `business_name.ilike.%${searchPattern}%,suburb.ilike.%${searchPattern}%,contact_email.ilike.%${searchPattern}%,contact_phone.ilike.%${searchPattern}%,latest_note.ilike.%${searchPattern}%`
     );
   }
   const townPattern = safeLikePattern(filters.town);
@@ -157,7 +172,7 @@ export default async function ContractorOutreachPage({
   const from = (filters.page - 1) * PAGE_SIZE;
   query = query.range(from, from + PAGE_SIZE - 1);
 
-  const [prospectResult, countResult, categoryResult, assigneeResult] =
+  const [prospectResult, countResult, categoryResult, assigneeResult, enquiryResult] =
     await Promise.all([
       query,
       supabase.rpc("admin_contractor_outreach_counts"),
@@ -172,6 +187,12 @@ export default async function ContractorOutreachPage({
         .select("assigned_to, assigned_name")
         .not("assigned_name", "is", null)
         .limit(1000),
+      supabase
+        .from("listing_enquiries")
+        .select("id, name, status, postcode, message, created_at")
+        .in("status", ["new", "forwarded"])
+        .order("created_at", { ascending: false })
+        .limit(10),
     ]);
 
   if (prospectResult.error) {
@@ -188,9 +209,12 @@ export default async function ContractorOutreachPage({
   const total = prospectResult.count ?? 0;
   const counts = normaliseCounts(countResult.data);
   const categories = (categoryResult.data ?? []) as Category[];
+  const openEnquiries = (enquiryResult.data ?? []) as OpenEnquirySummary[];
   const assignees = Array.from(
     new Set([
       "Ali",
+      "Daryl",
+      "Joshua",
       ...(assigneeResult.data ?? [])
         .map((row) => row.assigned_name?.trim())
         .filter((value): value is string => !!value),
@@ -199,23 +223,37 @@ export default async function ContractorOutreachPage({
 
   return (
     <PageShell>
-      <p className="mt-2 max-w-3xl text-sm text-neutral-700">
-        Work through regional Australian contractors, carriers, and rural suppliers across every category, record each contact, and schedule follow-ups. Invitation buttons copy text or open your phone/email/SMS app — this page never sends bulk messages.
+      <p className="mt-2 max-w-4xl text-sm text-neutral-700">
+        <strong>Rural Hub Provider &amp; Claim Support Workspace.</strong> Outback Connections is a free hub for all rural work, jobs, and services. Use this table to help providers across all 24 service and 8 freight categories claim or refresh their listings, and hand genuine Outback Fencing product enquiries once to <strong>Daryl</strong>. Directory inclusion and profile claims are completely separate from product sales.
       </p>
       <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold">
-        <Link href="/dashboard/admin/flags" className="text-green-800 underline hover:text-green-950">
+        <Link
+          href="/dashboard/admin/hub-queue"
+          className="rounded-lg bg-green-800 px-3 py-1.5 text-white hover:bg-green-950"
+        >
+          ★ Open Ali&apos;s Daily Rural Hub Growth Queue (A01–A06) →
+        </Link>
+        <Link href="/dashboard/admin/enquiries" className="self-center text-green-800 underline hover:text-green-950">
+          Enquiries ({enquiryResult.error ? "read error" : `${openEnquiries.length} open`}) →
+        </Link>
+        <Link href="/dashboard/directory/add" className="self-center text-green-800 underline hover:text-green-950">
+          + Add directory entry →
+        </Link>
+        <Link href="/dashboard/admin/daily-report" className="self-center text-green-800 underline hover:text-green-950">
+          Daily operator report →
+        </Link>
+        <Link href="/dashboard/admin/flags" className="self-center text-green-800 underline hover:text-green-950">
           Verification &amp; flag queue →
         </Link>
-        <Link href="/dashboard/directory/add" className="text-green-800 underline hover:text-green-950">
-          + Add directory contractor →
-        </Link>
-        <Link href="/dashboard/admin/enquiries" className="text-green-800 underline hover:text-green-950">
-          Customer enquiries →
-        </Link>
-        <Link href="/dashboard/admin/demand" className="text-green-800 underline hover:text-green-950">
-          Regional demand &amp; forecasting →
-        </Link>
       </div>
+
+      <PriorityFollowUpBanner
+        openEnquiries={openEnquiries}
+        enquiryReadError={enquiryResult.error?.message ?? null}
+        counts={counts}
+      />
+
+      <QuickPriorityTabs />
 
       {countResult.error && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
@@ -232,7 +270,7 @@ export default async function ContractorOutreachPage({
 
       <div className="mt-5 flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-sm font-semibold text-neutral-900">
-          {total.toLocaleString("en-AU")} contractor{total === 1 ? "" : "s"}
+          {total.toLocaleString("en-AU")} business{total === 1 ? "" : "es"}
           {hasFilters(filters) ? " match these filters" : ""}
         </p>
         <p className="text-xs text-neutral-500">50 per page</p>
@@ -240,7 +278,7 @@ export default async function ContractorOutreachPage({
 
       {rows.length === 0 ? (
         <div className="mt-4 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center text-sm text-neutral-700">
-          No contractors match these filters. Try resetting one or two filters.
+          No businesses match these filters. Try resetting one or two filters.
         </div>
       ) : (
         <ProspectTable rows={rows} assignees={assignees} />
@@ -255,11 +293,140 @@ export default async function ContractorOutreachPage({
   );
 }
 
+function PriorityFollowUpBanner({
+  openEnquiries,
+  enquiryReadError,
+  counts,
+}: {
+  openEnquiries: OpenEnquirySummary[];
+  enquiryReadError: string | null;
+  counts: Counts;
+}) {
+  const tommyMatch = openEnquiries.find(
+    (e) =>
+      /brettschneider|tommy/i.test(e.name) ||
+      /brettschneider|pool/i.test(e.message)
+  );
+
+  return (
+    <div className="mt-5 grid gap-3 lg:grid-cols-2">
+      <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-950">
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-bold uppercase tracking-wide text-amber-900">
+            Priority 1 · Urgent Enquiries, Corrections &amp; Removal Requests
+          </p>
+          <Link
+            href="/dashboard/admin/enquiries?status=open"
+            className="rounded bg-amber-900 px-2.5 py-1 font-semibold text-white hover:bg-amber-950"
+          >
+            Enquiry Queue ({enquiryReadError ? "Unavailable" : openEnquiries.length}) →
+          </Link>
+        </div>
+        {enquiryReadError && (
+          <p className="mt-2 rounded border border-red-200 bg-red-50 px-2.5 py-1.5 text-red-900">
+            ⚠ Couldn&apos;t read open enquiries ({enquiryReadError}). Do not treat this as zero open enquiries.
+          </p>
+        )}
+        <div className="mt-2.5 rounded-lg border border-amber-200 bg-white p-3">
+          <p className="font-semibold text-neutral-900">
+            Open Customer Request Check: Tommy Brettschneider (&ldquo;pools to buy&rdquo;)
+          </p>
+          {tommyMatch ? (
+            <p className="mt-1 text-neutral-700">
+              Found in open enquiries ({tommyMatch.status}): &ldquo;{tommyMatch.message.slice(0, 140)}&rdquo; —{" "}
+              <Link href="/dashboard/admin/enquiries?status=open" className="font-semibold text-green-800 underline">
+                Action in Enquiries →
+              </Link>
+            </p>
+          ) : (
+            <p className="mt-1 text-neutral-700">
+              <strong>Preserve original request wording:</strong> Tommy Brettschneider asked for a link to <strong>pools to buy</strong> (not pool fencing). Do not rewrite his request as pool fencing or forward it blindly to a fencing contractor. Clarify the intended product first and route to Daryl/Joshua if he needs stock tanks/water troughs or rural supplies.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-xs text-emerald-950">
+        <p className="font-bold uppercase tracking-wide text-emerald-900">
+          Hub Separation · Directory Claims vs. Daryl Product Handoffs
+        </p>
+        <ul className="mt-2 space-y-1.5 text-neutral-800">
+          <li>
+            • <strong>Three Independent Decisions:</strong> (1) Does the business/job belong in the rural hub? (2) Is evidence sufficient? (3) Is there a separate Outback product enquiry? A &ldquo;no&rdquo; to #3 never excludes a useful rural service.
+          </li>
+          <li>
+            • <strong>Product Handoffs to Daryl:</strong>{" "}
+            <Link
+              href="/dashboard/admin/contractor-outreach?status=interested&sort=follow_up"
+              className="font-semibold text-green-800 underline"
+            >
+              {(counts.interested ?? 0).toLocaleString("en-AU")} active interested / enquiry row(s)
+            </Link>{" "}
+            — click &ldquo;Hand Product Enquiry to Daryl&rdquo; once; Daryl owns sales follow-up so two people never chase the same customer.
+          </li>
+          <li>
+            • <strong>Due Follow-ups:</strong>{" "}
+            <Link
+              href="/dashboard/admin/contractor-outreach?contacted=due&sort=follow_up"
+              className="font-semibold text-green-800 underline"
+            >
+              {(counts.follow_ups_due ?? 0).toLocaleString("en-AU")} due
+            </Link>
+          </li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function QuickPriorityTabs() {
+  const tabs: Array<{ label: string; href: string; tone: string }> = [
+    {
+      label: "All Directory Records",
+      href: "/dashboard/admin/contractor-outreach",
+      tone: "border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-50",
+    },
+    {
+      label: "1. Follow-ups Due Today",
+      href: "/dashboard/admin/contractor-outreach?contacted=due&sort=follow_up",
+      tone: "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100",
+    },
+    {
+      label: "2. Non-Fencing Services (Under-Covered Categories)",
+      href: "/dashboard/admin/contractor-outreach?category=water-bores&sort=not_contacted",
+      tone: "border-blue-300 bg-blue-50 text-blue-900 hover:bg-blue-100",
+    },
+    {
+      label: "3. Claim Support / Interested",
+      href: "/dashboard/admin/contractor-outreach?status=interested&sort=follow_up",
+      tone: "border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100",
+    },
+    {
+      label: "4. Claimed Profiles (Joined)",
+      href: "/dashboard/admin/contractor-outreach?status=joined&sort=recent",
+      tone: "border-green-300 bg-green-50 text-green-900 hover:bg-green-100",
+    },
+  ];
+  return (
+    <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+      {tabs.map((tab) => (
+        <Link
+          key={tab.label}
+          href={tab.href}
+          className={`rounded-lg border px-3 py-1.5 ${tab.tone}`}
+        >
+          {tab.label}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto max-w-[1500px] px-4 py-8">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-3xl font-bold tracking-tight">Contractor outreach</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Rural hub directory &amp; relationship queue</h1>
         <Link href="/dashboard" className="text-sm underline">
           ← Dashboard
         </Link>
@@ -296,16 +463,16 @@ function ErrorBox({ message }: { message: string }) {
 
 function CountCards({ counts }: { counts: Counts }) {
   const cards: Array<[string, number | null, string]> = [
-    ["Total", counts.total, "border-neutral-200"],
-    ["Not contacted", counts.not_contacted, "border-slate-200"],
+    ["Total in Directory", counts.total, "border-neutral-200"],
+    ["Not Contacted", counts.not_contacted, "border-slate-200"],
     ["Contacted", counts.contacted, "border-blue-200"],
-    ["Interested", counts.interested, "border-emerald-200"],
-    ["Invited", counts.invite_sent, "border-violet-200"],
-    ["Joined", counts.joined, "border-green-300"],
-    ["Follow-ups due", counts.follow_ups_due, "border-amber-300"],
+    ["Interested / Enquiry", counts.interested, "border-emerald-200"],
+    ["Claim Invite Sent", counts.invite_sent, "border-violet-200"],
+    ["Profile Claimed", counts.joined, "border-green-300"],
+    ["Follow-ups Due", counts.follow_ups_due, "border-amber-300"],
   ];
   return (
-    <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
+    <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
       {cards.map(([label, value, border]) => (
         <div key={label} className={`rounded-xl border bg-white p-3 ${border}`}>
           <p className="text-2xl font-bold tabular-nums text-neutral-900">
@@ -333,14 +500,14 @@ function Filters({
     <form
       action="/dashboard/admin/contractor-outreach"
       method="get"
-      className="mt-6 rounded-xl border border-neutral-200 bg-neutral-50 p-4"
+      className="mt-5 rounded-xl border border-neutral-200 bg-neutral-50 p-4"
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
         <FilterInput
-          label="Search"
+          label="Search (business, note)"
           name="q"
           value={filters.q}
-          placeholder="Business, email or phone"
+          placeholder="Business or note"
         />
         <FilterInput
           label="Town / suburb"
@@ -354,7 +521,7 @@ function Filters({
             <option key={state} value={state}>{state}</option>
           ))}
         </FilterSelect>
-        <FilterSelect label="Outreach status" name="status" value={filters.status}>
+        <FilterSelect label="Directory status" name="status" value={filters.status}>
           <option value="">All statuses</option>
           {OUTREACH_STATUSES.map((item) => (
             <option key={item.value} value={item.value}>{item.label}</option>
@@ -369,7 +536,7 @@ function Filters({
         <FilterSelect label="Claimed" name="claim" value={filters.claim}>
           <option value="">Any</option>
           <option value="unclaimed">Unclaimed</option>
-          <option value="claimed">Claimed / joined</option>
+          <option value="claimed">Claimed by owner</option>
         </FilterSelect>
         <FilterSelect label="Has phone" name="phone" value={filters.hasPhone}>
           <option value="">Any</option>
@@ -389,7 +556,7 @@ function Filters({
             </option>
           ))}
         </FilterSelect>
-        <FilterSelect label="Assigned person" name="assigned" value={filters.assigned}>
+        <FilterSelect label="Owner / assigned" name="assigned" value={filters.assigned}>
           <option value="">Anyone</option>
           <option value="__unassigned">Unassigned</option>
           {assignees.map((assignee) => (
@@ -470,15 +637,15 @@ function FilterSelect({
 function ProspectTable({ rows, assignees }: { rows: ProspectRow[]; assignees: string[] }) {
   return (
     <div className="mt-4 overflow-x-auto rounded-xl border border-neutral-200 bg-white">
-      <table className="min-w-[1250px] w-full divide-y divide-neutral-200 text-left text-sm">
+      <table className="min-w-[1320px] w-full divide-y divide-neutral-200 text-left text-sm">
         <thead className="bg-neutral-50 text-xs uppercase tracking-wide text-neutral-600">
           <tr>
-            <th className="px-3 py-2">Business</th>
+            <th className="px-3 py-2">Business &amp; Hub Role</th>
             <th className="px-3 py-2">Location</th>
-            <th className="px-3 py-2">Contact</th>
-            <th className="px-3 py-2">Profile / source</th>
-            <th className="px-3 py-2">Outreach</th>
-            <th className="px-3 py-2">Fast actions</th>
+            <th className="px-3 py-2">Contact &amp; Channel Eligibility</th>
+            <th className="px-3 py-2">Profile / Source</th>
+            <th className="px-3 py-2">Task State, Directory &amp; Daryl Handoff</th>
+            <th className="px-3 py-2">Fast Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-neutral-100 align-top">
@@ -492,19 +659,56 @@ function ProspectTable({ rows, assignees }: { rows: ProspectRow[]; assignees: st
                 ? `${BASE_URL}/claim/${row.business_id}`
                 : publicUrl || `${BASE_URL}/dashboard/listings`;
             const status = row.outreach_status || "not_contacted";
-            const contactBlocked = status === "do_not_contact" || status === "invalid_duplicate";
+            const salesMeta = parseSalesMetaFromNote(row.latest_note, status);
+            const consentObj = MARKETING_CONSENT_OPTIONS.find(
+              (c) => c.value === salesMeta.consent
+            );
+            const handoffObj = DARYL_HANDOFF_STATES.find(
+              (h) => h.value === salesMeta.darylHandoff
+            );
+            const contactBlocked =
+              salesMeta.consent === "do_not_contact" ||
+              status === "do_not_contact" ||
+              status === "invalid_duplicate";
             const websiteHref = safeHttpUrl(row.website_url);
             const sourceHref = safeHttpUrl(row.source_url);
             return (
-              <tr key={row.business_id} className={isDue(row) ? "bg-amber-50/50" : undefined}>
-                <td className="max-w-[260px] px-3 py-3">
-                  <p className="font-semibold text-neutral-900">{row.business_name}</p>
-                  <p className="mt-1 text-xs text-neutral-600">
-                    {row.category_label || "Fencing contractor"}
+              <tr
+                key={row.business_id}
+                className={
+                  salesMeta.needsJoshua
+                    ? "bg-emerald-50/40"
+                    : isDue(row)
+                      ? "bg-amber-50/50"
+                      : undefined
+                }
+              >
+                <td className="max-w-[280px] px-3 py-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="font-semibold text-neutral-900">{row.business_name}</p>
+                    {salesMeta.darylHandoff !== "none" && (
+                      <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-950">
+                        {handoffObj?.label ?? salesMeta.darylHandoff}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-xs text-neutral-600">
+                    {row.category_label || "Rural service"}
                   </p>
-                  {row.latest_note && (
-                    <p className="mt-2 line-clamp-3 text-xs text-neutral-600" title={row.latest_note}>
-                      <span className="font-medium">Latest note:</span> {row.latest_note}
+                  {salesMeta.customerFit && (
+                    <p className="mt-1 text-xs font-medium text-emerald-900">
+                      Role: {salesMeta.customerFit}
+                    </p>
+                  )}
+                  {salesMeta.relevantProduct &&
+                    salesMeta.relevantProduct !== "None — Free Rural Hub Listing Only" && (
+                      <p className="mt-0.5 text-xs text-neutral-700">
+                        Product note: {salesMeta.relevantProduct}
+                      </p>
+                    )}
+                  {salesMeta.cleanNote && (
+                    <p className="mt-2 line-clamp-3 text-xs text-neutral-600" title={salesMeta.cleanNote}>
+                      <span className="font-medium">Note:</span> {salesMeta.cleanNote}
                     </p>
                   )}
                 </td>
@@ -515,6 +719,19 @@ function ProspectTable({ rows, assignees }: { rows: ProspectRow[]; assignees: st
                   </p>
                 </td>
                 <td className="max-w-[250px] px-3 py-3 text-xs">
+                  <div className="mb-1.5">
+                    <span
+                      className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                        salesMeta.consent === "opted_in_marketing"
+                          ? "bg-green-100 text-green-800"
+                          : salesMeta.consent === "do_not_contact"
+                            ? "bg-red-100 text-red-800"
+                            : "bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      {consentObj?.shortBadge ?? "Directory Only"}
+                    </span>
+                  </div>
                   {row.contact_phone ? (
                     <p>
                       {contactBlocked ? (
@@ -575,27 +792,47 @@ function ProspectTable({ rows, assignees }: { rows: ProspectRow[]; assignees: st
                     )}
                   </div>
                 </td>
-                <td className="min-w-[200px] px-3 py-3 text-xs text-neutral-700">
-                  <StatusBadge status={status} />
+                <td className="min-w-[210px] px-3 py-3 text-xs text-neutral-700">
+                  <div className="flex flex-wrap items-center gap-1">
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-800">
+                      Task: {salesMeta.taskState}
+                    </span>
+                    <StatusBadge status={status} stageLabel={salesMeta.stage} />
+                  </div>
                   <dl className="mt-2 space-y-1">
                     <div>
-                      <dt className="inline text-neutral-500">Assigned: </dt>
-                      <dd className="inline font-medium">{row.assigned_name || "Unassigned"}</dd>
+                      <dt className="inline text-neutral-500">Owner: </dt>
+                      <dd className="inline font-medium">{row.assigned_name || "Ali"}</dd>
                     </div>
+                    {salesMeta.darylHandoff !== "none" && (
+                      <div>
+                        <dt className="inline text-neutral-500">Sales handoff: </dt>
+                        <dd className="inline font-semibold text-amber-900">
+                          {handoffObj?.label ?? salesMeta.darylHandoff}
+                        </dd>
+                      </div>
+                    )}
+                    {salesMeta.nextAction && (
+                      <div>
+                        <dt className="inline text-neutral-500">Next action: </dt>
+                        <dd className="inline font-semibold text-neutral-900">{salesMeta.nextAction}</dd>
+                      </div>
+                    )}
                     <div>
                       <dt className="inline text-neutral-500">Last contact: </dt>
                       <dd className="inline">{formatDateTime(row.last_contacted_at)}</dd>
                     </div>
                     <div className={isDue(row) ? "font-semibold text-amber-900" : undefined}>
-                      <dt className="inline text-neutral-500">Next: </dt>
+                      <dt className="inline text-neutral-500">Due date: </dt>
                       <dd className="inline">{formatDateTime(row.next_follow_up_at)}</dd>
                     </div>
                   </dl>
                 </td>
-                <td className="min-w-[330px] px-3 py-3">
+                <td className="min-w-[340px] px-3 py-3">
                   <OutreachRowActions
                     businessId={row.business_id}
                     businessName={row.business_name}
+                    suburb={row.suburb}
                     email={row.contact_email}
                     phone={row.contact_phone}
                     invitationUrl={invitationUrl}
@@ -604,6 +841,7 @@ function ProspectTable({ rows, assignees }: { rows: ProspectRow[]; assignees: st
                     assignedTo={row.assigned_to}
                     assignedName={row.assigned_name}
                     nextFollowUpAt={row.next_follow_up_at}
+                    latestNote={row.latest_note}
                     assignees={assignees}
                   />
                 </td>
@@ -625,8 +863,8 @@ function ClaimBadge({ claimStatus }: { claimStatus: string }) {
   );
 }
 
-function StatusBadge({ status }: { status: OutreachStatus }) {
-  const label = OUTREACH_STATUSES.find((item) => item.value === status)?.label || humanise(status);
+function StatusBadge({ status, stageLabel }: { status: OutreachStatus; stageLabel?: string | null }) {
+  const label = stageLabel || OUTREACH_STATUSES.find((item) => item.value === status)?.label || humanise(status);
   const colour =
     status === "joined"
       ? "bg-green-100 text-green-800"

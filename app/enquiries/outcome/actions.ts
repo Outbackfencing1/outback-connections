@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { verifyToken } from "@/lib/signed-tokens";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isEnquiryOutcome } from "@/lib/enquiry-outcome";
+import { listingHref } from "@/lib/format";
 
 export async function confirmOutcome(formData: FormData): Promise<void> {
   const t = formData.get("t");
@@ -17,12 +18,26 @@ export async function confirmOutcome(formData: FormData): Promise<void> {
   const admin = createAdminClient();
   if (!admin) redirect("/enquiries/thanks?o=invalid");
 
-  const { error } = await admin
+  const { data: enq, error } = await admin
     .from("listing_enquiries")
     .update({ outcome: v.payload.l, outcome_at: new Date().toISOString() })
     .eq("id", v.payload.u)
-    .eq("status", "forwarded");
+    .eq("status", "forwarded")
+    .select("listing:listings(kind, slug)")
+    .maybeSingle();
   if (error) console.error("[enquiry-outcome] update failed:", error.message);
 
-  redirect(`/enquiries/thanks?o=${v.payload.l}`);
+  const listing = Array.isArray(enq?.listing) ? enq?.listing[0] : enq?.listing;
+  const path =
+    listing && typeof listing.kind === "string" && typeof listing.slug === "string"
+      ? listingHref(listing.kind, listing.slug)
+      : null;
+
+  const qs = new URLSearchParams({ o: v.payload.l });
+  if (path && path.startsWith("/")) {
+    qs.set("listing", path);
+  }
+
+  redirect(`/enquiries/thanks?${qs.toString()}`);
 }
+

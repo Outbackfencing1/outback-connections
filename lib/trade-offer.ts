@@ -4,9 +4,11 @@
 // so each click is logged as a trade_cta_click event, then redirect here.
 // Destinations are fixed: the route never redirects to a URL it was given.
 
+import { OUTBACK_STORE_BASE_URL } from "./outback-products";
+
 export const FENCING_CATEGORIES = new Set(["fencing-contractor", "fencing-labour", "fencing"]);
 
-const STORE_URL = "https://outbackfencingsupplies.com.au";
+const STORE_URL = OUTBACK_STORE_BASE_URL;
 
 export const TRADE_TARGETS = {
   clipgun: "/products/20v-cordless-c-ring-gun",
@@ -14,7 +16,7 @@ export const TRADE_TARGETS = {
 } as const;
 export type TradeTarget = keyof typeof TRADE_TARGETS;
 
-export const TRADE_PLACEMENTS = ["listing", "claim"] as const;
+export const TRADE_PLACEMENTS = ["listing", "claim", "header", "footer"] as const;
 export type TradePlacement = (typeof TRADE_PLACEMENTS)[number];
 
 export function isFencingCategory(slug: string | null | undefined): boolean {

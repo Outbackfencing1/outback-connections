@@ -4,9 +4,13 @@ import { useActionState } from "react";
 import { updateTrustProfile, type TrustProfileState } from "./actions";
 import {
   AVAILABILITY_STATUSES,
+  BOOKED_UNTIL_MONTHS,
+  CONTRACTOR_EQUIPMENT_OPTIONS,
   INSURANCE_BADGES,
+  PREFERRED_JOB_SIZES,
   ROLE_TAGS,
   formatAbn,
+  formatBelievableAvailability,
 } from "@/lib/trust";
 
 type Props = {
@@ -24,9 +28,15 @@ type Props = {
     services_offered?: string[];
     photo_urls?: string[];
     insurances_held: string[];
+    insurance_expiry_date?: string | null;
     role_tags: string[];
     years_in_district: number | null;
     availability_status?: string | null;
+    availability_note?: string | null;
+    availability_updated_at?: string | null;
+    travel_area?: string | null;
+    equipment_summary?: string[];
+    preferred_job_size?: string | null;
   };
 };
 
@@ -37,15 +47,25 @@ export default function TrustProfileForm({ initialValues }: Props) {
   const existingPhotos = Array.isArray(initialValues.photo_urls)
     ? initialValues.photo_urls
     : [];
+  const existingEquipment = Array.isArray(initialValues.equipment_summary)
+    ? initialValues.equipment_summary
+    : [];
   const defaultSpecialties = Array.isArray(initialValues.services_offered)
     ? initialValues.services_offered.join(", ")
     : "";
+
+  const believableAvail = formatBelievableAvailability({
+    availabilityStatus: initialValues.availability_status,
+    availabilityNote: initialValues.availability_note,
+    availabilityUpdatedAt: initialValues.availability_updated_at,
+    ownerConfirmed: true,
+  });
 
   return (
     <form action={formAction} className="mt-4 space-y-5">
       {state.ok && (
         <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-xs font-semibold text-green-900">
-          ✓ Your public profile, contact buttons, work photos &amp; verification badges have been updated.
+          ✓ Your public profile, availability date, equipment, work photos &amp; verification details have been saved.
         </div>
       )}
       {state.error && (
@@ -54,15 +74,30 @@ export default function TrustProfileForm({ initialValues }: Props) {
         </div>
       )}
 
-      <div>
-        <span className="block text-xs font-semibold uppercase tracking-wide text-neutral-700">
-          Your current availability status (shown on your profile &amp; listings)
-        </span>
-        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+      {/* Believable Availability + Booked Until Month */}
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <span className="block text-xs font-bold uppercase tracking-wide text-emerald-950">
+              📅 Booking Availability (Phone-friendly quick update)
+            </span>
+            <p className="mt-0.5 text-xs text-neutral-600">
+              Saving this form stamps today&apos;s date so farmers see fresh, believable availability instead of a stale listing.
+            </p>
+          </div>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold ${believableAvail.badgeClass}`}
+          >
+            <span className={`h-2 w-2 rounded-full ${believableAvail.dotClass}`} />
+            {believableAvail.headline} · {believableAvail.updatedText}
+          </span>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-3">
           {AVAILABILITY_STATUSES.map((st) => (
             <label
               key={st.slug}
-              className="flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-semibold text-neutral-800 hover:border-green-700"
+              className="flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs font-semibold text-neutral-800 hover:border-green-700"
             >
               <input
                 type="radio"
@@ -77,6 +112,30 @@ export default function TrustProfileForm({ initialValues }: Props) {
               <span>{st.label}</span>
             </label>
           ))}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label
+              htmlFor="availability_note"
+              className="block text-xs font-semibold text-neutral-700"
+            >
+              If booked ahead, when is your next opening? (Optional — shows e.g. &ldquo;Booked until November&rdquo;)
+            </label>
+            <select
+              id="availability_note"
+              name="availability_note"
+              defaultValue={initialValues.availability_note ?? ""}
+              className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900"
+            >
+              <option value="">Taking bookings now (no wait month)</option>
+              {BOOKED_UNTIL_MONTHS.map((month) => (
+                <option key={month} value={month}>
+                  Booked until {month}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -261,7 +320,7 @@ export default function TrustProfileForm({ initialValues }: Props) {
             htmlFor="services_offered"
             className="block text-xs font-semibold uppercase tracking-wide text-neutral-700"
           >
-            Specialties, Gear &amp; Services (comma-separated chips)
+            Fencing Specialties &amp; Rural Services (comma-separated chips)
           </label>
           <input
             id="services_offered"
@@ -269,7 +328,7 @@ export default function TrustProfileForm({ initialValues }: Props) {
             type="text"
             maxLength={300}
             defaultValue={defaultSpecialties}
-            placeholder="e.g. Exclusion Fencing, Hinge Joint, Cattle Yards, B-Double Stock Crate"
+            placeholder="e.g. Fixed Knot Exclusion, Hinge Joint, Cattle Yards, Post Driving"
             className="mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900"
           />
         </div>
@@ -297,6 +356,83 @@ export default function TrustProfileForm({ initialValues }: Props) {
         </div>
       </div>
 
+      {/* Practical Contractor Profile: Travel Area, Preferred Job Size & Equipment */}
+      <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 space-y-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-neutral-800">
+            🚜 Practical Contractor Details (Travel Area, Job Size &amp; Equipment)
+          </p>
+          <p className="mt-0.5 text-xs text-neutral-600">
+            Help landholders quickly see how far you travel, what size fencing or contracting jobs you take on, and what gear you bring.
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label
+              htmlFor="travel_area"
+              className="block text-xs font-semibold text-neutral-700"
+            >
+              Travel &amp; Service Area
+            </label>
+            <input
+              id="travel_area"
+              name="travel_area"
+              type="text"
+              maxLength={140}
+              defaultValue={initialValues.travel_area ?? ""}
+              placeholder="e.g. Within 150km of Orange — Bathurst, Molong, Cowra, Dubbo"
+              className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="preferred_job_size"
+              className="block text-xs font-semibold text-neutral-700"
+            >
+              Preferred Job Size
+            </label>
+            <select
+              id="preferred_job_size"
+              name="preferred_job_size"
+              defaultValue={initialValues.preferred_job_size ?? ""}
+              className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900"
+            >
+              <option value="">Select preferred job size (optional)</option>
+              {PREFERRED_JOB_SIZES.map((j) => (
+                <option key={j.slug} value={j.slug}>
+                  {j.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <span className="block text-xs font-semibold text-neutral-700">
+            Equipment &amp; Rig on Board (tap all that apply)
+          </span>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {CONTRACTOR_EQUIPMENT_OPTIONS.map((eq) => (
+              <label
+                key={eq.slug}
+                className="flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs font-medium text-neutral-800 hover:border-green-700"
+              >
+                <input
+                  type="checkbox"
+                  name="equipment_summary"
+                  value={eq.slug}
+                  defaultChecked={existingEquipment.includes(eq.slug)}
+                  className="h-4 w-4 rounded border-neutral-300 text-green-700"
+                />
+                {eq.label}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div>
         <label
           htmlFor="bio"
@@ -310,7 +446,7 @@ export default function TrustProfileForm({ initialValues }: Props) {
           rows={3}
           maxLength={600}
           defaultValue={initialValues.bio ?? ""}
-          placeholder="e.g. Family grazing & lucerne operation near Molong NSW, or 15 years operating headers, B-doubles and exclusion fencing across Central West NSW."
+          placeholder="e.g. Family grazing & lucerne operation near Molong NSW, or 15 years operating hydraulic post drivers, B-doubles and exclusion fencing across Central West NSW."
           className="mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900"
         />
         {state.fieldErrors?.bio && (
@@ -325,7 +461,7 @@ export default function TrustProfileForm({ initialValues }: Props) {
             📷 Work, Fleet, Fencing &amp; Property Photos (up to 6 photos)
           </p>
           <p className="mt-0.5 text-xs text-neutral-600">
-            Upload photos of your finished exclusion fences, strainer assemblies, trucks, headers, earthmoving gear, or livestock. Photos build immediate trust with farmers.
+            Upload photos of your finished exclusion fences, strainer assemblies, trucks, headers, earthmoving gear, or livestock straight from your phone.
           </p>
         </div>
 
@@ -424,26 +560,44 @@ export default function TrustProfileForm({ initialValues }: Props) {
         </div>
       </div>
 
-      <div>
-        <span className="block text-xs font-semibold uppercase tracking-wide text-neutral-700">
-          Insurance &amp; compliance held (shown as trust badges)
-        </span>
-        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-          {INSURANCE_BADGES.map((b) => (
-            <label
-              key={b.slug}
-              className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-medium text-neutral-800"
-            >
-              <input
-                type="checkbox"
-                name="insurances_held"
-                value={b.slug}
-                defaultChecked={initialValues.insurances_held.includes(b.slug)}
-                className="h-4 w-4 rounded border-neutral-300 text-green-700"
-              />
-              🛡 {b.label}
-            </label>
-          ))}
+      <div className="space-y-3">
+        <div>
+          <span className="block text-xs font-semibold uppercase tracking-wide text-neutral-700">
+            Insurance &amp; compliance held (shown as self-declared unless certificate sighted)
+          </span>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {INSURANCE_BADGES.map((b) => (
+              <label
+                key={b.slug}
+                className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-medium text-neutral-800"
+              >
+                <input
+                  type="checkbox"
+                  name="insurances_held"
+                  value={b.slug}
+                  defaultChecked={initialValues.insurances_held.includes(b.slug)}
+                  className="h-4 w-4 rounded border-neutral-300 text-green-700"
+                />
+                🛡 {b.label}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="max-w-xs">
+          <label
+            htmlFor="insurance_expiry_date"
+            className="block text-xs font-semibold text-neutral-700"
+          >
+            Current Public Liability policy expiry date (optional)
+          </label>
+          <input
+            id="insurance_expiry_date"
+            name="insurance_expiry_date"
+            type="date"
+            defaultValue={initialValues.insurance_expiry_date ?? ""}
+            className="mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900"
+          />
         </div>
       </div>
 
@@ -452,8 +606,9 @@ export default function TrustProfileForm({ initialValues }: Props) {
         disabled={pending}
         className="rounded-xl bg-green-700 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-green-800 disabled:opacity-50"
       >
-        {pending ? "Saving profile & uploading photos..." : "Save profile, details & photos"}
+        {pending ? "Saving profile & uploading photos..." : "Save profile, availability & photos"}
       </button>
     </form>
   );
 }
+

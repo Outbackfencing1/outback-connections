@@ -184,6 +184,172 @@ export function availabilityStatusInfo(slug: string | null | undefined) {
   );
 }
 
+export const BOOKED_UNTIL_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
+
+export const AVAILABILITY_STALE_DAYS = 45;
+
+export type BelievableAvailabilityDisplay = {
+  headline: string;
+  statusKind: "taking_bookings" | "booked_until" | "unconfirmed";
+  updatedText: string;
+  isStale: boolean;
+  dotClass: string;
+  badgeClass: string;
+};
+
+export function formatAustralianShortDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "Australia/Sydney",
+  });
+}
+
+/**
+ * Formats contractor availability with staleness checking so farmers see
+ * "Taking bookings", "Booked until November", or "Availability not recently confirmed"
+ * alongside the date the owner last updated it.
+ */
+export function formatBelievableAvailability(params: {
+  availabilityStatus?: string | null;
+  availabilityNote?: string | null;
+  availabilityUpdatedAt?: string | null;
+  ownerConfirmed?: boolean;
+  now?: Date;
+}): BelievableAvailabilityDisplay {
+  const now = params.now ?? new Date();
+  const updatedDateText = formatAustralianShortDate(params.availabilityUpdatedAt);
+
+  if (params.ownerConfirmed === false || !params.availabilityUpdatedAt || !updatedDateText) {
+    return {
+      headline: "Availability not recently confirmed",
+      statusKind: "unconfirmed",
+      updatedText:
+        params.ownerConfirmed === false
+          ? "Unclaimed listing — call directly to check current schedule"
+          : "Availability date not yet confirmed by owner",
+      isStale: true,
+      dotClass: "bg-neutral-400",
+      badgeClass: "border-neutral-300 bg-neutral-100 text-neutral-700",
+    };
+  }
+
+  const updatedMs = new Date(params.availabilityUpdatedAt).getTime();
+  const ageDays = (now.getTime() - updatedMs) / (1000 * 60 * 60 * 24);
+
+  if (ageDays > AVAILABILITY_STALE_DAYS) {
+    return {
+      headline: "Availability not recently confirmed",
+      statusKind: "unconfirmed",
+      updatedText: `Last updated ${updatedDateText}`,
+      isStale: true,
+      dotClass: "bg-neutral-400",
+      badgeClass: "border-neutral-300 bg-neutral-100 text-neutral-700",
+    };
+  }
+
+  const cleanNote = (params.availabilityNote ?? "").trim();
+  const status = params.availabilityStatus ?? "available";
+
+  if (status === "booked_out" || (status === "available_soon" && cleanNote)) {
+    const headline = cleanNote
+      ? cleanNote.toLowerCase().startsWith("booked")
+        ? cleanNote
+        : `Booked until ${cleanNote}`
+      : "Currently booked out";
+    return {
+      headline,
+      statusKind: "booked_until",
+      updatedText: `Updated ${updatedDateText}`,
+      isStale: false,
+      dotClass: "bg-amber-500",
+      badgeClass: "border-amber-300 bg-amber-50 text-amber-950",
+    };
+  }
+
+  if (cleanNote) {
+    const headline = cleanNote.toLowerCase().startsWith("booked")
+      ? cleanNote
+      : `Taking bookings (${cleanNote})`;
+    return {
+      headline,
+      statusKind: cleanNote.toLowerCase().startsWith("booked")
+        ? "booked_until"
+        : "taking_bookings",
+      updatedText: `Updated ${updatedDateText}`,
+      isStale: false,
+      dotClass: "bg-emerald-500",
+      badgeClass: "border-emerald-300 bg-emerald-50 text-emerald-950",
+    };
+  }
+
+  return {
+    headline: "Taking bookings",
+    statusKind: "taking_bookings",
+    updatedText: `Updated ${updatedDateText}`,
+    isStale: false,
+    dotClass: "bg-emerald-500",
+    badgeClass: "border-emerald-300 bg-emerald-50 text-emerald-950",
+  };
+}
+
+export const CONTRACTOR_EQUIPMENT_OPTIONS = [
+  { slug: "post_driver_hydraulic", label: "Hydraulic Post Driver" },
+  { slug: "tractor_post_rammer", label: "Tractor & Post Rammer" },
+  { slug: "rock_drill_auger", label: "Rock Drill / Auger Rig" },
+  { slug: "wire_dispensers", label: "Multi-Wire / Netting Unwinder" },
+  { slug: "clipgun_pneumatic", label: "Power Clip Guns" },
+  { slug: "skid_steer_loader", label: "Skid Steer / Bobcat / Loader" },
+  { slug: "excavator_dozer", label: "Excavator / Fence-Line Clearing" },
+  { slug: "mobile_welder_yards", label: "Mobile Welding & Cattle/Sheep Yard Rig" },
+] as const;
+
+export type ContractorEquipmentSlug = (typeof CONTRACTOR_EQUIPMENT_OPTIONS)[number]["slug"];
+
+const EQUIPMENT_MAP = new Map<string, string>(
+  CONTRACTOR_EQUIPMENT_OPTIONS.map((e) => [e.slug, e.label])
+);
+
+export function contractorEquipmentLabel(slug: string): string {
+  return EQUIPMENT_MAP.get(slug) ?? slug;
+}
+
+export const PREFERRED_JOB_SIZES = [
+  { slug: "any_size", label: "Any job size (repairs to full boundary runs)" },
+  { slug: "small_repairs_under_1km", label: "Small jobs, gateways, yards & repairs (under 1 km)" },
+  { slug: "medium_1km_to_5km", label: "Paddock subdivisions & medium runs (1–5 km)" },
+  { slug: "large_5km_plus", label: "Large boundary & exclusion contracts (5 km+)" },
+  { slug: "station_contract_10km_plus", label: "Station-scale & cluster fencing (10 km+)" },
+] as const;
+
+export type PreferredJobSizeSlug = (typeof PREFERRED_JOB_SIZES)[number]["slug"];
+
+const PREFERRED_JOB_SIZE_MAP = new Map<string, string>(
+  PREFERRED_JOB_SIZES.map((j) => [j.slug, j.label])
+);
+
+export function preferredJobSizeLabel(slug: string | null | undefined): string | null {
+  if (!slug) return null;
+  return PREFERRED_JOB_SIZE_MAP.get(slug) ?? slug;
+}
+
 export function isCustomerTrustTag(slug: string): boolean {
   const found = TRUST_TAGS.find((t) => t.slug === slug);
   return found?.side === "customer";
@@ -265,12 +431,18 @@ export type ClaimVerificationDecision = {
   phoneMatchesFile: boolean;
   emailMatchesFile: boolean;
   domainMatchesFile: boolean;
+  abnDetailsChecked: boolean;
 };
 
 /**
  * Evaluates whether a business claim can be auto-approved immediately based on
- * objective proof (matching business email, matching website domain, matching
- * ABN on file, or active ABR entity/phone match), or queued for admin review.
+ * objective control proof (matching business email, matching website domain, or
+ * active ABN combined with matching registered business phone on file).
+ *
+ * Scamwatch guidance: An ABN is a public number and does NOT by itself establish
+ * that a claimant controls the business. Claims relying solely on an ABN match
+ * from a generic webmail address without phone/email/domain corroboration are
+ * recorded as `abnDetailsChecked: true` and routed to `admin_approval`.
  */
 export function evaluateClaimAutoVerification(params: {
   claimantEmail: string | null | undefined;
@@ -305,42 +477,7 @@ export function evaluateClaimAutoVerification(params: {
   const cleanSubmittedAbn = normaliseAbn(params.submittedAbn);
   const cleanBizAbn = normaliseAbn(params.businessAbn);
 
-  // 1. Exact business email or custom business domain match
-  if (emailMatchesFile) {
-    return {
-      autoApprove: true,
-      method: "email_domain",
-      reason: "Signed-in email matches the business email on file.",
-      phoneMatchesFile,
-      emailMatchesFile,
-      domainMatchesFile,
-    };
-  }
-
-  if (domainMatchesFile) {
-    return {
-      autoApprove: true,
-      method: "email_domain",
-      reason: `Signed-in email domain (@${userDomain}) matches the business website/domain.`,
-      phoneMatchesFile,
-      emailMatchesFile,
-      domainMatchesFile,
-    };
-  }
-
-  // 2. Submitted valid ABN matches ABN already recorded on the business
-  if (cleanSubmittedAbn && cleanBizAbn && cleanSubmittedAbn === cleanBizAbn) {
-    return {
-      autoApprove: true,
-      method: "abn_match",
-      reason: "Submitted ABN matches the business ABN on file.",
-      phoneMatchesFile,
-      emailMatchesFile,
-      domainMatchesFile,
-    };
-  }
-
-  // 3. Submitted valid ABN + ABR entity name shares a significant word with business name
+  let abnNameOverlap = false;
   if (cleanSubmittedAbn && params.abrIsActive && params.abrEntityName && params.businessName) {
     const stopWords = new Set([
       "pty",
@@ -365,28 +502,66 @@ export function evaluateClaimAutoVerification(params: {
       .split(/\s+/)
       .filter((w) => w.length >= 3 && !stopWords.has(w));
     const abrLower = params.abrEntityName.toLowerCase();
-    const nameOverlap = bizWords.some((w) => abrLower.includes(w));
-    if (nameOverlap) {
-      return {
-        autoApprove: true,
-        method: "abn_match",
-        reason: `Active ABR entity (${params.abrEntityName}) matches business name.`,
-        phoneMatchesFile,
-        emailMatchesFile,
-        domainMatchesFile,
-      };
-    }
+    abnNameOverlap = bizWords.some((w) => abrLower.includes(w));
   }
 
-  // 4. Submitted valid ABN + exact business phone match on file
+  const abnDetailsChecked = Boolean(
+    cleanSubmittedAbn &&
+      ((cleanBizAbn && cleanSubmittedAbn === cleanBizAbn) ||
+        abnNameOverlap ||
+        params.abrIsActive)
+  );
+
+  // 1. Exact business email or custom business domain match
+  if (emailMatchesFile) {
+    return {
+      autoApprove: true,
+      method: "email_domain",
+      reason: "Signed-in email matches the business email on file.",
+      phoneMatchesFile,
+      emailMatchesFile,
+      domainMatchesFile,
+      abnDetailsChecked,
+    };
+  }
+
+  if (domainMatchesFile) {
+    return {
+      autoApprove: true,
+      method: "email_domain",
+      reason: `Signed-in email domain (@${userDomain}) matches the business website/domain.`,
+      phoneMatchesFile,
+      emailMatchesFile,
+      domainMatchesFile,
+      abnDetailsChecked,
+    };
+  }
+
+  // 2. Submitted valid ABN + matching registered business phone number on file
   if (cleanSubmittedAbn && phoneMatchesFile && params.abrIsActive !== false) {
     return {
       autoApprove: true,
       method: "abn_match",
-      reason: "Valid 11-digit ABN combined with matching registered business phone number.",
+      reason:
+        "Valid 11-digit ABN combined with matching registered business phone number on file.",
       phoneMatchesFile,
       emailMatchesFile,
       domainMatchesFile,
+      abnDetailsChecked: true,
+    };
+  }
+
+  // 3. ABN matches ABR or file, but no email/domain/phone control proof yet -> manual owner confirmation
+  if (abnDetailsChecked) {
+    return {
+      autoApprove: false,
+      method: "admin_approval",
+      reason:
+        "ABN details checked against ABR, but an ABN alone does not prove business control (Scamwatch guidance). Queued for quick phone/email owner confirmation.",
+      phoneMatchesFile,
+      emailMatchesFile,
+      domainMatchesFile,
+      abnDetailsChecked: true,
     };
   }
 
@@ -399,7 +574,120 @@ export function evaluateClaimAutoVerification(params: {
     phoneMatchesFile,
     emailMatchesFile,
     domainMatchesFile,
+    abnDetailsChecked: false,
   };
+}
+
+export type SpecificTrustCheck = {
+  key:
+    | "owner_confirmed"
+    | "abn_details_checked"
+    | "insurance_self_declared"
+    | "insurance_document_checked";
+  label: string;
+  status: "verified" | "self_declared" | "expired" | "unverified";
+  detail: string;
+  dateText: string | null;
+};
+
+/**
+ * Builds the 4 distinct trust checks required for transparent rural verification:
+ * 1. Owner confirmed (control of business verified via domain/email/phone/staff check)
+ * 2. ABN details checked (public ABR lookup; explicitly notes ABN alone != ownership)
+ * 3. Insurance self-declared (what coverages the operator states they hold)
+ * 4. Insurance document checked (whether Outback Connections has sighted a current certificate & its expiry)
+ */
+export function buildSpecificTrustChecks(params: {
+  claimStatus?: string | null;
+  claimedAt?: string | null;
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
+  hasBusinessRecord?: boolean;
+  abn?: string | null;
+  abnVerified?: boolean;
+  abnEntityName?: string | null;
+  abnVerifiedAt?: string | null;
+  insurancesHeld?: string[] | null;
+  insuranceVerifiedAt?: string | null;
+  insuranceExpiryDate?: string | null;
+  now?: Date;
+}): SpecificTrustCheck[] {
+  const now = params.now ?? new Date();
+  const isOwnerConfirmed = params.hasBusinessRecord
+    ? params.claimStatus === "claimed"
+    : Boolean(params.claimStatus === "claimed" || params.emailVerified || params.phoneVerified);
+
+  const claimedDate = formatAustralianShortDate(params.claimedAt);
+  const abnDate = formatAustralianShortDate(params.abnVerifiedAt);
+  const formattedAbn = formatAbn(params.abn);
+  const abnChecked = Boolean(params.abnVerified && formattedAbn);
+
+  const held = (params.insurancesHeld ?? []).filter(isValidInsuranceBadge);
+  const insVerifiedDate = formatAustralianShortDate(params.insuranceVerifiedAt);
+  const insExpiryDate = formatAustralianShortDate(params.insuranceExpiryDate);
+
+  let insDocStatus: SpecificTrustCheck["status"] = "unverified";
+  let insDocDetail = "Certificate of currency not yet sighted by Outback Connections";
+  let insDocDateText: string | null = null;
+
+  if (params.insuranceVerifiedAt && insVerifiedDate) {
+    if (params.insuranceExpiryDate) {
+      const expiryMs = new Date(params.insuranceExpiryDate).getTime();
+      if (!Number.isNaN(expiryMs) && expiryMs < now.getTime()) {
+        insDocStatus = "expired";
+        insDocDetail = `Certificate expired ${insExpiryDate ?? params.insuranceExpiryDate}`;
+        insDocDateText = `Checked ${insVerifiedDate}`;
+      } else {
+        insDocStatus = "verified";
+        insDocDetail = insExpiryDate
+          ? `Certificate sighted · Expires ${insExpiryDate}`
+          : "Certificate of currency sighted";
+        insDocDateText = `Checked ${insVerifiedDate}`;
+      }
+    } else {
+      insDocStatus = "verified";
+      insDocDetail = "Certificate of currency sighted";
+      insDocDateText = `Checked ${insVerifiedDate}`;
+    }
+  }
+
+  return [
+    {
+      key: "owner_confirmed",
+      label: "Owner confirmed",
+      status: isOwnerConfirmed ? "verified" : "unverified",
+      detail: isOwnerConfirmed
+        ? "Account holder confirmed via business contact or staff check"
+        : "Unclaimed directory profile — owner has not yet confirmed control",
+      dateText: isOwnerConfirmed && claimedDate ? `Confirmed ${claimedDate}` : null,
+    },
+    {
+      key: "abn_details_checked",
+      label: "ABN details checked",
+      status: abnChecked ? "verified" : "unverified",
+      detail: abnChecked
+        ? `ABN ${formattedAbn}${params.abnEntityName ? ` (${params.abnEntityName})` : ""} active on ABR. Note: an ABN is public and does not by itself prove business control.`
+        : "No ABN verified on file yet",
+      dateText: abnChecked && abnDate ? `Checked ${abnDate}` : null,
+    },
+    {
+      key: "insurance_self_declared",
+      label: "Insurance self-declared",
+      status: held.length > 0 ? "self_declared" : "unverified",
+      detail:
+        held.length > 0
+          ? `Operator self-declared: ${held.map(insuranceBadgeLabel).join(", ")}`
+          : "No insurance cover declared on profile",
+      dateText: null,
+    },
+    {
+      key: "insurance_document_checked",
+      label: "Insurance document checked",
+      status: insDocStatus,
+      detail: insDocDetail,
+      dateText: insDocDateText,
+    },
+  ];
 }
 
 export type VendorReviewRow = {
@@ -414,7 +702,65 @@ export type VendorReviewRow = {
   comment: string | null;
   vendor_reply: string | null;
   vendor_replied_at: string | null;
+  review_kind?: "review" | "vouch" | null;
 };
+
+/**
+ * Distinguishes a genuine Completed-Work Review from a 1-click Neighbour Vouch.
+ * Quick vouches have `deal_type === "general"` and `comment === null` (or `review_kind === "vouch"`).
+ * Only reviews with a specific dealing type and a written comment count toward star ratings.
+ */
+export function isCompletedWorkReview(
+  row: Pick<VendorReviewRow, "deal_type" | "comment" | "review_kind">
+): boolean {
+  if (row.review_kind === "vouch") return false;
+  if (row.review_kind === "review") return true;
+  const hasSpecificDealing = Boolean(row.deal_type && row.deal_type !== "general");
+  const hasWrittenComment = Boolean(row.comment && row.comment.trim().length >= 10);
+  return hasSpecificDealing && hasWrittenComment;
+}
+
+export function partitionReviewsAndVouches(rows: VendorReviewRow[]): {
+  completedReviews: VendorReviewRow[];
+  quickVouches: VendorReviewRow[];
+  completedReviewCount: number;
+  vouchCount: number;
+  avgRating: number | null;
+  recommendPct: number | null;
+} {
+  const completedReviews: VendorReviewRow[] = [];
+  const quickVouches: VendorReviewRow[] = [];
+
+  for (const r of rows) {
+    if (isCompletedWorkReview(r)) {
+      completedReviews.push(r);
+    } else {
+      quickVouches.push(r);
+    }
+  }
+
+  const completedReviewCount = completedReviews.length;
+  const vouchCount = quickVouches.length;
+
+  let avgRating: number | null = null;
+  let recommendPct: number | null = null;
+
+  if (completedReviewCount > 0) {
+    const sum = completedReviews.reduce((acc, r) => acc + (Number(r.rating) || 0), 0);
+    avgRating = Math.round((sum / completedReviewCount) * 10) / 10;
+    const recCount = completedReviews.filter((r) => r.would_recommend).length;
+    recommendPct = Math.round((recCount / completedReviewCount) * 100);
+  }
+
+  return {
+    completedReviews,
+    quickVouches,
+    completedReviewCount,
+    vouchCount,
+    avgRating,
+    recommendPct,
+  };
+}
 
 export type VendorTrustSummary = {
   user_id: string | null;
@@ -431,7 +777,9 @@ export type VendorTrustSummary = {
   abn_verified: boolean;
   abn: string | null;
   abn_entity_name: string | null;
+  abn_verified_at?: string | null;
   claim_status: string | null;
+  claimed_at?: string | null;
   contact_phone?: string | null;
   contact_email?: string | null;
   website_url?: string | null;
@@ -439,9 +787,16 @@ export type VendorTrustSummary = {
   services_offered?: string[];
   photo_urls?: string[];
   insurances_held: string[];
+  insurance_verified_at?: string | null;
+  insurance_expiry_date?: string | null;
   role_tags: string[];
   years_in_district: number | null;
   availability_status?: string | null;
+  availability_note?: string | null;
+  availability_updated_at?: string | null;
+  travel_area?: string | null;
+  equipment_summary?: string[] | null;
+  preferred_job_size?: string | null;
   outback_verified?: boolean;
   active_listings_count: number;
   completed_deals_count: number;
@@ -449,10 +804,12 @@ export type VendorTrustSummary = {
   enquiry_answered: number;
   enquiry_responded: number;
   review_count: number;
+  vouch_count?: number;
   avg_rating: number | null;
   recommend_pct: number | null;
   top_tags: Array<{ tag: string; count: number }>;
   recent_reviews: VendorReviewRow[];
 };
+
 
 

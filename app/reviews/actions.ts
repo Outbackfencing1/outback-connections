@@ -23,7 +23,7 @@ export async function submitVendorReview(
   const { data: auth } = await supabase.auth.getUser();
   const user = auth.user;
   if (!user) {
-    return { error: "Please sign in to leave feedback or a review." };
+    return { error: "Please sign in to leave a completed-work review." };
   }
 
   const listingIdRaw = String(formData.get("listing_id") ?? "").trim();
@@ -33,11 +33,12 @@ export async function submitVendorReview(
 
   const rating = Number(formData.get("rating") ?? 5);
   const wouldRecommend = String(formData.get("would_recommend") ?? "yes") !== "no";
-  const dealTypeRaw = String(formData.get("deal_type") ?? "general").trim();
+  const dealTypeRaw = String(formData.get("deal_type") ?? "").trim();
   const dealType: DealTypeSlug = isValidDealType(dealTypeRaw) ? dealTypeRaw : "general";
   const reviewerNameRaw = String(formData.get("reviewer_display_name") ?? "").trim();
   const reviewerPostcodeRaw = String(formData.get("reviewer_postcode") ?? "").trim();
   const commentRaw = String(formData.get("comment") ?? "").trim();
+  const confirmedGenuine = String(formData.get("confirmed_genuine_dealing") ?? "") === "yes";
 
   const rawTags = formData.getAll("tags").map((t) => String(t).trim());
   const tags = Array.from(new Set(rawTags.filter(isValidTrustTag)));
@@ -46,17 +47,25 @@ export async function submitVendorReview(
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
     fieldErrors.rating = "Choose a star rating from 1 to 5.";
   }
+  if (dealType === "general") {
+    fieldErrors.deal_type =
+      "Select the specific work or dealing completed. For a general neighbour endorsement, use the 1-click vouch buttons instead.";
+  }
   if (reviewerNameRaw.length < 2 || reviewerNameRaw.length > 60) {
     fieldErrors.reviewer_display_name = "Enter your name or property/business name (2–60 chars).";
   }
   if (reviewerPostcodeRaw && !/^\d{4}$/.test(reviewerPostcodeRaw)) {
     fieldErrors.reviewer_postcode = "Enter a 4-digit Australian postcode (or leave blank).";
   }
-  if (commentRaw.length > 800) {
+  if (commentRaw.length < 15) {
+    fieldErrors.comment =
+      "Write a short description (at least 15 characters) of the work completed or dealing so locals can judge the review fairly.";
+  } else if (commentRaw.length > 800) {
     fieldErrors.comment = "Keep your written review under 800 characters.";
   }
-  if (tags.length === 0 && commentRaw.length < 5) {
-    fieldErrors.comment = "Select at least one feedback tag or write a short comment.";
+  if (!confirmedGenuine) {
+    fieldErrors.confirmed_genuine_dealing =
+      "Please confirm this review reflects a genuine completed dealing.";
   }
 
   if (Object.keys(fieldErrors).length > 0) {
@@ -115,12 +124,12 @@ export async function submitVendorReview(
     would_recommend: wouldRecommend,
     deal_type: dealType,
     tags,
-    comment: commentRaw || null,
+    comment: commentRaw,
     status: "published",
   });
 
   if (insertErr) {
-    return { error: "Could not save your feedback right now. Please try again." };
+    return { error: "Could not save your review right now. Please try again." };
   }
 
   if (returnPath && returnPath.startsWith("/")) {
@@ -334,4 +343,47 @@ export async function toggleOutbackVerified(formData: FormData): Promise<void> {
   if (targetBusinessId) revalidatePath(`/profile/${targetBusinessId}`);
   revalidatePath("/profiles");
 }
+
+export async function confirmOwnerAvailabilityNow(formData: FormData): Promise<void> {
+  const supabase = createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  const user = auth.user;
+  if (!user) return;
+
+  const returnPath = String(formData.get("return_path") ?? "").trim();
+  const statusRaw = String(formData.get("availability_status") ?? "available").trim();
+  const noteRaw = String(formData.get("availability_note") ?? "").trim();
+  const nowIso = new Date().toISOString();
+
+  const admin = createAdminClient();
+  if (!admin) return;
+
+  const { error } = await admin
+    .from("user_profiles")
+    .update({
+      availability_status: statusRaw || "available",
+      availability_note: noteRaw || null,
+      availability_updated_at: nowIso,
+      updated_at: nowIso,
+    })
+    .eq("user_id", user.id);
+
+  if (error) {
+    // Graceful fallback if availability_updated_at / availability_note columns are not yet migrated
+    await admin
+      .from("user_profiles")
+      .update({
+        availability_status: statusRaw || "available",
+        updated_at: nowIso,
+      })
+      .eq("user_id", user.id);
+  }
+
+  if (returnPath && returnPath.startsWith("/")) {
+    revalidatePath(returnPath);
+  }
+  revalidatePath(`/profile/${user.id}`);
+  revalidatePath("/profiles");
+}
+
 

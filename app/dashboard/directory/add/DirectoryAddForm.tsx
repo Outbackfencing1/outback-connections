@@ -180,7 +180,13 @@ export default function DirectoryAddForm({ categories }: Props) {
       </div>
 
       <div className="grid gap-5 sm:grid-cols-3">
-        <Field id="postcode" label="Postcode" error={errors.postcode} required>
+        <Field
+          id="postcode"
+          label="Postcode (Rural / Regional)"
+          error={errors.postcode}
+          hint="NSW metro postcodes (Sydney, Newcastle, Wollongong) are excluded."
+          required
+        >
           <input
             id="postcode"
             name="postcode"
@@ -218,6 +224,51 @@ export default function DirectoryAddForm({ categories }: Props) {
           </select>
         </Field>
       </div>
+
+      <details className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-700">
+        <summary className="cursor-pointer font-semibold text-neutral-800">
+          Metro-based office that genuinely services rural properties? (Optional override &amp; postcode rules)
+        </summary>
+        <p className="mt-2">
+          Suburban residential fencers, pool fencers, handrails, and temporary event barricades in metro postcodes (<code>2000–2263</code> Sydney/Central Coast, <code>2280–2308</code> Newcastle, <code>2500–2530</code> Wollongong, <code>2555–2570</code> Outer SW Sydney, <code>2745–2770</code> Western Sydney) must <strong>not</strong> be added.
+        </p>
+        <p className="mt-1">
+          However, if a genuine rural contractor or carrier has an office/billing address in a metro fringe postcode (e.g. Camden <code>2570</code> or Penrith <code>2750</code>) and actively travels to regional farms, enter their <strong>Primary Rural Service Postcode</strong> below so they are listed in the rural region they actually serve:
+        </p>
+        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <Field
+            id="service_postcode"
+            label="Primary rural service postcode (optional)"
+            error={errors.service_postcode}
+            hint="e.g. 2795 (Bathurst) or 2577 (Southern Highlands)"
+          >
+            <input
+              id="service_postcode"
+              name="service_postcode"
+              type="text"
+              inputMode="numeric"
+              maxLength={4}
+              onChange={invalidate}
+              className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm"
+            />
+          </Field>
+          <Field
+            id="service_suburb"
+            label="Primary rural town / district serviced (optional)"
+            error={errors.service_suburb}
+            hint="e.g. Bathurst / Central Tablelands"
+          >
+            <input
+              id="service_suburb"
+              name="service_suburb"
+              type="text"
+              maxLength={80}
+              onChange={invalidate}
+              className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm"
+            />
+          </Field>
+        </div>
+      </details>
 
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
         <p className="text-sm font-semibold text-amber-900">Where did you find it?</p>

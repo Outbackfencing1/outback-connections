@@ -180,8 +180,14 @@ export default async function JobDetailPage({
     : listing.job_details) as JobDetail | null;
   const cat = Array.isArray(listing.category) ? listing.category[0] : listing.category;
   const biz = Array.isArray(listing.business) ? listing.business[0] : listing.business;
-  const resolvedPhone = listing.contact_phone || biz?.contact_phone || null;
-  const resolvedEmail = listing.contact_email || biz?.contact_email || null;
+  const publicBusinessPhone = biz?.contact_phone ?? null;
+  const publicBusinessEmail = biz?.contact_email ?? null;
+  const resolvedPhone = viewer
+    ? listing.contact_phone || publicBusinessPhone
+    : publicBusinessPhone;
+  const resolvedEmail = viewer
+    ? listing.contact_email || publicBusinessEmail
+    : publicBusinessEmail;
   const resolvedWebsite = biz?.website_url || null;
   const resolvedSuburb = biz?.suburb || null;
   const phoneDigits = resolvedPhone ? resolvedPhone.replace(/[^\d+]/g, "") : null;
@@ -225,7 +231,7 @@ export default async function JobDetailPage({
     });
   }
 
-  // Real job ads (direction !== 'available_for_work') -> JobPosting (Google-for-Jobs eligible).
+  // Real active job ads (direction !== 'available_for_work') -> JobPosting (Google-for-Jobs eligible).
   // Worker/operator skill profiles are supply listings, NOT job vacancies, so they never emit JobPosting.
   // Scraped directory rows also never emit JobPosting — they get LocalBusiness instead.
   const pageUrl = `${BASE_URL}/jobs/${listing.slug}`;
@@ -238,13 +244,15 @@ export default async function JobDetailPage({
         postcode: listing.postcode,
         suburb: resolvedSuburb,
         state: listing.state,
-        telephone: !isExpiredOrFilled ? resolvedPhone : null,
+        telephone: !isExpiredOrFilled ? publicBusinessPhone : null,
         geoLat: biz?.geo_lat ?? null,
         geoLng: biz?.geo_lng ?? null,
         category: cat?.label ?? null,
         categorySlug: cat?.slug ?? null,
         url: pageUrl,
       })
+    : isExpiredOrFilled
+    ? null
     : jobPostingJsonLd({
         title: listing.title,
         description: displayDescription,

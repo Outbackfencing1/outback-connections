@@ -5,11 +5,20 @@ export default function Footer() {
     <footer className="mt-16 border-t bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40">
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
         {/* COI at top — visible on every page. */}
-        <p className="border-l-4 border-amber-400 pl-4 text-sm text-neutral-700">
-          Outback Connections is run by{" "}
-          <strong>Outback Fencing &amp; Steel Supplies Pty Ltd</strong>.
-          We disclose this upfront, on every page.
-        </p>
+        <div className="border-l-4 border-amber-400 pl-4 text-sm text-neutral-700 space-y-1">
+          <p>
+            Outback Connections is run by{" "}
+            <strong>Josh Crawford</strong> and the team at{" "}
+            <strong>Outback Fencing &amp; Steel Supplies Pty Ltd</strong> (76 Astill Drive, Orange NSW).
+            We disclose this upfront, on every page.
+          </p>
+          <p className="text-xs text-neutral-600">
+            <strong>Who sees enquiries:</strong> Direct phone, SMS, and email buttons connect you straight to the business. Quote requests on claimed profiles go directly to that business; quote requests on unclaimed entries are forwarded by our Orange team to that specific business only (never sold or broadcast to competitors).{" "}
+            <Link href="/about" className="underline hover:text-neutral-900">
+              How it works →
+            </Link>
+          </p>
+        </div>
 
         {/* Single column on mobile with section dividers, 4 columns from md+. */}
         <div className="mt-8 grid gap-0 md:grid-cols-4 md:gap-8">
@@ -74,12 +83,12 @@ export default function Footer() {
               </li>
               <li>
                 <a
-                  href="https://outbackfencingsupplies.com.au/"
+                  href="/go/trade?to=store&from=footer"
                   target="_blank"
-                  rel="noopener noreferrer"
+                  rel="nofollow noopener noreferrer"
                   className="inline-block py-1 hover:text-neutral-900"
                 >
-                  outbackfencingsupplies.com.au
+                  Fencing supplies (outbackfencingsupplies.com.au) ↗
                 </a>
               </li>
             </ul>

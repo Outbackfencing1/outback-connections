@@ -91,9 +91,10 @@ export default async function SaleDetailPage({
 
   const fullCols = `
       id, anonymised_id, slug, kind, side, title, description, postcode, state,
-      created_at, expires_at, user_id, status, category_id,
+      created_at, expires_at, user_id, status, category_id, business_id,
       contact_email, contact_phone, contact_best_time,
       category:categories(slug, label),
+      business:businesses(contact_phone, contact_email, website_url),
       sale_details(price_cents, price_type, quantity, unit, condition, delivery, sold_at, sub_category, harvest_season, proof_badges)
     `;
 
@@ -110,9 +111,10 @@ export default async function SaleDetailPage({
       .select(
         `
         id, anonymised_id, slug, kind, side, title, description, postcode, state,
-        created_at, expires_at, user_id, status, category_id,
+        created_at, expires_at, user_id, status, category_id, business_id,
         contact_email, contact_phone, contact_best_time,
         category:categories(slug, label),
+        business:businesses(contact_phone, contact_email, website_url),
         sale_details(price_cents, price_type, quantity, unit, condition, delivery, sold_at)
       `
       )
@@ -357,13 +359,27 @@ export default async function SaleDetailPage({
       {!isExpiredOrFilled ? (
         <>
           <section className="mt-8">
-            <ContactBlock
-              signedIn={!!viewer}
-              contactEmail={listing.contact_email ?? null}
-              contactPhone={listing.contact_phone ?? null}
-              contactBestTime={listing.contact_best_time ?? null}
-              signInRedirect={`/sale/${listing.slug}`}
-            />
+            {(() => {
+              const biz = Array.isArray((listing as { business?: unknown }).business)
+                ? ((listing as { business: Array<{ contact_phone?: string | null; contact_email?: string | null; website_url?: string | null }> }).business[0] ?? null)
+                : ((listing as { business?: { contact_phone?: string | null; contact_email?: string | null; website_url?: string | null } | null }).business ?? null);
+              const resolvedEmail = viewer
+                ? listing.contact_email || biz?.contact_email || null
+                : biz?.contact_email ?? null;
+              const resolvedPhone = viewer
+                ? listing.contact_phone || biz?.contact_phone || null
+                : biz?.contact_phone ?? null;
+              return (
+                <ContactBlock
+                  signedIn={!!viewer}
+                  contactEmail={resolvedEmail}
+                  contactPhone={resolvedPhone}
+                  contactBestTime={viewer ? listing.contact_best_time ?? null : null}
+                  websiteUrl={biz?.website_url ?? null}
+                  signInRedirect={`/sale/${listing.slug}`}
+                />
+              );
+            })()}
             <p className="mt-3 text-xs text-neutral-500">
               Private sale between you and the seller. Outback Connections doesn&apos;t handle payment,
               inspect goods, or take a commission. Inspect before you pay.
