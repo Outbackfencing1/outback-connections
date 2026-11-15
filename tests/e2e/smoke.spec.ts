@@ -70,7 +70,7 @@ test("honesty: an unclaimed row says so and never shows a contact block", async 
   const unclaimed = page.locator("a[href^='/services/listing/']", { hasText: "Unclaimed" }).first();
   if ((await unclaimed.count()) === 0) test.skip(true, "no unclaimed rows on this deploy");
   await unclaimed.click();
-  await expect(page.getByText(/unclaimed listing/i).first()).toBeVisible();
+  await expect(page.getByText(/unclaimed (listing|profile)/i).first()).toBeVisible();
   await expect(page.getByText(/wasn't posted by the business/i)).toBeVisible();
   await expect(page.getByText(/sign in to see contact/i)).toHaveCount(0);
   await expect(page.getByText(/from the people who run this site/i)).toBeVisible();
